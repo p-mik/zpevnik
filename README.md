@@ -1,5 +1,27 @@
 # Zpěvník — zadání aplikace
 
+## Jak to spustit lokálně
+
+Vyžaduje Docker Desktop.
+
+```bash
+cp .env.example .env   # a uprav hodnoty (SECRET_KEY, DB_PASSWORD, ...)
+docker compose up -d --build
+docker compose exec web python manage.py migrate
+docker compose exec web python manage.py createsuperuser
+```
+
+Appka poběží na `http://localhost:8007/`, admin na `http://localhost:8007/admin/`.
+
+Frontend se builduje v rámci Docker image (multi-stage build) a servíruje ho Django přes
+WhiteNoise — není potřeba spouštět `npm run dev` zvlášť, pokud jen ověřuješ, že appka běží.
+Pro vývoj frontendu s hot reloadem: `cd frontend && npm install && npm run dev`.
+
+Migrace se generují **pouze lokálně** (`python manage.py makemigrations`) a commitují —
+nikdy ne na serveru ani v deploy pipeline.
+
+---
+
 > Pracovní název: **zpevnik** (finální název TBD, subdoména `<nazev>.upupaepops.cz`)
 > Stav: zadání po brainstormingu, před implementací
 > Verze: 1.0 (2026-07-21)
