@@ -180,3 +180,5 @@ Důvody: anotační vrstva a session UI jsou hustě interaktivní (React dle pra
 2. Číselník předdefinovaných značek pro anotace (REF, SL., SPECIAL, … co dál?)
 3. Vzorový dokument pro batch split — poslat, posoudí se automatizovatelnost
 4. Detailní zadání modulu Tvorba (dodá Peťo ve fázi 3)
+
+<!-- deploy test: 2026-09-07 22:28:33 -->
