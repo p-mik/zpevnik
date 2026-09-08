@@ -42,12 +42,19 @@ class SlozkaAdmin(admin.ModelAdmin):
     search_fields = ["nazev"]
 
 
+@admin.action(description="Vygenerovat veřejný odkaz (token)")
+def vygenerovat_verejny_token(modeladmin, request, queryset):
+    for zpevnik in queryset:
+        zpevnik.vygeneruj_verejny_token()
+
+
 @admin.register(Zpevnik)
 class ZpevnikAdmin(admin.ModelAdmin):
     list_display = ["nazev", "slozka", "verejny_token"]
     list_filter = ["slozka"]
     search_fields = ["nazev"]
     filter_horizontal = ["pisne"]
+    actions = [vygenerovat_verejny_token]
 
 
 class PolozkaSetlistuInline(admin.TabularInline):

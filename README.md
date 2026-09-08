@@ -22,6 +22,87 @@ nikdy ne na serveru ani v deploy pipeline.
 
 ---
 
+## API endpointy (fáze 1a)
+
+Autentizace: Django session (`SessionAuthentication`) + CSRF. Frontend musí u
+POST/PUT/PATCH/DELETE posílat hlavičku `X-CSRFToken` (hodnota z cookie `csrftoken`,
+kterou nastaví `GET /api/auth/me/`). Bez platného tokenu vrací zápis `403`.
+
+Výchozí oprávnění je `IsAuthenticated` — pokud tabulka níže nepíše jinak, je endpoint
+jen pro přihlášené. Role `admin` = `is_staff`, role `člen` = běžný přihlášený uživatel.
+Seznamové endpointy jsou stránkované (`page`, `page_size`, výchozí 50 na stránku).
+
+**Zatím bez `Session` a `Anotace` (fáze 2) a bez uploadu souborů (samostatný task) —
+pole `soubor` na verzi písně je proto jen pro čtení.**
+
+### Auth
+
+| Cesta | Metoda | Kdo smí | Vrací |
+|---|---|---|---|
+| `/api/auth/login/` | POST | kdokoliv | uživatele po přihlášení (`username`, `password` v těle) |
+| `/api/auth/logout/` | POST | přihlášený | `204` |
+| `/api/auth/me/` | GET | kdokoliv | `{authenticated, id, username, role}` — `role` je `admin` nebo `clen`; nastavuje CSRF cookie |
+
+### Písně (`/api/pisne/`)
+
+| Metoda | Kdo smí | Poznámka |
+|---|---|---|
+| GET (list) | přihlášený | lehký seznam `{id, kod, nazev, interpret}` pro rychlý scroll; `?kod=123` přesná shoda, `?search=text` (název/interpret), `?ordering=kod` |
+| GET (detail) | přihlášený | + `verze` (všechny verze písně) a `aktivni_verze` (podle logiky auto-loadu níže, pro přihlášeného uživatele) |
+| POST / PUT / PATCH / DELETE | admin | |
+
+### Verze písní (`/api/verze-pisni/`)
+
+| Metoda | Kdo smí | Poznámka |
+|---|---|---|
+| GET | přihlášený | `?pisen=<id>`, `?stav=`, `?vlastnik=` |
+| POST | přihlášený | člen vždy vytvoří `stav=personal` s `vlastnik=` sebou — cokoliv jiného pošle klient v `stav`/`vlastnik`, server přepíše |
+| PUT / PATCH / DELETE | admin (cokoliv), vlastník (jen svoje `personal`) | ostatní členové dostanou `403` |
+
+### Složky, zpěvníky, setlisty
+
+| Cesta | Metoda | Kdo smí | Poznámka |
+|---|---|---|---|
+| `/api/slozky/` | GET | přihlášený | |
+| `/api/slozky/` | POST/PUT/PATCH/DELETE | admin | |
+| `/api/zpevniky/` | GET | přihlášený | vč. lehkého seznamu `pisne`; `verejny_token` vidí jen admin (viz níže) |
+| `/api/zpevniky/` | POST/PUT/PATCH/DELETE | admin | zápis přes `pisne_ids` (seznam ID písní) |
+| `/api/setlisty/` | GET/POST/PUT/PATCH/DELETE | přihlášený | sdílený zdroj kapely (viz níže); vnořené `polozky` (`pisen`, `poradi`) se zapisují spolu se setlistem |
+| `/api/polozky-setlistu/` | GET/POST/PUT/PATCH/DELETE | přihlášený | pro drobné úpravy pořadí bez přepsání celého setlistu |
+
+**`verejny_token` je v API čitelný jen pro admina** (`is_staff`) — pro ostatní přihlášené
+je pole vždy `null`, ať jde o detail nebo seznam. Je to sdílitelný odkaz na veřejný
+zpěvník, ne informace, kterou má vidět kdokoliv přihlášený.
+
+**Setlisty jsou vědomě sdílený zdroj kapely, ne osobní vlastnictví jednotlivce.**
+Model `Setlist` nemá pole `vlastnik` a kterýkoliv přihlášený člen smí upravit
+i setlist založený někým jiným — kapela má společný repertoár a vlastnictví
+setlistů by přidalo práva navíc bez reálného užitku. Pokud se v praxi ukáže,
+že si lidé chtějí dělat vlastní soukromé setlisty, přidá se pole `vlastnik`
+a odpovídající oprávnění později (analogicky k `VerzePisne.vlastnik`).
+
+### Veřejný zpěvník — bez přihlášení (`/api/verejny/<token>/`)
+
+| Metoda | Kdo smí | Vrací |
+|---|---|---|
+| GET | kdokoliv | `{nazev, pisne: [{kod, nazev, interpret, tonina, capo, tempo, odkaz_nahravka, aktivni_verze}]}` |
+
+Jen tento zpěvník a jeho písně — žádná ID, žádní uživatelé, žádné `personal` verze,
+žádné jiné zpěvníky. Neplatný nebo chybějící token → `404`.
+
+Token se **negeneruje automaticky** — v adminu je u zpěvníku akce
+**„Vygenerovat veřejný odkaz (token)“** (`secrets.token_urlsafe`, ne `uuid4`).
+Zpěvník bez tokenu je přes tento endpoint nedostupný.
+
+### Logika auto-loadu verze (`Pisen.aktivni_verze(user)`)
+
+1. uživatelova nejnovější `personal` verze, jinak
+2. nejnovější `confirmed` verze, jinak
+3. nejnovější verze vůbec (nikdy cizí `personal`, u nepřihlášených žádná `personal`)
+4. pokud píseň nemá žádnou verzi → `None`
+
+---
+
 > Pracovní název: **zpevnik** (finální název TBD, subdoména `<nazev>.upupaepops.cz`)
 > Stav: zadání po brainstormingu, před implementací
 > Verze: 1.0 (2026-07-21)
