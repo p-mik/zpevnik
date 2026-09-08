@@ -42,6 +42,14 @@ Seznamové endpointy jsou stránkované (`page`, `page_size`, výchozí 50 na st
 | `/api/auth/logout/` | POST | přihlášený | `204` |
 | `/api/auth/me/` | GET | kdokoliv | `{authenticated, id, username, role}` — `role` je `admin` nebo `clen`; nastavuje CSRF cookie |
 
+**TODO (backend):** nepřihlášený požadavek dostane na chráněných endpointech `403`, ne `401`.
+Je to proto, že `SessionAuthentication` v DRF nemá `authenticate_header`, takže DRF nemá
+důvod poslat `401` (ten patří k `WWW-Authenticate` výzvě) a spadne na `403`. Frontend si s tím
+teď poradí obchozně — při libovolném `403` si dotáhne `/api/auth/me/` navíc, aby poznal
+„vypršela session" od „na tohle nemáš právo", což je zbytečný dotaz navíc při každé chybě
+práv. Čistší oprava: vlastní `authentication_classes`/exception handler, který u nepřihlášeného
+requestu vrátí `401`. Nekritické, ale zjednoduší to frontend.
+
 ### Písně (`/api/pisne/`)
 
 | Metoda | Kdo smí | Poznámka |
@@ -102,6 +110,13 @@ a teprve pak odmítne, má smysl velikost zkontrolovat rovnou v prohlížeči
 | `/api/slozky/` | POST/PUT/PATCH/DELETE | admin | |
 | `/api/zpevniky/` | GET | přihlášený | vč. lehkého seznamu `pisne`; `verejny_token` vidí jen admin (viz níže) |
 | `/api/zpevniky/` | POST/PUT/PATCH/DELETE | admin | zápis přes `pisne_ids` (seznam ID písní) |
+
+**TODO (backend):** `SlozkaViewSet`/`ZpevnikViewSet` nemají `filterset_fields` pro `rodic`
+(u složek) ani `slozka` (u zpěvníků). Frontend (fáze 1c) proto strom složek/zpěvníků staví
+tak, že si stáhne úplně všechny složky a zpěvníky (projde všechny stránky) a filtruje si
+je po straně sám. U současného řádu desítek položek je to v pořádku, ale je to zbytečná
+práce navíc a nescaluje to — až jich bude víc, přidat server-side filtr a přepnout frontend
+na `?rodic=<id>` / `?slozka=<id>`.
 | `/api/setlisty/` | GET/POST/PUT/PATCH/DELETE | přihlášený | sdílený zdroj kapely (viz níže); vnořené `polozky` (`pisen`, `poradi`) se zapisují spolu se setlistem |
 | `/api/polozky-setlistu/` | GET/POST/PUT/PATCH/DELETE | přihlášený | pro drobné úpravy pořadí bez přepsání celého setlistu |
 

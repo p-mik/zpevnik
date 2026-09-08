@@ -1,0 +1,112 @@
+/* Design tokeny Zpěvníku — potvrzeno v návrhu, viz README.
+   Komponenty smí odkazovat jen na tyhle proměnné. Žádná barva ani velikost
+   fontu natvrdo v komponentě. */
+
+:root {
+  /* --- app-* : běžné rozhraní --- */
+  --app-ink: #181611;
+  --app-paper: #f4efe1;
+  --app-primary: #d6472b;
+  --app-secondary: #175e56;
+  --app-accent: #efb011; /* vyhrazeno jen pro kódy písní a odznaky */
+  --app-error: #a61b3d;
+
+  /* odvozené — jen průhlednost inku/papíru pro tlumený text a linky, ne nová identita */
+  --app-ink-70: rgba(24, 22, 17, 0.7);
+  --app-ink-45: rgba(24, 22, 17, 0.45);
+  --app-ink-18: rgba(24, 22, 17, 0.18);
+  --app-primary-hover: #b83a22;
+
+  /* --- stage-* : čtečka a stage mode (struktura teď, appka příště) ---
+     Vlastní, menší paleta — nesdílí odstín s app-*. */
+  --stage-bg: #0a0a0a;
+  --stage-ink: #edede6;
+  --stage-muted: #6b6b63;
+  --stage-accent: #ff8a3d;
+
+  /* typografie */
+  --font-display: 'Oswald', 'Arial Narrow', sans-serif;
+  --font-body: 'Work Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-base: 1.0625rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+  --text-2xl: 2.5rem;
+  --text-code: 1.375rem;
+
+  /* rozestupy — 4px mřížka, velkorysejší než web-default (ovládá se prstem) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --space-8: 4rem;
+
+  /* rámečky — obrysy místo stínů, nula zaoblení, bez výjimky */
+  --border-w: 2px;
+  --border-w-lg: 3px;
+  --radius: 0;
+
+  /* dotykový cíl */
+  --touch-min: 44px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--app-paper);
+  color: var(--app-ink);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: 1.55;
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+svg {
+  max-width: 100%;
+}
+
+::selection {
+  background: var(--app-accent);
+  color: var(--app-ink);
+}
+
+:focus-visible {
+  outline: 3px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

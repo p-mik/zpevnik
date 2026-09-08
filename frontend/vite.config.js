@@ -9,4 +9,11 @@ export default defineConfig(({ mode }) => ({
     outDir: 'dist',
     emptyOutDir: true,
   },
+  server: {
+    // `npm run dev` běží na vlastním portu — API a admin cookie (CSRF, session)
+    // musí jít na skutečný Django backend v Dockeru, ne na Vite dev server.
+    proxy: {
+      '/api': 'http://localhost:8007',
+    },
+  },
 }))

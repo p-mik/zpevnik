@@ -1,0 +1,48 @@
+.song-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: var(--border-w) solid var(--app-ink);
+  border-top: none;
+}
+
+.song-row {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+}
+
+.song-row-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-top: var(--border-w) solid var(--app-ink);
+  min-height: var(--touch-min);
+}
+
+/* --app-accent zůstává vyhrazený jen kódům — hover proto stojí na tlumeném inku */
+.song-row:hover .song-row-inner,
+.song-row:focus-visible .song-row-inner {
+  background: var(--app-ink-18);
+}
+
+.song-row .titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.song-row .nazev {
+  font-weight: 600;
+  font-size: var(--text-base);
+  display: block;
+}
+
+.song-row .interpret {
+  font-size: var(--text-sm);
+  color: var(--app-ink-70);
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

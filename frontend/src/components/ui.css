@@ -1,0 +1,202 @@
+/* Sdílené UI kousky — obrysy místo stínů, nula zaoblení, jen tokeny. */
+
+.panel {
+  border: var(--border-w) solid var(--app-ink);
+  background: var(--app-paper);
+}
+
+.btn {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+  padding: var(--space-3) var(--space-5);
+  border: var(--border-w) solid var(--app-ink);
+  min-height: var(--touch-min);
+  cursor: pointer;
+  background: transparent;
+  color: var(--app-ink);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--app-primary);
+  color: var(--app-paper);
+  border-color: var(--app-primary);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--app-primary-hover);
+  border-color: var(--app-primary-hover);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--app-ink);
+  color: var(--app-paper);
+}
+
+.field-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.field-input {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  padding: var(--space-3) var(--space-4);
+  border: var(--border-w) solid var(--app-ink);
+  background: var(--app-paper);
+  color: var(--app-ink);
+  min-height: var(--touch-min);
+}
+.field-input::placeholder {
+  color: var(--app-ink-45);
+}
+
+.code-chip {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--text-lg);
+  font-variant-numeric: tabular-nums;
+  background: var(--app-accent);
+  color: var(--app-ink);
+  padding: var(--space-1) var(--space-3);
+  min-width: 3.2em;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.folder-chip {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  padding: var(--space-1) var(--space-3);
+  background: var(--app-secondary);
+  color: var(--app-paper);
+  white-space: nowrap;
+}
+
+/* --- stavy: načítání / prázdno / chyba --- */
+
+.state-block {
+  border: var(--border-w) solid var(--app-ink);
+  padding: var(--space-7) var(--space-5);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.state-block p {
+  max-width: 44ch;
+  color: var(--app-ink-70);
+  margin: 0;
+}
+
+.state-block h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: 0;
+}
+
+.state-error {
+  border-color: var(--app-error);
+}
+.state-error h2 {
+  color: var(--app-error);
+}
+
+.loading-pulse {
+  display: inline-block;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--app-ink-70);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* --- obecný klikatelný řádek (složky, zpěvníky) --- */
+
+.link-list {
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  border: var(--border-w) solid var(--app-ink);
+  border-top: none;
+}
+
+.link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-top: var(--border-w) solid var(--app-ink);
+  min-height: var(--touch-min);
+  text-decoration: none;
+  color: inherit;
+}
+.link-row:hover,
+.link-row:focus-visible {
+  background: var(--app-ink-18);
+}
+
+.link-row .nazev {
+  font-weight: 600;
+}
+
+.link-row .count {
+  font-size: var(--text-sm);
+  color: var(--app-ink-70);
+  white-space: nowrap;
+}
+
+.section-heading {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  margin: 0 0 var(--space-3);
+}
+
+.breadcrumb-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  margin-bottom: var(--space-5);
+}
+.breadcrumb-back:hover {
+  text-decoration: underline;
+}
+
+.toast-error {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--app-error);
+  color: var(--app-paper);
+  border: var(--border-w) solid var(--app-ink);
+  padding: var(--space-4);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}

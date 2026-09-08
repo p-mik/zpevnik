@@ -1,0 +1,65 @@
+.public-wrap {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5) var(--space-8);
+}
+
+.public-header {
+  border: var(--border-w-lg) solid var(--app-ink);
+  padding: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+
+.public-header .eyebrow {
+  font-family: var(--font-display);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--app-primary);
+  display: block;
+  margin-bottom: var(--space-2);
+}
+
+.public-header h1 {
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  margin: 0;
+}
+
+.public-song-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-top: var(--border-w) solid var(--app-ink);
+}
+
+.public-song-row .titles {
+  flex: 1;
+  min-width: 0;
+}
+
+.public-song-row .nazev {
+  font-weight: 600;
+  display: block;
+}
+
+.public-song-row .interpret {
+  font-size: var(--text-sm);
+  color: var(--app-ink-70);
+  display: block;
+}
+
+.public-song-row .pdf-link {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  padding: var(--space-2) var(--space-4);
+  border: var(--border-w) solid var(--app-ink);
+}
+.public-song-row .pdf-link:hover {
+  background: var(--app-ink);
+  color: var(--app-paper);
+}

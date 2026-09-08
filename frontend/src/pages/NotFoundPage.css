@@ -1,0 +1,9 @@
+.not-found-page {
+  padding: var(--space-6);
+}
+
+.not-found-page .back-link {
+  text-align: center;
+  font-family: var(--font-display);
+  font-weight: 600;
+}

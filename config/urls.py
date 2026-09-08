@@ -1,5 +1,5 @@
 from django.contrib import admin
-from django.urls import include, path
+from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 
 from zpevnik.api_views import (
@@ -38,6 +38,11 @@ urlpatterns = [
     ),
     path("api/", include(router.urls)),
     path("", index, name="index"),
+    # Zachytávač pro React Router — bez tohohle 404ne Django dřív, než se SPA
+    # vůbec stihne nahrát (přímý vstup na /pisne/42, F5 na /verejny/<token>...).
+    # Umístěný poslední: admin/api mají vlastní přesné vzory výše, ty se
+    # vyhodnotí dřív a tenhle vzor je nechytí.
+    re_path(r"^(?!admin/|api/|static/|media/).*$", index, name="spa-fallback"),
 ]
 
 # ZÁMĚRNĚ TU NENÍ static(MEDIA_URL, ...) ani jiné servírování /media/.

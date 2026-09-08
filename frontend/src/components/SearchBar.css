@@ -1,0 +1,7 @@
+.search-bar {
+  margin-bottom: var(--space-5);
+}
+
+.search-bar .field-input {
+  font-variant-numeric: tabular-nums;
+}
