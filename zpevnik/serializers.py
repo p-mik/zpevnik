@@ -1,7 +1,9 @@
 from django.contrib.auth.models import User
+from django.urls import reverse
 from rest_framework import serializers
 
 from .models import Pisen, PolozkaSetlistu, Setlist, Slozka, VerzePisne, Zpevnik
+from .validatory import bezpecny_puvodni_nazev, zvaliduj_pdf
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -12,6 +14,10 @@ class UserSerializer(serializers.ModelSerializer):
 
 class VerzePisneSerializer(serializers.ModelSerializer):
     vlastnik = UserSerializer(read_only=True)
+    # Surovou cestu k souboru ven nedáváme — soubor se čte jen přes chráněný
+    # endpoint, který kontroluje práva (viz VerzePisneViewSet.soubor).
+    soubor = serializers.FileField(write_only=True, required=False, allow_null=True)
+    ma_soubor = serializers.SerializerMethodField()
 
     class Meta:
         model = VerzePisne
@@ -20,13 +26,37 @@ class VerzePisneSerializer(serializers.ModelSerializer):
             "pisen",
             "typ_obsahu",
             "soubor",
+            "ma_soubor",
+            "puvodni_nazev_souboru",
             "stav",
             "vlastnik",
             "vytvoreno",
             "upraveno",
         ]
-        # soubor: upload je samostatný task, zatím jen read-only průchod pole
-        read_only_fields = ["vytvoreno", "upraveno", "soubor"]
+        read_only_fields = ["vytvoreno", "upraveno", "puvodni_nazev_souboru"]
+
+    def get_ma_soubor(self, obj):
+        return bool(obj.soubor)
+
+    def validate_soubor(self, hodnota):
+        if hodnota is None:
+            return hodnota
+        return zvaliduj_pdf(hodnota)
+
+    def _uloz_puvodni_nazev(self, validated_data):
+        """Jméno od klienta si schovej jen jako popisek, očištěné."""
+        soubor = validated_data.get("soubor")
+        if soubor is not None:
+            validated_data["puvodni_nazev_souboru"] = bezpecny_puvodni_nazev(
+                getattr(soubor, "name", "")
+            )
+        return validated_data
+
+    def create(self, validated_data):
+        return super().create(self._uloz_puvodni_nazev(validated_data))
+
+    def update(self, instance, validated_data):
+        return super().update(instance, self._uloz_puvodni_nazev(validated_data))
 
 
 class PisenListSerializer(serializers.ModelSerializer):
@@ -134,13 +164,20 @@ class SetlistSerializer(serializers.ModelSerializer):
 
 
 class VerejnaVerzeSerializer(serializers.ModelSerializer):
+    """Jen typ obsahu — cesta k souboru na disku ven nepatří ani tady.
+
+    Soubor se čte přes /api/verejny/<token>/pisen/<kod>/soubor/, což znovu
+    ověří, že píseň v tom zpěvníku opravdu je.
+    """
+
     class Meta:
         model = VerzePisne
-        fields = ["typ_obsahu", "soubor"]
+        fields = ["typ_obsahu"]
 
 
 class VerejnaPisenSerializer(serializers.ModelSerializer):
     aktivni_verze = serializers.SerializerMethodField()
+    soubor_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Pisen
@@ -153,6 +190,7 @@ class VerejnaPisenSerializer(serializers.ModelSerializer):
             "tempo",
             "odkaz_nahravka",
             "aktivni_verze",
+            "soubor_url",
         ]
 
     def get_aktivni_verze(self, obj):
@@ -160,6 +198,15 @@ class VerejnaPisenSerializer(serializers.ModelSerializer):
         if verze is None:
             return None
         return VerejnaVerzeSerializer(verze, context=self.context).data
+
+    def get_soubor_url(self, obj):
+        verze = obj.aktivni_verze(user=None)
+        token = self.context.get("verejny_token")
+        if verze is None or not verze.soubor or not token:
+            return None
+        return reverse(
+            "verejny-soubor", kwargs={"token": token, "kod": obj.kod}
+        )
 
 
 class VerejnyZpevnikSerializer(serializers.ModelSerializer):

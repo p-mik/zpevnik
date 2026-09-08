@@ -1,5 +1,3 @@
-from django.conf import settings
-from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
@@ -9,6 +7,7 @@ from zpevnik.api_views import (
     PolozkaSetlistuViewSet,
     SetlistViewSet,
     SlozkaViewSet,
+    VerejnySouborView,
     VerejnyZpevnikView,
     VerzePisneViewSet,
     ZpevnikViewSet,
@@ -32,9 +31,16 @@ urlpatterns = [
     path("api/auth/logout/", auth_logout, name="auth-logout"),
     path("api/auth/me/", auth_me, name="auth-me"),
     path("api/verejny/<str:token>/", VerejnyZpevnikView.as_view(), name="verejny-zpevnik"),
+    path(
+        "api/verejny/<str:token>/pisen/<int:kod>/soubor/",
+        VerejnySouborView.as_view(),
+        name="verejny-soubor",
+    ),
     path("api/", include(router.urls)),
     path("", index, name="index"),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# ZÁMĚRNĚ TU NENÍ static(MEDIA_URL, ...) ani jiné servírování /media/.
+# Každý soubor musí projít kontrolou práv (viz zpevnik/soubory.py) — jakákoliv
+# přímá cesta k media složce (i "jen pro DEBUG") ten mechanismus obchází.
+# Ze stejného důvodu nesmí v nginx vhostu vzniknout `location /media/`.

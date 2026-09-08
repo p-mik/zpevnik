@@ -1,7 +1,20 @@
 import secrets
+import uuid
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
+
+
+def cesta_pro_soubor_verze(instance, filename):
+    """Cestu na disku skládá výhradně server — jméno od klienta se zahazuje.
+
+    Tím je path traversal vyloučený konstrukčně: do cesty nevstupuje žádný
+    uživatelský vstup. Rok/měsíc drží počet souborů v jedné složce v rozumných
+    mezích, vlastní jméno je náhodné UUID (nejde uhodnout ani z ID verze).
+    """
+    dnes = timezone.now()
+    return f"verze/{dnes:%Y/%m}/{uuid.uuid4().hex}.pdf"
 
 
 class Pisen(models.Model):
@@ -99,7 +112,14 @@ class VerzePisne(models.Model):
     typ_obsahu = models.CharField(
         max_length=10, choices=TYP_OBSAHU_CHOICES, default=TYP_PDF
     )
-    soubor = models.FileField(upload_to="verze_pisni/", blank=True, null=True)
+    soubor = models.FileField(upload_to=cesta_pro_soubor_verze, blank=True, null=True)
+    puvodni_nazev_souboru = models.CharField(
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Jméno, pod kterým soubor nahrál uživatel — jen pro zobrazení, "
+        "na disku se nepoužívá",
+    )
     stav = models.CharField(max_length=20, choices=STAV_CHOICES, default=STAV_DRAFT)
     vlastnik = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -168,6 +188,14 @@ class Zpevnik(models.Model):
 
     def __str__(self):
         return self.nazev
+
+    def save(self, *args, **kwargs):
+        # Prázdný token drž jako NULL, ne "" — jednak by dvě prázdné hodnoty
+        # spadly na unique constraintu, jednak "nemá token" musí být jednoznačný
+        # stav (zpěvník bez tokenu je veřejně nedostupný).
+        if not self.verejny_token:
+            self.verejny_token = None
+        return super().save(*args, **kwargs)
 
     def vygeneruj_verejny_token(self):
         """Kryptograficky bezpečný token (secrets, ne uuid4/random) pro veřejný odkaz."""

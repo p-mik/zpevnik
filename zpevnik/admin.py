@@ -30,9 +30,10 @@ class PisenAdmin(admin.ModelAdmin):
 
 @admin.register(VerzePisne)
 class VerzePisneAdmin(admin.ModelAdmin):
-    list_display = ["pisen", "typ_obsahu", "stav", "vlastnik", "upraveno"]
+    list_display = ["pisen", "typ_obsahu", "stav", "vlastnik", "puvodni_nazev_souboru", "upraveno"]
     list_filter = ["typ_obsahu", "stav"]
-    search_fields = ["pisen__nazev", "pisen__kod"]
+    search_fields = ["pisen__nazev", "pisen__kod", "puvodni_nazev_souboru"]
+    readonly_fields = ["puvodni_nazev_souboru"]
 
 
 @admin.register(Slozka)

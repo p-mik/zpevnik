@@ -100,6 +100,18 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.environ.get("MEDIA_ROOT", str(BASE_DIR / "media"))
 
+# Vlastní limit pro upload. Nginx má svůj (client_max_body_size 200m), ale na ten
+# se nespoléháme — Django musí odmítnout velký soubor samo, i kdyby šel request
+# mimo nginx. Kontroluje se v zpevnik/validatory.py, ne přes FILE_UPLOAD_*
+# (ty řeší jen buffer v paměti vs. temp soubor, ne maximální velikost).
+MAX_UPLOAD_SIZE = int(os.environ.get("MAX_UPLOAD_SIZE_MB", "25")) * 1024 * 1024
+
+# Chráněné soubory posílá nginx přes X-Accel-Redirect (viz zpevnik/soubory.py).
+# V PRODUKCI MUSÍ ZŮSTAT True — Django nesmí streamovat soubory samo.
+# False je jen pro lokální vývoj bez nginx; hlídá to system check zpevnik.E001.
+X_ACCEL_REDIRECT = os.environ.get("X_ACCEL_REDIRECT", "True") == "True"
+X_ACCEL_PREFIX = "/protected/"
+
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Za nginx reverse proxy

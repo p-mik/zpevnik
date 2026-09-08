@@ -32,8 +32,7 @@ Výchozí oprávnění je `IsAuthenticated` — pokud tabulka níže nepíše ji
 jen pro přihlášené. Role `admin` = `is_staff`, role `člen` = běžný přihlášený uživatel.
 Seznamové endpointy jsou stránkované (`page`, `page_size`, výchozí 50 na stránku).
 
-**Zatím bez `Session` a `Anotace` (fáze 2) a bez uploadu souborů (samostatný task) —
-pole `soubor` na verzi písně je proto jen pro čtení.**
+**Zatím bez `Session` a `Anotace` — to je fáze 2.**
 
 ### Auth
 
@@ -58,6 +57,42 @@ pole `soubor` na verzi písně je proto jen pro čtení.**
 | GET | přihlášený | `?pisen=<id>`, `?stav=`, `?vlastnik=` |
 | POST | přihlášený | člen vždy vytvoří `stav=personal` s `vlastnik=` sebou — cokoliv jiného pošle klient v `stav`/`vlastnik`, server přepíše |
 | PUT / PATCH / DELETE | admin (cokoliv), vlastník (jen svoje `personal`) | ostatní členové dostanou `403` |
+| GET `/api/verze-pisni/<id>/soubor/` | admin, vlastník `personal`, jinak každý přihlášený | samotné PDF (viz „Servírování souborů“) |
+
+Cesta k souboru na disku se v API **nikdy nevrací** — místo pole `soubor` je jen
+`ma_soubor` (bool) a `puvodni_nazev_souboru` (popisek). K obsahu se jde výhradně
+přes chráněný endpoint výše.
+
+#### Upload PDF
+
+`POST`/`PATCH` na `/api/verze-pisni/` s `multipart/form-data`, pole `soubor`.
+
+- Běžnou verzi (`draft`/`download`/`confirmed`/`handmade`) nahraje **admin**;
+  **personal verzi kdokoliv přihlášený** (server dosadí `stav=personal` a `vlastnik`
+  podle volajícího, ať klient pošle cokoliv).
+- Validuje se **obsah, ne přípona** — soubor musí začínat magic bytes `%PDF-`.
+  PNG přejmenovaný na `.pdf` skončí `400`.
+- Limit velikosti je `MAX_UPLOAD_SIZE` (výchozí 25 MB, přes env `MAX_UPLOAD_SIZE_MB`).
+  Nginx má vlastní `client_max_body_size 200m`, ale na ten se nespoléháme.
+  Prázdný soubor je odmítnut.
+
+**Co uživatel uvidí při moc velkém souboru — pozor při psaní frontendu.**
+Jsou dva různé limity a každý se chová jinak:
+
+| Velikost | Kdo odmítne | Odpověď |
+|---|---|---|
+| do 25 MB | — | projde |
+| 25–200 MB | Django | `400` + JSON `{"soubor": ["Soubor je příliš velký (limit je 25 MB)."]}` (ověřeno) |
+| nad 200 MB | nginx | `413` + **HTML stránka nginxu, ne JSON** |
+
+Frontend tedy nesmí u chyby uploadu slepě dělat `response.json()` — u `413` přijde HTML
+a parsování spadne. A protože se v obou případech soubor nejdřív celý nahraje na server
+a teprve pak odmítne, má smysl velikost zkontrolovat rovnou v prohlížeči
+(`input.files[0].size`) a velký soubor vůbec neposílat.
+- **Jméno souboru na disku generuje server** (`verze/<rok>/<měsíc>/<uuid>.pdf`), jméno
+  od klienta se do cesty nedostane vůbec — path traversal je tím vyloučený
+  konstrukčně, ne filtrováním. Původní jméno se ukládá zvlášť, očištěné na holý
+  basename, jen pro zobrazení.
 
 ### Složky, zpěvníky, setlisty
 
@@ -83,9 +118,10 @@ a odpovídající oprávnění později (analogicky k `VerzePisne.vlastnik`).
 
 ### Veřejný zpěvník — bez přihlášení (`/api/verejny/<token>/`)
 
-| Metoda | Kdo smí | Vrací |
-|---|---|---|
-| GET | kdokoliv | `{nazev, pisne: [{kod, nazev, interpret, tonina, capo, tempo, odkaz_nahravka, aktivni_verze}]}` |
+| Cesta | Metoda | Kdo smí | Vrací |
+|---|---|---|---|
+| `/api/verejny/<token>/` | GET | kdokoliv | `{nazev, pisne: [{kod, nazev, ..., aktivni_verze, soubor_url}]}` |
+| `/api/verejny/<token>/pisen/<kod>/soubor/` | GET | kdokoliv | PDF té písně |
 
 Jen tento zpěvník a jeho písně — žádná ID, žádní uživatelé, žádné `personal` verze,
 žádné jiné zpěvníky. Neplatný nebo chybějící token → `404`.
@@ -93,6 +129,78 @@ Jen tento zpěvník a jeho písně — žádná ID, žádní uživatelé, žádn
 Token se **negeneruje automaticky** — v adminu je u zpěvníku akce
 **„Vygenerovat veřejný odkaz (token)“** (`secrets.token_urlsafe`, ne `uuid4`).
 Zpěvník bez tokenu je přes tento endpoint nedostupný.
+
+⚠️ **`verejny_token` musí být `NULL`, nikdy prázdný řetězec.** Pole je
+`unique=True, null=True`, takže „nemá token“ smí být jen `NULL` — dvě `""` hodnoty
+by spadly na unique constraintu a druhý zpěvník bez tokenu by nešel uložit.
+Django formuláře (a tedy i admin) ale do `CharField` ukládají prázdný vstup jako `""`,
+proto to `Zpevnik.save()` normalizuje zpátky na `None`. **Tu normalizaci při refaktoru
+nevyhazuj** — bez ní se to rozbije tiše a až u druhého zpěvníku bez odkazu.
+
+**Jak je zajištěné, že veřejný odkaz neotevře celou knihovnu.** Soubor se adresuje
+jako „píseň s kódem K ve zpěvníku s tokenem T“, ne jako „verze s ID X“. Klient tedy
+nikdy neříká, kterou verzi chce — vybírá ji server. Řetěz kontrol:
+
+1. `token` → právě jeden zpěvník; neplatný, odvolaný nebo chybějící token = `404`,
+2. píseň se hledá **jen mezi písněmi toho zpěvníku** (`zpevnik.pisne`), takže píseň
+   z jiného zpěvníku přes tenhle token nejde získat, i když veřejná je,
+3. verzi vybere `aktivni_verze(user=None)`, která pro nepřihlášeného z principu
+   `personal` verze vynechává — plus explicitní pojistka navíc přímo ve view.
+
+Kdyby v URL bylo ID verze, stačilo by uhodnout ID cizí `personal` verze u písně,
+která ve veřejném zpěvníku je. Proto tam není. Píseň, která má jen `personal` verzi,
+dostane ve výpisu `soubor_url: null` a její soubor přes token nejde stáhnout (`404`).
+
+### Servírování souborů (`X-Accel-Redirect`)
+
+Django soubory **neposílá samo** — streamování by na celou dobu přenosu zablokovalo
+gunicorn worker. Místo toho ověří práva a vrátí prázdnou odpověď s hlavičkou
+`X-Accel-Redirect: /protected/<cesta z DB>`; soubor pak ze složky pošle nginx:
+
+```nginx
+location /protected/ {
+    internal;
+    alias /opt/zpevnik/media/;
+}
+```
+
+`internal` znamená, že `/protected/` **nejde zavolat zvenčí** — jen jako důsledek
+`X-Accel-Redirect` z Djanga. Tím pádem každý přístup k notám projde kontrolou práv.
+
+Dvě věci, které tenhle mechanismus tiše obejdou, a proto tu nejsou:
+
+- **žádný `location /media/` v nginx vhostu** — servíroval by stejné soubory bez
+  jakékoliv kontroly (ověřeno v `our-hub/infra/nginx/zpevnik.upupaepops.cz.conf`),
+- **žádné `static(MEDIA_URL, ...)` v `config/urls.py`**, ani pod `if settings.DEBUG`.
+
+Cesta v hlavičce se skládá výhradně z `verze.soubor.name` (hodnota z databáze),
+nikdy z parametru requestu — klient ovlivní jen to, o kterou verzi si řekne.
+
+Pro lokální vývoj bez nginx existuje přepínač `X_ACCEL_REDIRECT=False`, kdy soubor
+pošle Django přes `FileResponse`. **V produkci musí zůstat `True`** — když je vypnutý
+a zároveň `DEBUG=False`, `manage.py check` skončí chybou `zpevnik.E001`.
+
+### Mazání souborů
+
+**Smazání verze písně soubor na disku nemaže.** Je to vědomé rozhodnutí: mazání
+v adminu je jeden neopatrný klik a PDF nahrané na zkoušce nemusí být kde vzít znovu,
+takže okamžité mazání by zbytečně vyrábělo nevratné ztráty. Osiřelé soubory ale
+místo zabírají (server na tom s diskem není dobře), tak se uklízejí zvlášť:
+
+```bash
+docker compose exec web python manage.py uklid_souboru            # jen vypíše
+docker compose exec web python manage.py uklid_souboru --smazat   # opravdu smaže
+```
+
+Bez `--smazat` jen vypíše, co by smazal. Maže soubory, na které neukazuje žádná verze
+a které jsou starší než `--dny` (výchozí 30) — ten odklad je právě to okno na
+„vrať to zpátky“. Stejně se uklidí i soubory nahrazené novým uploadem.
+
+**Zatím ZÁMĚRNĚ není v cronu.** Nejdřív ať appka pár měsíců běží a uvidí se, kolik toho
+reálně osiří — pak se rozhodne, jestli to cronovat a jak často. Do té doby je to ale
+příkaz, na který si za tři měsíce nikdo nevzpomene, takže: **vedeno jako TODO
+v `our-hub/infra/STATE.md`**, ne jako hotová věc. Stav se dá kdykoliv zjistit
+spuštěním bez `--smazat`.
 
 ### Logika auto-loadu verze (`Pisen.aktivni_verze(user)`)
 
