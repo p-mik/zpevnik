@@ -1,0 +1,32 @@
+.version-switcher {
+  display: flex;
+  border: var(--border-w) solid var(--app-ink);
+}
+
+.version-chip {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  padding: var(--space-2) var(--space-3);
+  min-height: var(--touch-min);
+  background: transparent;
+  color: var(--app-ink);
+  border: none;
+  border-right: var(--border-w) solid var(--app-ink);
+  cursor: pointer;
+}
+.version-chip:last-child {
+  border-right: none;
+}
+.version-chip:hover {
+  background: var(--app-ink-18);
+}
+
+.version-chip-active {
+  background: var(--app-ink);
+  color: var(--app-paper);
+}
+.version-chip-active:hover {
+  background: var(--app-ink);
+}

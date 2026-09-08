@@ -11,6 +11,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APIClient
 
+from .apps import zkontroluj_servirovani_souboru
 from .models import Pisen, VerzePisne, Zpevnik
 
 # Minimální, ale platné PDF (rozhodují úvodní magic bytes "%PDF-").
@@ -591,3 +592,24 @@ class MazaniSouboruTests(SouboroveTestyZaklad):
         # Výchozí odklad 30 dnů — čerstvý osiřelý soubor musí přežít.
         call_command("uklid_souboru", "--smazat", stdout=StringIO())
         self.assertTrue(os.path.exists(cesta))
+
+
+class E001SystemCheckTests(TestCase):
+    """Kontrola je vědomě vázaná na ENVIRONMENT, ne na DEBUG — Django test
+    runner DEBUG vždy vynutí na False, takže vazba na DEBUG by kontrolu
+    spouštěla i tady, v běžném `manage.py test` s X_ACCEL_REDIRECT=False."""
+
+    @override_settings(ENVIRONMENT="production", X_ACCEL_REDIRECT=False)
+    def test_produkce_bez_x_accel_redirect_spadne(self):
+        chyby = zkontroluj_servirovani_souboru(None)
+        self.assertEqual(len(chyby), 1)
+        self.assertEqual(chyby[0].id, "zpevnik.E001")
+
+    @override_settings(ENVIRONMENT="production", X_ACCEL_REDIRECT=True)
+    def test_produkce_s_x_accel_redirect_projde(self):
+        self.assertEqual(zkontroluj_servirovani_souboru(None), [])
+
+    @override_settings(ENVIRONMENT="development", X_ACCEL_REDIRECT=False)
+    def test_lokalni_vyvoj_bez_x_accel_redirect_projde(self):
+        """Přesně scénář z README — lokální .env bez nginx."""
+        self.assertEqual(zkontroluj_servirovani_souboru(None), [])

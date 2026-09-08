@@ -1,0 +1,130 @@
+.reader-page {
+  display: flex;
+  flex-direction: column;
+  /* Fixní výška (ne min-height) — jinak by .reader-viewport nemělo co
+     omezit a celá stránka by rostla s obsahem PDF místo aby scrollovala
+     jen ta oblast, a lišta Předchozí/Další by zmizela pod okrajem. */
+  height: 100vh;
+  height: 100dvh;
+}
+
+.reader-topbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: var(--border-w-lg) solid var(--app-ink);
+}
+
+.reader-back {
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.reader-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.reader-code {
+  font-size: var(--text-base);
+  flex-shrink: 0;
+}
+
+.reader-title-text {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-lg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reader-subtitle {
+  font-family: var(--font-body);
+  font-weight: 400;
+  color: var(--app-ink-70);
+}
+
+.reader-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.reader-banner {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+
+.reader-viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  /* Místo pro svislý scrollbar rezervované předem — jinak by se šířka
+     kontejneru změnila zpětně PO tom, co se podle ní canvas už vykreslil
+     (scrollbar se objeví, až když je stránka vyšší než okno). */
+  scrollbar-gutter: stable;
+  padding: var(--space-5);
+  /* Vlastní pinch (viz usePinchZoom) — prohlížeč ať nezoomuje celou stránku,
+     ale svislý i vodorovný posun (scroll) nechává na sobě. */
+  touch-action: pan-x pan-y;
+  background: var(--app-ink-18);
+}
+
+/* `width: fit-content` + `margin: auto` msto flex `justify-content: center`
+   — ten na přetékajícím scrollovacím kontejneru začne scroll rovnou v
+   polovině stránky (klasický flexbox bug), tohle ne. */
+.reader-page-center {
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.reader-pagebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  border-top: var(--border-w-lg) solid var(--app-ink);
+}
+
+.reader-page-btn {
+  min-width: 9.5em;
+}
+
+.reader-page-count {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.reader-zoom-reset {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--app-primary);
+  background: transparent;
+  border: none;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0;
+  min-height: var(--touch-min);
+}
+
+@media (max-width: 640px) {
+  .reader-page-btn {
+    min-width: 0;
+  }
+}

@@ -56,7 +56,10 @@
   font-size: var(--text-sm);
   text-decoration: none;
   white-space: nowrap;
-  padding: var(--space-2) var(--space-4);
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
   border: var(--border-w) solid var(--app-ink);
 }
 .public-song-row .pdf-link:hover {

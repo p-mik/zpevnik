@@ -40,6 +40,11 @@
   margin: 0 0 0 var(--space-1);
 }
 
+.song-open-btn {
+  margin-top: var(--space-4);
+  display: inline-flex;
+}
+
 .song-detail-page h2 {
   font-family: var(--font-display);
   font-size: var(--text-lg);
@@ -63,12 +68,24 @@
   border-top: var(--border-w) solid var(--app-ink);
 }
 
+.verze-text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
 .verze-row .stav-label {
   font-family: var(--font-display);
   font-weight: 600;
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+
+.verze-open-btn {
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-4);
+  min-height: var(--touch-min);
 }
 
 /* jediné další místo, kde smí být --app-accent — odznak, ne plocha */

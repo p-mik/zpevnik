@@ -1,0 +1,16 @@
+.pdf-page-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 200px;
+  min-height: 200px;
+}
+
+.pdf-page-canvas canvas {
+  display: block;
+}
+
+.pdf-page-placeholder {
+  position: absolute;
+}

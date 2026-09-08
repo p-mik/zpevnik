@@ -10,6 +10,14 @@ SECRET_KEY = os.environ.get("SECRET_KEY", "dev-insecure-key-change-in-production
 
 DEBUG = os.environ.get("DEBUG", "False") == "True"
 
+# Nezávislé na DEBUGu schválně — Django test runner DEBUG vždy vynutí na
+# False (viz django.test.utils.setup_test_environment), takže by kontroly
+# vázané na "not DEBUG" vyskakovaly i při běžném `manage.py test` v lokálním
+# vývoji. Výchozí hodnota je "production" (bezpečné selhání zavřeně — kdyby
+# se proměnná v produkci zapomněla nastavit, kontroly dál platí); lokální
+# `.env` ji přepíná na "development".
+ENVIRONMENT = os.environ.get("ENVIRONMENT", "production")
+
 ALLOWED_HOSTS = os.environ.get(
     "ALLOWED_HOSTS", "zpevnik.upupaepops.cz,localhost,127.0.0.1"
 ).split(",")

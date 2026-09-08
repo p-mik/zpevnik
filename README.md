@@ -193,7 +193,13 @@ nikdy z parametru requestu — klient ovlivní jen to, o kterou verzi si řekne.
 
 Pro lokální vývoj bez nginx existuje přepínač `X_ACCEL_REDIRECT=False`, kdy soubor
 pošle Django přes `FileResponse`. **V produkci musí zůstat `True`** — když je vypnutý
-a zároveň `DEBUG=False`, `manage.py check` skončí chybou `zpevnik.E001`.
+a zároveň `ENVIRONMENT=production` (výchozí hodnota, pokud proměnná není nastavená
+vůbec — viz `config/settings.py`), `manage.py check` skončí chybou `zpevnik.E001`.
+
+Kontrola je vědomě vázaná na `ENVIRONMENT`, ne na `DEBUG` — Django test runner
+`DEBUG` vždy vynutí na `False` (i lokálně), takže vazba na `DEBUG` by kontrolu
+spouštěla i při obyčejném `manage.py test` s `X_ACCEL_REDIRECT=False` v `.env`.
+Lokální `.env` proto nastavuje `ENVIRONMENT=development` a testy pak běžně projdou.
 
 ### Mazání souborů
 

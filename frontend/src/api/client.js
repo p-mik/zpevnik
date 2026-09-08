@@ -99,3 +99,34 @@ export const api = {
   put: (path, body, opts = {}) => apiFetch(path, { method: 'PUT', body, ...opts }),
   del: (path) => apiFetch(path, { method: 'DELETE' }),
 }
+
+// Binární odpověď (PDF noty) — stejná CSRF/403/chybová logika jako apiFetch,
+// ale bez pokusu o `res.json()`. Použito čtečkou, ne běžnými komponentami.
+//
+// Kešuje se v paměti podle cesty: přechod mezi běžnou čtečkou a stage mode
+// pro tutéž verzi tak PDF nestahuje znovu. Neúspěch se nekešuje, ať jde
+// znovu zkusit.
+const blobCache = new Map()
+
+export function fetchBlob(path) {
+  const cached = blobCache.get(path)
+  if (cached) return cached
+
+  const promise = (async () => {
+    const res = await fetch(path, { method: 'GET', credentials: 'same-origin' })
+
+    if (res.status === 403 && forbiddenHandler) {
+      await forbiddenHandler()
+    }
+
+    if (!res.ok) {
+      throw await ApiError.fromResponse(res)
+    }
+
+    return res.blob()
+  })()
+
+  blobCache.set(path, promise)
+  promise.catch(() => blobCache.delete(path))
+  return promise
+}

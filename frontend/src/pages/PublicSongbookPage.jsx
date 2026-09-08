@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useApiResource } from '../hooks/useApiResource'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
@@ -53,9 +53,9 @@ export default function PublicSongbookPage() {
                 {song.interpret && <span className="interpret">{song.interpret}</span>}
               </span>
               {song.soubor_url && (
-                <a className="pdf-link" href={song.soubor_url} target="_blank" rel="noreferrer">
-                  Noty ↗
-                </a>
+                <Link className="pdf-link" to={`/verejny/${token}/pisen/${song.kod}`}>
+                  Noty
+                </Link>
               )}
             </div>
           ))}

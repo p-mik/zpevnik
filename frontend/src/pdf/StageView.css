@@ -1,0 +1,170 @@
+/* Stage mode — vlastní paleta (--stage-*), nikdy --app-*. */
+
+.stage-root {
+  position: fixed;
+  inset: 0;
+  background: var(--stage-bg);
+  color: var(--stage-ink);
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.stage-root-static {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage-tapzone {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.stage-tapzone .pdf-page-wrap {
+  min-width: 0;
+  min-height: 0;
+}
+
+.stage-loading {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--stage-muted);
+  animation: stage-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes stage-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+.stage-error {
+  max-width: 32ch;
+  text-align: center;
+  color: var(--stage-accent);
+  font-size: var(--text-base);
+  padding: var(--space-5);
+}
+
+.stage-unavailable {
+  text-align: center;
+  max-width: 36ch;
+  padding: var(--space-6);
+}
+.stage-unavailable h2 {
+  font-family: var(--font-display);
+  color: var(--stage-accent);
+  margin: 0 0 var(--space-3);
+}
+.stage-unavailable p {
+  color: var(--stage-muted);
+  margin: 0 0 var(--space-5);
+}
+
+.stage-btn,
+.stage-exit {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-min);
+  padding: var(--space-3) var(--space-5);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+  color: var(--stage-bg);
+  background: var(--stage-ink);
+  border: none;
+  text-decoration: none;
+}
+
+/* Ovládací vrstva — schovaná, dokud se nezaklepe doprostřed. */
+.stage-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.stage-overlay-visible {
+  opacity: 1;
+  pointer-events: none;
+}
+.stage-overlay-visible .stage-overlay-top,
+.stage-overlay-visible .stage-overlay-bottom,
+.stage-overlay-visible .stage-session-banner {
+  pointer-events: auto;
+}
+
+.stage-overlay-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: rgba(10, 10, 10, 0.82);
+}
+
+.stage-overlay-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.stage-code {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--stage-accent);
+  flex-shrink: 0;
+}
+
+.stage-session-banner {
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+  background: rgba(10, 10, 10, 0.82);
+  color: var(--stage-accent);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.stage-overlay-bottom {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-4);
+  background: rgba(10, 10, 10, 0.82);
+}
+
+.stage-page-count {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-lg);
+  color: var(--stage-ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stage-overlay {
+    transition: none;
+  }
+  .stage-loading {
+    animation: none;
+  }
+}

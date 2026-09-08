@@ -1,4 +1,4 @@
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { useApiResource } from '../hooks/useApiResource'
 import { STAV_LABELS, TYP_OBSAHU_LABELS } from '../constants'
 import LoadingState from '../components/LoadingState'
@@ -19,6 +19,8 @@ export default function SongDetailPage() {
       />
     )
   }
+
+  const maNejakySoubor = song.verze.some((v) => v.ma_soubor)
 
   return (
     <div className="song-detail-page">
@@ -57,6 +59,11 @@ export default function SongDetailPage() {
               </span>
             )}
           </dl>
+          {maNejakySoubor && (
+            <Link to={`/pisne/${song.id}/ctecka`} className="btn btn-primary song-open-btn">
+              Otevřít noty
+            </Link>
+          )}
         </div>
       </div>
 
@@ -67,17 +74,24 @@ export default function SongDetailPage() {
         <ul className="verze-list">
           {song.verze.map((verze) => (
             <li key={verze.id} className="verze-row">
-              <span className="stav-label">
-                {STAV_LABELS[verze.stav] || verze.stav}
-                {song.aktivni_verze && verze.id === song.aktivni_verze.id && (
-                  <span className="active-badge">Aktivní</span>
-                )}
-              </span>
-              <span className="verze-info">
-                {TYP_OBSAHU_LABELS[verze.typ_obsahu] || verze.typ_obsahu}
-                {verze.vlastnik && ` · ${verze.vlastnik.username}`}
-                {!verze.ma_soubor && ' · bez souboru'}
-              </span>
+              <div className="verze-text">
+                <span className="stav-label">
+                  {STAV_LABELS[verze.stav] || verze.stav}
+                  {song.aktivni_verze && verze.id === song.aktivni_verze.id && (
+                    <span className="active-badge">Aktivní</span>
+                  )}
+                </span>
+                <span className="verze-info">
+                  {TYP_OBSAHU_LABELS[verze.typ_obsahu] || verze.typ_obsahu}
+                  {verze.vlastnik && ` · ${verze.vlastnik.username}`}
+                  {!verze.ma_soubor && ' · bez souboru'}
+                </span>
+              </div>
+              {verze.ma_soubor && (
+                <Link to={`/pisne/${song.id}/ctecka?verze=${verze.id}`} className="btn verze-open-btn">
+                  Otevřít
+                </Link>
+              )}
             </li>
           ))}
         </ul>
