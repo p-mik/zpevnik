@@ -3,7 +3,11 @@
   flex-direction: column;
   border: var(--border-w-lg) solid var(--app-ink);
   margin: var(--space-5) auto;
-  max-width: 1100px;
+  /* .app-main má stejný max-width, ale navíc `padding: 0 var(--space-5)`
+     kolem obsahu — bez odečtení stejné šířky by levý/pravý okraj hlavičky
+     nesouhlasil s tím, co je pod ní (viz screenshot v konverzaci). */
+  width: calc(100% - (var(--space-5) * 2));
+  max-width: calc(1100px - (var(--space-5) * 2));
 }
 
 .header-text {
