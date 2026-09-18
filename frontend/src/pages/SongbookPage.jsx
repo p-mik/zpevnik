@@ -38,7 +38,7 @@ export default function SongbookPage() {
       ) : (
         <SongList>
           {zpevnik.pisne.map((song) => (
-            <SongRow key={song.id} song={song} />
+            <SongRow key={song.id} song={song} zpevnikId={id} />
           ))}
         </SongList>
       )}

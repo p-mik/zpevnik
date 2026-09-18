@@ -27,6 +27,14 @@
   background: var(--app-ink-18);
 }
 
+/* Právě otevřená píseň — tlumené pozadí jako hover + primární linka vlevo
+   (odečtená z paddingu, ať text neuskočí). */
+.song-row-current .song-row-inner {
+  background: var(--app-ink-18);
+  border-left: var(--border-w-lg) solid var(--app-primary);
+  padding-left: calc(var(--space-4) - var(--border-w-lg));
+}
+
 .song-row .titles {
   flex: 1;
   min-width: 0;

@@ -1,0 +1,41 @@
+.song-picker {
+  position: absolute;
+  top: 100%;
+  left: var(--space-5);
+  right: var(--space-5);
+  z-index: 20;
+  margin-top: var(--space-2);
+  max-width: 32rem;
+  background: var(--app-paper);
+  border: var(--border-w-lg) solid var(--app-ink);
+  display: flex;
+  flex-direction: column;
+  /* Až ke spodnímu okraji obrazovky — kde panel začíná (pod titulkem),
+     hlásí komponenta do --song-picker-top, zbytek si spočítá CSS. */
+  height: calc(100vh - var(--song-picker-top, 0px) - var(--space-4));
+  height: calc(100dvh - var(--song-picker-top, 0px) - var(--space-4));
+}
+
+.song-picker .search-bar {
+  flex-shrink: 0;
+  padding: var(--space-3);
+  border-bottom: var(--border-w) solid var(--app-ink);
+}
+
+.song-picker .field-input {
+  min-height: var(--touch-min);
+}
+
+.song-picker-list-wrap {
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.song-picker .song-list {
+  border: none;
+}
+
+.song-picker .state-block {
+  border: none;
+  padding: var(--space-6) var(--space-5);
+}

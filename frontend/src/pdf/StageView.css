@@ -69,8 +69,7 @@
   margin: 0 0 var(--space-5);
 }
 
-.stage-btn,
-.stage-exit {
+.stage-btn {
   display: inline-flex;
   align-items: center;
   min-height: var(--touch-min);
@@ -83,6 +82,28 @@
   background: var(--stage-ink);
   border: none;
   text-decoration: none;
+}
+
+/* Jen tenký barevný křížek, žádný tmavý flek přes noty — dost velké
+   klikací pole (padding), ale opticky drobné a nenápadné. */
+.stage-exit {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-5);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--touch-min);
+  height: var(--touch-min);
+  font-family: var(--font-body);
+  font-weight: 300;
+  font-size: var(--text-xl);
+  line-height: 1;
+  color: var(--stage-accent);
+  text-decoration: none;
+  text-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.85),
+    0 0 10px rgba(0, 0, 0, 0.6);
 }
 
 /* Ovládací vrstva — schovaná, dokud se nezaklepe doprostřed. */
@@ -102,30 +123,116 @@
 }
 .stage-overlay-visible .stage-overlay-top,
 .stage-overlay-visible .stage-overlay-bottom,
-.stage-overlay-visible .stage-session-banner {
+.stage-overlay-visible .stage-session-banner,
+.stage-overlay-visible .stage-exit {
   pointer-events: auto;
 }
 
 .stage-overlay-top {
+  /* Kotva pro rozbalený rychlý výběr písně (.song-picker, top: 100 %). */
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  background: rgba(10, 10, 10, 0.82);
+  /* Křížek žije mimo tenhle řádek (viz .stage-exit) — nechává se tu místo,
+     ať se titulek nepřekrývá s jeho klikacím polem v pravém rohu. */
+  padding: var(--space-4) calc(var(--touch-min) + var(--space-6)) 0 var(--space-5);
 }
 
+/* Titulek je <button> — rozbaluje rychlý výběr písně. Vizuálně jen text
+   se stínem, žádný rámeček ani pozadí, ať nepřekáží notám. */
 .stage-overlay-title {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  min-width: 0;
+  max-width: 100%;
+  min-height: var(--touch-min);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--stage-ink);
   font-family: var(--font-display);
   font-weight: 600;
   font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+  text-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.85),
+    0 0 10px rgba(0, 0, 0, 0.6);
+}
+.stage-overlay-title:hover .stage-overlay-title-text {
+  text-decoration: underline;
+}
+
+.stage-overlay-title-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+.stage-overlay-caret {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--stage-muted);
+}
+
+/* Rychlý výběr písně ve stage módu — stejný panel a sdílené komponenty jako
+   ve čtečce, ale přebarvené do --stage-*. Sdílené kousky (ui.css, SongRow)
+   mají výchozí --app-* barvy, tady se každá přepisuje; průsvitné odstíny
+   jsou color-mix z tokenů, žádná nová barva. Kód písně je jako v titulku:
+   akcentový text bez žlutého odznaku. */
+.stage-root .song-picker {
+  background: var(--stage-bg);
+  color: var(--stage-ink);
+  border-color: var(--stage-ink);
+}
+.stage-root .song-picker .search-bar {
+  border-bottom-color: var(--stage-muted);
+}
+.stage-root .song-picker .field-input {
+  background: var(--stage-bg);
+  color: var(--stage-ink);
+  border-color: var(--stage-muted);
+}
+.stage-root .song-picker .field-input:focus-visible {
+  border-color: var(--stage-accent);
+  outline: none;
+}
+.stage-root .song-picker .field-input::placeholder {
+  color: var(--stage-muted);
+}
+.stage-root .song-picker .song-row-inner {
+  border-top-color: var(--stage-muted);
+}
+.stage-root .song-picker .song-row:hover .song-row-inner,
+.stage-root .song-picker .song-row:focus-visible .song-row-inner {
+  background: color-mix(in srgb, var(--stage-ink) 14%, transparent);
+}
+.stage-root .song-picker .song-row-current .song-row-inner {
+  background: color-mix(in srgb, var(--stage-ink) 14%, transparent);
+  border-left-color: var(--stage-accent);
+}
+.stage-root .song-picker .code-chip {
+  background: transparent;
+  color: var(--stage-accent);
+  padding-left: 0;
+  text-align: left;
+  min-width: 2.6em;
+}
+.stage-root .song-picker .song-row .interpret,
+.stage-root .song-picker .state-block p,
+.stage-root .song-picker .loading-pulse {
+  color: var(--stage-muted);
+}
+.stage-root .song-picker .state-block {
+  color: var(--stage-ink);
+}
+.stage-root .song-picker .state-error h2 {
+  color: var(--stage-accent);
+}
+.stage-root :focus-visible {
+  outline-color: var(--stage-accent);
 }
 
 .stage-code {

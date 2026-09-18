@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePdfDocument } from './usePdfDocument'
 import { usePageRenderCache } from './usePageRenderCache'
@@ -7,9 +7,13 @@ import { usePagingKeys } from './usePagingKeys'
 import { useWakeLock } from './useWakeLock'
 import { exitDocumentFullscreen } from './fullscreen'
 import PdfPageCanvas from './PdfPageCanvas'
+import SongQuickPicker from './SongQuickPicker'
 import './StageView.css'
 
 const OVERLAY_TIMEOUT_MS = 4000
+// Tap, který zavřel rychlý výběr písně, se do tohohle času nebere jako tap
+// na noty (otočení stránky / skrytí overlaye).
+const TAP_SWALLOW_MS = 500
 
 // Fullscreen čtení bez appkového UI — vlastní tokeny (--stage-*), žádný
 // --app-* odstín. `position: fixed` kryje celou obrazovku bez ohledu na to,
@@ -22,11 +26,19 @@ export default function StageView({
   codeLabel,
   exitHref,
   sessionLost,
+  prevSongHref,
+  nextSongHref,
+  pickerHrefFor,
+  currentSongId,
 }) {
+  const navigate = useNavigate()
   const containerRef = useRef(null)
+  const titleRef = useRef(null)
   const [page, setPage] = useState(1)
   const [overlayVisible, setOverlayVisible] = useState(false)
+  const [pickerOpen, setPickerOpen] = useState(false)
   const hideTimerRef = useRef(null)
+  const swallowTapsUntilRef = useRef(0)
 
   const { pdfDoc, loading, error } = usePdfDocument(unavailableMessage ? null : pdfPath)
   const scale = useFitScale(pdfDoc, containerRef, 'contain')
@@ -57,16 +69,58 @@ export default function StageView({
     }
   }, [])
 
+  // Dvě věci v jednom:
+  // 1. Hned po vstupu se ovládání (hlavně "jak se odsud dostanu ven") krátce
+  //    mihne — jinak by se objevilo, jen když uživatel ví, že má ťuknout
+  //    doprostřed, což je přesně to "nezjevné", co zadání zakazuje. Po pár
+  //    vteřinách zase zmizí a při hraní nepřekáží.
+  // 2. Rychlý výběr písně žije v overlayi — dokud je otevřený, overlay se
+  //    nesmí sám schovat (zmizel by i s ním). Po zavření zase běží odpočet.
+  useEffect(() => {
+    if (pickerOpen) {
+      clearTimeout(hideTimerRef.current)
+      setOverlayVisible(true)
+    } else {
+      flashOverlay(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pickerOpen])
+
+  const closePicker = useCallback((reason) => {
+    setPickerOpen(false)
+    // Pointerdown mimo panel zavře výběr, ale ten samý tap by pak jako click
+    // dopadl na noty a otočil stránku. Krátce ho proto v handleTap ignorujeme.
+    if (reason === 'outside') swallowTapsUntilRef.current = performance.now() + TAP_SWALLOW_MS
+  }, [])
+
+  // Při přechodu na jinou píseň tap zónou / klávesou se panel zavře sám
+  // (výběr z panelu si zavření hlásí přes onClose('select')).
+  useEffect(() => {
+    setPickerOpen(false)
+  }, [pdfPath])
+
   useEffect(() => {
     if (sessionLost) flashOverlay(true)
   }, [sessionLost, flashOverlay])
 
-  const goPrev = useCallback(() => setPage((p) => Math.max(1, p - 1)), [])
-  const goNext = useCallback(() => setPage((p) => Math.min(numPages, p + 1)), [numPages])
+  // Na první/poslední straně "přeteče" do sousední písně, pokud je kam —
+  // stejná logika jako v běžné čtečce, navíc platí i pro tap zóny a
+  // klávesy/pedál (usePagingKeys volá tytéž funkce). `navigate` musí být
+  // mimo updater funkci setPage — ta musí zůstat čistá, jinak by ji React
+  // mohl zavolat vícekrát (StrictMode) a navigace by se spustila dvakrát.
+  const goPrev = useCallback(() => {
+    if (page > 1) setPage((p) => p - 1)
+    else if (prevSongHref) navigate(prevSongHref)
+  }, [page, prevSongHref, navigate])
+  const goNext = useCallback(() => {
+    if (page < numPages) setPage((p) => p + 1)
+    else if (nextSongHref) navigate(nextSongHref)
+  }, [page, numPages, nextSongHref, navigate])
 
   usePagingKeys({ onPrev: goPrev, onNext: goNext, enabled: Boolean(pdfDoc) && !unavailableMessage })
 
   function handleTap(e) {
+    if (performance.now() < swallowTapsUntilRef.current) return
     const rect = e.currentTarget.getBoundingClientRect()
     const ratio = (e.clientX - rect.left) / rect.width
     if (ratio < 0.35) goPrev()
@@ -111,14 +165,39 @@ export default function StageView({
 
       <div className={`stage-overlay${overlayVisible ? ' stage-overlay-visible' : ''}`}>
         <div className="stage-overlay-top">
-          <span className="stage-overlay-title">
+          <button
+            ref={titleRef}
+            type="button"
+            className="stage-overlay-title"
+            onClick={() => setPickerOpen((v) => !v)}
+            aria-expanded={pickerOpen}
+            aria-label="Přepnout na jinou píseň"
+          >
             {codeLabel && <span className="stage-code">{codeLabel}</span>}
-            {title}
-          </span>
-          <Link to={exitHref} className="stage-exit" onClick={(e) => e.stopPropagation()}>
-            Ukončit stage mode ✕
-          </Link>
+            <span className="stage-overlay-title-text">{title}</span>
+            <span className="stage-overlay-caret" aria-hidden="true">
+              {pickerOpen ? '▴' : '▾'}
+            </span>
+          </button>
+          {pickerOpen && (
+            <SongQuickPicker
+              onClose={closePicker}
+              anchorRef={titleRef}
+              hrefFor={pickerHrefFor}
+              currentSongId={currentSongId}
+            />
+          )}
         </div>
+
+        <Link
+          to={exitHref}
+          className="stage-exit"
+          aria-label="Ukončit stage mode"
+          title="Ukončit stage mode"
+          onClick={(e) => e.stopPropagation()}
+        >
+          ✕
+        </Link>
 
         {sessionLost && (
           <p className="stage-session-banner">

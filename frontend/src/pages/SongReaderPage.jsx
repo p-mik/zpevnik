@@ -2,6 +2,7 @@ import { Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useApiResource } from '../hooks/useApiResource'
 import { useReaderAuth } from '../pdf/useReaderAuth'
 import { resolveVerze } from '../pdf/resolveVerze'
+import { useSongNavigation } from '../pdf/useSongNavigation'
 import ReaderView from '../pdf/ReaderView'
 import VersionSwitcher from '../pdf/VersionSwitcher'
 import LoadingState from '../components/LoadingState'
@@ -11,8 +12,10 @@ export default function SongReaderPage() {
   const auth = useReaderAuth()
   const { id } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
+  const zpevnikId = searchParams.get('z')
 
   const { data: song, loading, error, reload } = useApiResource(auth.status === 'ready' ? `/api/pisne/${id}/` : null)
+  const { prevSong, nextSong } = useSongNavigation(id, zpevnikId)
 
   if (auth.status === 'loading') return <LoadingState label="Ověřuji přihlášení…" />
   if (auth.status === 'redirect') {
@@ -32,6 +35,8 @@ export default function SongReaderPage() {
   const pozadovaneId = Number(searchParams.get('verze'))
   const { currentVerze, unavailableTitle, unavailableMessage } = resolveVerze(song, pozadovaneId)
 
+  const zSuffix = zpevnikId ? `?z=${zpevnikId}` : ''
+
   return (
     <ReaderView
       pdfPath={currentVerze ? `/api/verze-pisni/${currentVerze.id}/soubor/` : null}
@@ -47,10 +52,20 @@ export default function SongReaderPage() {
         <VersionSwitcher
           verze={song.verze}
           currentId={currentVerze?.id}
-          onChange={(verzeId) => setSearchParams({ verze: String(verzeId) })}
+          onChange={(verzeId) =>
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev)
+              next.set('verze', String(verzeId))
+              return next
+            })
+          }
         />
       }
-      stageHref={currentVerze ? `/pisne/${id}/stage?verze=${currentVerze.id}` : undefined}
+      stageHref={currentVerze ? `/pisne/${id}/stage?verze=${currentVerze.id}${zpevnikId ? `&z=${zpevnikId}` : ''}` : undefined}
+      prevSongHref={prevSong ? `/pisne/${prevSong.id}/ctecka${zSuffix}` : undefined}
+      nextSongHref={nextSong ? `/pisne/${nextSong.id}/ctecka${zSuffix}` : undefined}
+      pickerHrefFor={(song) => `/pisne/${song.id}/ctecka${zSuffix}`}
+      currentSongId={song.id}
     />
   )
 }

@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useEffect, useRef, useState } from 'react'
 import { usePdfDocument } from './usePdfDocument'
 import { usePageRenderCache } from './usePageRenderCache'
@@ -7,6 +7,7 @@ import { usePinchZoom } from './usePinchZoom'
 import { usePagingKeys } from './usePagingKeys'
 import { requestDocumentFullscreen } from './fullscreen'
 import PdfPageCanvas from './PdfPageCanvas'
+import SongQuickPicker from './SongQuickPicker'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import EmptyState from '../components/EmptyState'
@@ -25,7 +26,12 @@ export default function ReaderView({
   versionSwitcher,
   stageHref,
   sessionBanner,
+  prevSongHref,
+  nextSongHref,
+  pickerHrefFor,
+  currentSongId,
 }) {
+  const navigate = useNavigate()
   const containerRef = useRef(null)
   const [page, setPage] = useState(1)
 
@@ -53,8 +59,18 @@ export default function ReaderView({
     prefetch(page - 1)
   }, [pdfDoc, page, prefetch])
 
-  const goPrev = () => setPage((p) => Math.max(1, p - 1))
-  const goNext = () => setPage((p) => Math.min(numPages, p + 1))
+  // Na první/poslední straně "přeteče" do sousední písně, pokud je kam —
+  // jedna dvojice tlačítek/kláves pro obojí, ať to nevypadá rozbité u
+  // (převažujících) jednostránkových písní, kde by jinak Další/Předchozí
+  // nikdy nedělalo nic.
+  const goPrev = () => {
+    if (page > 1) setPage((p) => p - 1)
+    else if (prevSongHref) navigate(prevSongHref)
+  }
+  const goNext = () => {
+    if (page < numPages) setPage((p) => p + 1)
+    else if (nextSongHref) navigate(nextSongHref)
+  }
 
   usePagingKeys({ onPrev: goPrev, onNext: goNext, enabled: Boolean(pdfDoc) && !unavailableMessage })
 
@@ -77,6 +93,8 @@ export default function ReaderView({
         subtitle={subtitle}
         versionSwitcher={versionSwitcher}
         stageHref={stageHref}
+        pickerHrefFor={pickerHrefFor}
+        currentSongId={currentSongId}
       />
 
       {sessionBanner && (
@@ -121,10 +139,10 @@ export default function ReaderView({
               type="button"
               className="btn reader-page-btn"
               onClick={goPrev}
-              disabled={page <= 1}
-              aria-label="Předchozí strana"
+              disabled={page <= 1 && !prevSongHref}
+              aria-label={page > 1 ? 'Předchozí strana' : 'Předchozí píseň'}
             >
-              ‹ Předchozí
+              ‹ {page > 1 ? 'Předchozí' : 'Předchozí píseň'}
             </button>
             <span className="reader-page-count">
               {page} / {numPages}
@@ -138,10 +156,10 @@ export default function ReaderView({
               type="button"
               className="btn reader-page-btn"
               onClick={goNext}
-              disabled={page >= numPages}
-              aria-label="Další strana"
+              disabled={page >= numPages && !nextSongHref}
+              aria-label={page < numPages ? 'Další strana' : 'Další píseň'}
             >
-              Další ›
+              {page < numPages ? 'Další' : 'Další píseň'} ›
             </button>
           </footer>
         </>
@@ -150,19 +168,42 @@ export default function ReaderView({
   )
 }
 
-function ReaderTopbar({ backHref, backLabel, codeLabel, title, subtitle, versionSwitcher, stageHref }) {
+function ReaderTopbar({
+  backHref,
+  backLabel,
+  codeLabel,
+  title,
+  subtitle,
+  versionSwitcher,
+  stageHref,
+  pickerHrefFor,
+  currentSongId,
+}) {
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const titleRef = useRef(null)
+
   return (
     <header className="reader-topbar">
       <Link to={backHref} className="breadcrumb-back reader-back">
         ← {backLabel}
       </Link>
-      <div className="reader-title">
+      <button
+        ref={titleRef}
+        type="button"
+        className="reader-title"
+        onClick={() => setPickerOpen((v) => !v)}
+        aria-expanded={pickerOpen}
+        aria-label="Přepnout na jinou píseň"
+      >
         {codeLabel && <span className="code-chip reader-code">{codeLabel}</span>}
         <span className="reader-title-text">
           {title}
           {subtitle && <span className="reader-subtitle"> · {subtitle}</span>}
         </span>
-      </div>
+        <span className="reader-title-caret" aria-hidden="true">
+          {pickerOpen ? '▴' : '▾'}
+        </span>
+      </button>
       <div className="reader-topbar-actions">
         {versionSwitcher}
         {stageHref && (
@@ -175,6 +216,14 @@ function ReaderTopbar({ backHref, backLabel, codeLabel, title, subtitle, version
           </Link>
         )}
       </div>
+      {pickerOpen && (
+        <SongQuickPicker
+          onClose={() => setPickerOpen(false)}
+          anchorRef={titleRef}
+          hrefFor={pickerHrefFor}
+          currentSongId={currentSongId}
+        />
+      )}
     </header>
   )
 }
