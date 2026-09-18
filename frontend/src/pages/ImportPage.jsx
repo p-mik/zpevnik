@@ -68,6 +68,7 @@ function ImportWizard() {
             pages={wizard.pages}
             problems={wizard.problems}
             updatePage={wizard.updatePage}
+            resolvedKodInfoByPage={wizard.resolvedKodInfoByPage}
           />
           <div className="import-actions">
             <button type="button" className="btn" onClick={wizard.zacitZnovu}>
@@ -143,15 +144,34 @@ function ImportWizard() {
 
 function ImportSummaryBar({ wizard }) {
   const rozpoznano = wizard.pages.filter((p) => p.headerFound).length
+  const pokracovani = wizard.pages.filter((p) => p.action === 'continuation').length
+  const kodyOdhadem = wizard.songs.filter((s) => s.kodOdhad).length
+
   return (
     <div className="import-summary panel">
       <span>
         <strong>{wizard.pages.length}</strong> stran, <strong>{rozpoznano}</strong> s
-        rozpoznanou hlavičkou, <strong>{wizard.songs.length}</strong> písní k založení
+        rozpoznanou hlavičkou, <strong>{pokracovani}</strong> jako pokračování,{' '}
+        <strong>{wizard.songs.length}</strong> písní k založení
       </span>
       {wizard.pocetProblemu > 0 && (
         <span className="import-summary-problems">{wizard.pocetProblemu} věcí k pohledu</span>
       )}
+      <label className="import-kody-od">
+        Kódy od:
+        <input
+          type="number"
+          className="field-input import-kody-od-input"
+          value={wizard.kodyOdText}
+          onChange={(e) => wizard.setKodyOdText(e.target.value)}
+          placeholder={String(wizard.vychoziKodyOd)}
+        />
+        {kodyOdhadem > 0 && (
+          <span className="import-kody-od-hint">
+            {kodyOdhadem} {kodyOdhadem === 1 ? 'píseň dostane' : 'písní dostane'} dopočítaný kód
+          </span>
+        )}
+      </label>
     </div>
   )
 }

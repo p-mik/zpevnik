@@ -59,7 +59,10 @@ export function analyzeProblems(pages, songs, orphanConstinuations, existingKody
 
   for (const s of songs) {
     if (s.kod == null) {
-      pridej(s.definujiciStrana, 'chybi-kod', 'Chybí kód')
+      // Kód není povinný — dopočítá se (viz kodyAuto.js), takže tohle
+      // NENÍ problém k nahlášení. Duplicity se kontrolují jen u kódů, co
+      // někdo (parser nebo uživatel) skutečně zadal.
+      continue
     } else if (kodCounts.get(s.kod) > 1) {
       pridej(s.definujiciStrana, 'duplicitni-kod-import', `Kód ${s.kod} se v importu opakuje`)
     } else if (existingKody && existingKody.has(s.kod)) {
@@ -77,7 +80,7 @@ export function planJeValidni(songs, orphanConstinuations, problems) {
   if (songs.length === 0) return false
   if (orphanConstinuations.length > 0) return false
   for (const list of problems.values()) {
-    if (list.some((p) => p.type === 'chybi-kod' || p.type.startsWith('duplicitni-kod'))) {
+    if (list.some((p) => p.type.startsWith('duplicitni-kod'))) {
       return false
     }
   }

@@ -15,6 +15,20 @@
   height: auto;
 }
 
+.page-thumb-open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+}
+.page-thumb-open:hover img,
+.page-thumb-open:focus-visible img {
+  outline: var(--border-w) solid var(--app-primary);
+  outline-offset: -2px;
+}
+
 .page-thumb-placeholder {
   display: block;
   width: 100%;

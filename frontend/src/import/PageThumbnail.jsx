@@ -7,7 +7,7 @@ const THUMB_WIDTH = 90
 // velká stránka najednou, tady desítky miniatur současně. Renderuje se líně,
 // jen když je řádek v tabulce reálně vidět (IntersectionObserver), ať se
 // při 89 stránkách nezasekne úvodní vykreslení.
-export default function PageThumbnail({ pdfDoc, pageNumber }) {
+export default function PageThumbnail({ pdfDoc, pageNumber, onOpen }) {
   const containerRef = useRef(null)
   const [visible, setVisible] = useState(false)
   const [imgUrl, setImgUrl] = useState(null)
@@ -56,7 +56,18 @@ export default function PageThumbnail({ pdfDoc, pageNumber }) {
   return (
     <div ref={containerRef} className="page-thumb">
       {imgUrl ? (
-        <img src={imgUrl} alt={`Náhled strany ${pageNumber}`} />
+        onOpen ? (
+          <button
+            type="button"
+            className="page-thumb-open"
+            onClick={onOpen}
+            title="Otevřít stranu na celou obrazovku"
+          >
+            <img src={imgUrl} alt={`Náhled strany ${pageNumber} — otevřít na celou obrazovku`} />
+          </button>
+        ) : (
+          <img src={imgUrl} alt={`Náhled strany ${pageNumber}`} />
+        )
       ) : (
         <span className="page-thumb-placeholder" aria-hidden="true" />
       )}

@@ -1,0 +1,102 @@
+.page-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(24, 22, 17, 0.7);
+  padding: var(--space-5);
+}
+
+.page-preview-panel {
+  background: var(--app-paper);
+  border: var(--border-w-lg) solid var(--app-ink);
+  /* Skutečná (ne jen max-) velikost — bez ní by .page-preview-body nemělo
+     podle čeho spočítat dostupný prostor DŘÍV, než se do něj cokoliv
+     vykreslí (viz JS "contain" výpočet), a měření velikosti při otevření by
+     dopadlo na počáteční min-height placeholderu, ne na skutečně dostupné
+     místo. */
+  width: min(900px, calc(100vw - 64px));
+  height: min(820px, calc(100vh - 64px));
+  display: flex;
+  flex-direction: column;
+}
+
+.page-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: var(--border-w) solid var(--app-ink);
+}
+
+.page-preview-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.page-preview-close {
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  border: var(--border-w) solid var(--app-ink);
+  background: transparent;
+  font-size: var(--text-lg);
+  line-height: 1;
+  cursor: pointer;
+}
+.page-preview-close:hover {
+  background: var(--app-ink);
+  color: var(--app-paper);
+}
+
+.page-preview-body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  /* flex: 1 + min-height: 0 — bez druhého by se v sloupcovém flexu (viz
+     .page-preview-panel) nesmrštilo pod výšku obsahu a canvas by pak měřil
+     dostupný prostor podle nesprávně velkého (nesmrsknutého) kontejneru. */
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.page-preview-nav {
+  flex-shrink: 0;
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  border: var(--border-w) solid var(--app-ink);
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  line-height: 1;
+  cursor: pointer;
+}
+.page-preview-nav:hover:not(:disabled) {
+  background: var(--app-ink);
+  color: var(--app-paper);
+}
+.page-preview-nav:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.page-preview-canvas-wrap {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.page-preview-canvas {
+  display: block;
+  max-width: 100%;
+  border: var(--border-w) solid var(--app-ink-18);
+}

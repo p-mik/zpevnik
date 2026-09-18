@@ -39,6 +39,30 @@
   color: var(--app-error);
 }
 
+.import-kody-od {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.import-kody-od-input {
+  width: 6em;
+  min-height: 2.4em;
+  padding: var(--space-1) var(--space-2);
+}
+
+.import-kody-od-hint {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-style: italic;
+  color: var(--app-ink-70);
+  white-space: normal;
+}
+
 .import-cely-zpevnik {
   display: flex;
   align-items: center;

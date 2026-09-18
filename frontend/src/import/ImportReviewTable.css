@@ -1,7 +1,32 @@
+.import-bulk-bar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-3);
+  background: var(--app-accent);
+}
+
+.import-bulk-count {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  margin-right: var(--space-2);
+}
+
 .import-table-wrap {
   overflow-x: auto;
   border: var(--border-w) solid var(--app-ink);
   margin-bottom: var(--space-6);
+}
+
+.import-col-vyber {
+  width: 2.5em;
+  text-align: center;
 }
 
 .import-table {
@@ -50,6 +75,33 @@
 
 .import-input-kod {
   width: 5.5em;
+}
+
+/* Odhad z "Kódy od" — dokud ho nikdo nepotvrdí zápisem, je vidět, že je to
+   jen návrh, ne rozhodnutí (viz zadání bod 1 — kód v tabulce editovatelný). */
+.import-input-kod-odhad {
+  color: var(--app-ink-45);
+  font-style: italic;
+}
+
+.import-col-swap {
+  width: 2.5em;
+  text-align: center;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.import-swap-btn {
+  min-width: 2.2em;
+  min-height: 2.2em;
+  border: var(--border-w) solid var(--app-ink);
+  background: transparent;
+  font-size: var(--text-base);
+  line-height: 1;
+  cursor: pointer;
+}
+.import-swap-btn:hover {
+  background: var(--app-ink-18);
 }
 
 .import-nazev-cell {
@@ -105,6 +157,16 @@
   background: var(--app-paper);
   color: var(--app-ink);
   min-height: var(--touch-min);
+}
+
+/* Zvýraznění, že jde o odhad parseru (bod 6), ne o potvrzenou volbu — tlumená
+   barva ať to nesoupeří s error/warning odznaky vedle. */
+.import-odhad-badge {
+  display: inline-block;
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  font-style: italic;
+  color: var(--app-ink-45);
 }
 
 .import-problems {
