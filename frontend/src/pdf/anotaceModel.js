@@ -27,7 +27,7 @@ export function omez(hodnota, min, max) {
   return Math.min(max, Math.max(min, hodnota))
 }
 
-export function novaAnotace(strana, x, y) {
+export function novaAnotace(strana, x, y, styl = 'normal') {
   return {
     // crypto.randomUUID chybí na starším Safari i mimo secure context —
     // id musí být jen unikátní v rámci jedné verze, takže tohle stačí.
@@ -37,7 +37,7 @@ export function novaAnotace(strana, x, y) {
     y: omez(y, 0, 0.98),
     sirka: VYCHOZI_SIRKA,
     text: '',
-    styl: 'normal',
+    styl,
     velikost: VYCHOZI_VELIKOST,
   }
 }

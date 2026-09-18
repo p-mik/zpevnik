@@ -3,6 +3,19 @@ import { isTypingTarget } from './usePagingKeys'
 import { MIN_SIRKA, VYCHOZI_VELIKOST, omez } from './anotaceModel'
 import './AnnotationLayer.css'
 
+// Textarea začíná na jeden řádek (viz rows={1} a bez min-height v CSS) a
+// roste s obsahem — ne napevno na dva řádky předem. `height: auto` před
+// změřením je nutné, jinak by scrollHeight při MAZÁNÍ textu zůstal
+// zaklíněný na předchozí (větší) výšce. Volá se jak z ref callbacku (velikost
+// hned při otevření pole — i pro už rozepsaný víceřádkový text), tak z
+// onChange (přerůst/zmenšení při psaní). Je to obyčejná funkce mimo
+// komponentu, ne hook — nevadí, že se používá z ref i z event handleru.
+function velikostTextarea(el) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
 // Vrstva poznámek nad jednou stránkou PDF. Leží v `.pdf-page-stack`, který má
 // přesně rozměr vykreslené stránky, takže zlomkové souřadnice stačí přepsat
 // na procenta a sedí samy — při zoomu, na jiné šířce okna i po otočení tabletu.
@@ -154,12 +167,22 @@ export default function AnnotationLayer({
               <textarea
                 className="anotace-text-input"
                 value={objekt.text}
+                rows={1}
+                ref={velikostTextarea}
                 autoFocus
-                onChange={(e) => onZmenit?.(objekt.id, { text: e.target.value })}
+                onChange={(e) => {
+                  onZmenit?.(objekt.id, { text: e.target.value })
+                  velikostTextarea(e.target)
+                }}
                 onKeyDown={(e) => naKlavesuVText(e, objekt)}
                 onBlur={() => setEditovanyId(null)}
                 onPointerDown={(e) => e.stopPropagation()}
                 aria-label="Text poznámky"
+                // iPad: appka vlastní pravopis/kapitalizaci/autokorekci nechce —
+                // text bývá akord, tab nebo zkratka, kde by "opravy" jen škodily.
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
               />
             ) : (
               <span className="anotace-text">{objekt.text || (editovatelne ? '…' : '')}</span>

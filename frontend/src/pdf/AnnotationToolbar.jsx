@@ -1,10 +1,17 @@
 import { PREDVOLBY_ZNACEK, STYLY, VELIKOSTI, VYCHOZI_VELIKOST } from './anotaceModel'
 import './AnnotationToolbar.css'
 
-// Lišta režimu úprav. Vlevo co se dá dělat s vybraným polem, vpravo uložení —
-// výslovné, se stavem „neuloženo", ne autosave při každém písmenu.
+// Lišta režimu úprav. Vlevo co se dá dělat, vpravo uložení — výslovné, se
+// stavem „neuloženo", ne autosave při každém písmenu.
+//
+// Typ poznámky je vidět a přepínatelný VŽDY, i bez vybraného pole — funguje
+// jako nástroj v kreslicím programu: zvolí se jednou a dvojklik do not pak
+// zakládá pole rovnou s ním, místo aby vznikalo pořád jako "poznámka" a styl
+// se dolaďoval až dodatečně po každém vložení. Když je něco vybrané, tlačítko
+// zároveň přebarví i to pole — jedna akce, dvě role podle kontextu.
 export default function AnnotationToolbar({
   vybrany,
+  typProNove,
   onStyl,
   onVelikost,
   onText,
@@ -15,24 +22,27 @@ export default function AnnotationToolbar({
   ukladam,
   chyba,
 }) {
+  const aktivniStyl = vybrany ? vybrany.styl : typProNove
+
   return (
     <div className="anotace-lista">
       <div className="anotace-lista-nastroje">
+        <div className="anotace-styly" role="group" aria-label="Typ poznámky">
+          {STYLY.map((styl) => (
+            <button
+              key={styl.hodnota}
+              type="button"
+              className={`anotace-styl${aktivniStyl === styl.hodnota ? ' anotace-styl-aktivni' : ''}`}
+              onClick={() => onStyl(styl.hodnota)}
+              aria-pressed={aktivniStyl === styl.hodnota}
+            >
+              {styl.popisek}
+            </button>
+          ))}
+        </div>
+
         {vybrany ? (
           <>
-            <div className="anotace-styly" role="group" aria-label="Styl poznámky">
-              {STYLY.map((styl) => (
-                <button
-                  key={styl.hodnota}
-                  type="button"
-                  className={`anotace-styl${vybrany.styl === styl.hodnota ? ' anotace-styl-aktivni' : ''}`}
-                  onClick={() => onStyl(styl.hodnota)}
-                  aria-pressed={vybrany.styl === styl.hodnota}
-                >
-                  {styl.popisek}
-                </button>
-              ))}
-            </div>
             <div className="anotace-styly" role="group" aria-label="Velikost písma">
               {VELIKOSTI.map((velikost) => {
                 const aktivni = (vybrany.velikost || VYCHOZI_VELIKOST) === velikost.hodnota
@@ -69,7 +79,7 @@ export default function AnnotationToolbar({
           </>
         ) : (
           <p className="anotace-napoveda">
-            Dvojklik do not založí poznámku. Klik ji vybere, tažení posune, dvojklik otevře text.
+            Dvojklik do not vloží pole zvoleného typu. Klik ho vybere, tažení posune, dvojklik otevře text.
           </p>
         )}
       </div>

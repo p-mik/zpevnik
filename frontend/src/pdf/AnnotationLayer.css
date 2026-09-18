@@ -45,7 +45,6 @@
 .anotace-text-input {
   display: block;
   width: 100%;
-  min-height: 3em;
   margin: 0;
   padding: 0;
   border: none;
@@ -55,6 +54,9 @@
   line-height: inherit;
   resize: none;
   outline: none;
+  /* Výšku počítá velikostTextarea() v JS (roste s obsahem) — overflow: hidden
+     jen zamezí bliknutí scrollbaru mezi jedním přepočtem a druhým. */
+  overflow: hidden;
 }
 
 /* --- vzhled objektů ---
@@ -65,7 +67,6 @@
 .anotace-app .anotace {
   --deska: var(--app-anotace-bg);
   --text: var(--app-anotace-ink);
-  --akord: var(--app-anotace-akord);
   --znacka-deska: var(--app-anotace-znacka-bg);
   --znacka-text: var(--app-anotace-znacka-ink);
 }
@@ -73,7 +74,6 @@
 .anotace-stage .anotace {
   --deska: var(--stage-anotace-bg);
   --text: var(--stage-anotace-ink);
-  --akord: var(--stage-anotace-akord);
   --znacka-deska: var(--stage-anotace-znacka-bg);
   --znacka-text: var(--stage-anotace-znacka-ink);
 }
@@ -89,11 +89,14 @@
   font-family: var(--font-mono);
 }
 
+/* Stejná tmavá deska + světlý text jako ostatní typy (dědí z .anotace) — jen
+   monospace a tučně kvůli zarovnání: víc akordů za sebou v jednom poli
+   ("Ami   G   D") drží mezery pevnou šířku, takže jdou vyrovnat pod sebou
+   jako v tabu. */
 .anotace[data-styl='akord'] {
-  font-family: var(--font-display);
+  font-family: var(--font-mono);
   font-weight: 700;
   font-size: calc(var(--sirka-stranky) * var(--anotace-pomer-akord) * var(--nasobic));
-  color: var(--akord);
   padding: 0 var(--padding);
 }
 

@@ -29,7 +29,6 @@
      ale poznámka musí vypadat stejně tam, kde vzniká, i tam, kde se čte. */
   --stage-anotace-bg: rgba(10, 10, 10, 0.92);
   --stage-anotace-ink: #edede6;
-  --stage-anotace-akord: #ff8a3d;
   --stage-anotace-znacka-bg: #ff8a3d;
   --stage-anotace-znacka-ink: #0a0a0a;
 
@@ -97,7 +96,6 @@
      s tiskem a musí být čitelná i v šeru. */
   --app-anotace-bg: rgba(24, 22, 17, 0.92);
   --app-anotace-ink: #f4efe1;
-  --app-anotace-akord: #ff8a3d;
   --app-anotace-znacka-bg: #ff8a3d;
   --app-anotace-znacka-ink: #181611;
 

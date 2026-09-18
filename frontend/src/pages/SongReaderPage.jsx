@@ -62,6 +62,10 @@ function CtenaPisen({ song, reload, sessionLost, pozadovanaVerze }) {
 
   const [rezimUprav, setRezimUprav] = useState(false)
   const [vybranyId, setVybranyId] = useState(null)
+  // "Nástroj" pro vkládání — styl, který dostane příští nové pole. Přepnutí
+  // platí, dokud ho uživatel nezmění, ať psaní víc akordů/značek za sebou
+  // nevyžaduje po každém dvojkliku znovu sahat na lištu.
+  const [typProNove, setTypProNove] = useState('normal')
   const anotace = useAnotace(currentVerze?.id)
   useVarovaniPriOdchodu(anotace.zmeneno)
 
@@ -80,6 +84,13 @@ function CtenaPisen({ song, reload, sessionLost, pozadovanaVerze }) {
       next.set('verze', String(verzeId))
       return next
     })
+  }
+
+  // Klik na typ v liště vždy nastaví "nástroj" pro příští vložení a navíc,
+  // pokud je zrovna něco vybrané, rovnou přebarví i to pole.
+  function nastavStyl(styl) {
+    setTypProNove(styl)
+    if (vybrany) anotace.zmen(vybrany.id, { styl })
   }
 
   return (
@@ -124,7 +135,8 @@ function CtenaPisen({ song, reload, sessionLost, pozadovanaVerze }) {
         rezimUprav ? (
           <AnnotationToolbar
             vybrany={vybrany}
-            onStyl={(styl) => vybrany && anotace.zmen(vybrany.id, { styl })}
+            typProNove={typProNove}
+            onStyl={nastavStyl}
             onVelikost={(velikost) => vybrany && anotace.zmen(vybrany.id, { velikost })}
             onText={(text) => vybrany && anotace.zmen(vybrany.id, { text })}
             onSmazat={() => {
@@ -148,7 +160,7 @@ function CtenaPisen({ song, reload, sessionLost, pozadovanaVerze }) {
           vybranyId={vybranyId}
           onVybrat={setVybranyId}
           onVytvorit={(x, y) => {
-            const objekt = novaAnotace(strana, x, y)
+            const objekt = novaAnotace(strana, x, y, typProNove)
             anotace.pridej(objekt)
             setVybranyId(objekt.id)
           }}
