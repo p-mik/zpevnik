@@ -4,10 +4,17 @@ import { useReaderAuth } from '../pdf/useReaderAuth'
 import { resolveVerze } from '../pdf/resolveVerze'
 import { useSongNavigation } from '../pdf/useSongNavigation'
 import { useAnotace } from '../pdf/useAnotace'
+import { kodVeZpevniku } from '../pdf/kodVeZpevniku'
 import StageView from '../pdf/StageView'
 import AnnotationLayer from '../pdf/AnnotationLayer'
 import LoadingState from '../components/LoadingState'
 import '../pdf/StageView.css'
+
+// Kód je vlastnost zařazení do KONKRÉTNÍHO zpěvníku (viz kodVeZpevniku.js) —
+// bez zpevnikId ho appka nemá odkud vzít, odznak se pak prostě nezobrazí.
+function formatKod(kod) {
+  return kod != null ? String(kod).padStart(3, '0') : undefined
+}
 
 export default function StageModePage() {
   const auth = useReaderAuth()
@@ -75,7 +82,7 @@ function HranaPisen({ song, backHref, sessionLost, pozadovanaVerze }) {
       unavailableTitle={unavailableTitle}
       unavailableMessage={unavailableMessage}
       title={song.nazev}
-      codeLabel={String(song.kod).padStart(3, '0')}
+      codeLabel={formatKod(kodVeZpevniku(song, zpevnikId))}
       exitHref={backHref}
       sessionLost={sessionLost}
       prevSongHref={prevSong ? `/pisne/${prevSong.id}/stage${zSuffix}` : undefined}

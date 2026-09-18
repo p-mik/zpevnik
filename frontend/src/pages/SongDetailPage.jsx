@@ -16,10 +16,13 @@ function SousedniPisen({ pisen, smer }) {
       </span>
     )
   }
+  // Bez kódu schválně — tohle je procházení napříč VŠÍM, ne v rámci
+  // jednoho zpěvníku, a kód je od fáze 2b vlastnost zařazení do
+  // konkrétního zpěvníku, ne písně (viz PolozkaZpevniku). Řadí se podle
+  // jména (useSongNavigation), tak se jméno i ukazuje.
   return (
     <Link to={`/pisne/${pisen.id}`} className="btn song-nav-btn">
       {smer === 'predchozi' && '‹ '}
-      <span className="song-nav-kod">{String(pisen.kod).padStart(3, '0')}</span>
       <span className="song-nav-nazev">{pisen.nazev}</span>
       {smer === 'dalsi' && ' ›'}
     </Link>
@@ -56,10 +59,19 @@ export default function SongDetailPage() {
       </nav>
 
       <div className="song-detail-head">
-        <span className="code-chip">{String(song.kod).padStart(3, '0')}</span>
         <div>
           <h1>{song.nazev}</h1>
           {song.interpret && <p className="interpret">{song.interpret}</p>}
+          {song.zarazeni?.length > 0 && (
+            <ul className="song-zarazeni" aria-label="Číslo v jednotlivých zpěvnících">
+              {song.zarazeni.map((z) => (
+                <li key={z.id} className="song-zarazeni-item">
+                  <span className="code-chip">{String(z.kod).padStart(3, '0')}</span>
+                  <span className="song-zarazeni-nazev">{z.zpevnik_nazev}</span>
+                </li>
+              ))}
+            </ul>
+          )}
           <dl className="song-meta">
             {song.tonina && (
               <span>

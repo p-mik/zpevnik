@@ -6,6 +6,7 @@ from .models import (
     Anotace,
     Pisen,
     PolozkaSetlistu,
+    PolozkaZpevniku,
     Setlist,
     Slozka,
     VerzePisne,
@@ -125,22 +126,40 @@ class AnotaceSerializer(serializers.ModelSerializer):
 
 
 class PisenListSerializer(serializers.ModelSerializer):
-    """Lehký seznam pro rychlý scroll — bez vnořených verzí."""
+    """Lehký seznam pro rychlý scroll — bez vnořených verzí.
+
+    Bez `kod` schválně: kód je vlastnost zařazení do KONKRÉTNÍHO zpěvníku
+    (viz PolozkaZpevniku), ne písně samotné — stejná píseň může mít v
+    různých zpěvnících různá čísla. V plochém seznamu napříč vším žádné
+    jednoznačné číslo neexistuje; kód se ukazuje jen tam, kde je jasné, o
+    kterém zpěvníku je řeč (viz PisenVZpevnikuSerializer)."""
 
     class Meta:
         model = Pisen
-        fields = ["id", "kod", "nazev", "interpret"]
+        fields = ["id", "nazev", "interpret"]
+
+
+class ZarazeniZpevnikuSerializer(serializers.ModelSerializer):
+    """Jedno zařazení písně do zpěvníku — s jeho vlastním kódem. Píseň jich
+    může mít víc (různé zpěvníky, různá čísla), proto je to seznam na
+    PisenDetailSerializer, ne jedno pole."""
+
+    zpevnik_nazev = serializers.CharField(source="zpevnik.nazev", read_only=True)
+
+    class Meta:
+        model = PolozkaZpevniku
+        fields = ["id", "zpevnik", "zpevnik_nazev", "kod"]
 
 
 class PisenDetailSerializer(serializers.ModelSerializer):
     verze = VerzePisneSerializer(many=True, read_only=True)
     aktivni_verze = serializers.SerializerMethodField()
+    zarazeni = ZarazeniZpevnikuSerializer(source="polozky_zpevniku", many=True, read_only=True)
 
     class Meta:
         model = Pisen
         fields = [
             "id",
-            "kod",
             "nazev",
             "interpret",
             "tonina",
@@ -149,6 +168,7 @@ class PisenDetailSerializer(serializers.ModelSerializer):
             "odkaz_nahravka",
             "verze",
             "aktivni_verze",
+            "zarazeni",
         ]
 
     def get_aktivni_verze(self, obj):
@@ -160,6 +180,21 @@ class PisenDetailSerializer(serializers.ModelSerializer):
         return VerzePisneSerializer(verze, context=self.context).data
 
 
+class PisenVZpevnikuSerializer(serializers.ModelSerializer):
+    """Píseň tak, jak se objevuje v KONKRÉTNÍM zpěvníku — s jeho vlastním
+    kódem. `id` je PK písně (pro odkazy na /pisne/<id>/…), `polozka_id` je PK
+    tohohle konkrétního zařazení (pro budoucí editaci/přesun mezi zpěvníky)."""
+
+    id = serializers.IntegerField(source="pisen_id", read_only=True)
+    polozka_id = serializers.IntegerField(source="id", read_only=True)
+    nazev = serializers.CharField(source="pisen.nazev", read_only=True)
+    interpret = serializers.CharField(source="pisen.interpret", read_only=True)
+
+    class Meta:
+        model = PolozkaZpevniku
+        fields = ["id", "polozka_id", "kod", "nazev", "interpret"]
+
+
 class SlozkaSerializer(serializers.ModelSerializer):
     class Meta:
         model = Slozka
@@ -167,19 +202,20 @@ class SlozkaSerializer(serializers.ModelSerializer):
 
 
 class ZpevnikSerializer(serializers.ModelSerializer):
-    pisne = PisenListSerializer(many=True, read_only=True)
-    pisne_ids = serializers.PrimaryKeyRelatedField(
-        source="pisne",
-        queryset=Pisen.objects.all(),
-        many=True,
-        write_only=True,
-        required=False,
-    )
+    # Přes `polozky` (PolozkaZpevniku), ne přímo `pisne` — potřebujeme kód
+    # PLATNÝ V TOMHLE zpěvníku, ne píseň samotnou. Řazení podle kódu jde
+    # zadarmo z PolozkaZpevniku.Meta.ordering.
+    pisne = PisenVZpevnikuSerializer(source="polozky", many=True, read_only=True)
+    # Zápisové přidávání/přesun písní (s řešením kolizí kódů) je zatím jen
+    # přes admin/import — `pisne_ids` je pryč, protože M2M s `through`
+    # vyžadujícím extra pole (kód) neumí Django `.set()` jednou hodnotou pro
+    # všechny najednou. Vrátí se, až bude editace/přesun mezi zpěvníky
+    # hotová pořádně (viz zadání „později").
     verejny_token = serializers.SerializerMethodField()
 
     class Meta:
         model = Zpevnik
-        fields = ["id", "nazev", "slozka", "pisne", "pisne_ids", "verejny_token"]
+        fields = ["id", "nazev", "slozka", "pisne", "verejny_token"]
 
     def get_verejny_token(self, obj):
         """Token je sdílitelný odkaz — viditelný jen adminovi, ne každému členovi."""
@@ -241,11 +277,22 @@ class VerejnaVerzeSerializer(serializers.ModelSerializer):
 
 
 class VerejnaPisenSerializer(serializers.ModelSerializer):
+    """Píseň ve VEŘEJNÉM zpěvníku — `obj` je PolozkaZpevniku (ne Pisen), kód
+    je platný jen v rámci TOHOTO zpěvníku (viz PisenVZpevnikuSerializer,
+    stejný princip)."""
+
+    kod = serializers.IntegerField(read_only=True)
+    nazev = serializers.CharField(source="pisen.nazev", read_only=True)
+    interpret = serializers.CharField(source="pisen.interpret", read_only=True)
+    tonina = serializers.CharField(source="pisen.tonina", read_only=True)
+    capo = serializers.IntegerField(source="pisen.capo", read_only=True)
+    tempo = serializers.IntegerField(source="pisen.tempo", read_only=True)
+    odkaz_nahravka = serializers.URLField(source="pisen.odkaz_nahravka", read_only=True)
     aktivni_verze = serializers.SerializerMethodField()
     soubor_url = serializers.SerializerMethodField()
 
     class Meta:
-        model = Pisen
+        model = PolozkaZpevniku
         fields = [
             "kod",
             "nazev",
@@ -259,13 +306,13 @@ class VerejnaPisenSerializer(serializers.ModelSerializer):
         ]
 
     def get_aktivni_verze(self, obj):
-        verze = obj.aktivni_verze(user=None)
+        verze = obj.pisen.aktivni_verze(user=None)
         if verze is None:
             return None
         return VerejnaVerzeSerializer(verze, context=self.context).data
 
     def get_soubor_url(self, obj):
-        verze = obj.aktivni_verze(user=None)
+        verze = obj.pisen.aktivni_verze(user=None)
         token = self.context.get("verejny_token")
         if verze is None or not verze.soubor or not token:
             return None
@@ -275,17 +322,23 @@ class VerejnaPisenSerializer(serializers.ModelSerializer):
 
 
 class VerejnyZpevnikSerializer(serializers.ModelSerializer):
-    pisne = VerejnaPisenSerializer(many=True, read_only=True)
+    # Přes `polozky`, ne `pisne` přímo — stejný důvod jako u ZpevnikSerializer.
+    pisne = VerejnaPisenSerializer(source="polozky", many=True, read_only=True)
 
     class Meta:
         model = Zpevnik
         fields = ["nazev", "pisne"]
 
 
-# --- Hromadný import (fáze 1e) — validace POTVRZENÉHO plánu, ne parsování ---
+# --- Hromadný import (fáze 1e/2b) — validace POTVRZENÉHO plánu, ne parsování ---
 # Parsování PDF proběhlo na klientovi; tady se jen ověřuje TVAR plánu, který
 # poslal. Obsahová validace (kódy, rozsahy stránek) je v zpevnik/import_pisni.py,
 # protože potřebuje znát skutečný počet stran nahraného PDF.
+#
+# `kod` je od fáze 2b vlastnost zařazení do zpěvníku (viz PolozkaZpevniku),
+# ne písně — pořád ho ale posílá JEDEN plán jako "číslo, pod kterým tahle
+# píseň bude ve VŠECH zpěvnících, co se tímhle importem zakládají" (kategorie
+# i celý zpěvník dohromady tvoří jednu knihu, číslování je jedno pro obojí).
 
 
 class ImportPisenPlanSerializer(serializers.Serializer):

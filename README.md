@@ -264,7 +264,6 @@ Webová aplikace pro správu a čtení zpěvníků kapely (a víc kapel). Členo
 ## Datový model (koncept)
 
 ### pisen (kmenová píseň)
-- `kod` — číselný kód písničky (pro rychlé vyhledání v session)
 - `nazev`
 - `interpret`
 - `tonina` (volitelné)
@@ -272,6 +271,13 @@ Webová aplikace pro správu a čtení zpěvníků kapely (a víc kapel). Členo
 - `tempo` — BPM, int, nullable (pro vizuální metronom)
 - `odkaz_nahravka` — URL na YouTube/Spotify („takhle to hrajeme")
 - pozn.: píseň sama o sobě nemá obsah — obsah nesou verze
+- **žádný `kod`** — od fáze 2b je číslo vlastnost ZAŘAZENÍ do konkrétního
+  zpěvníku (viz `polozka_zpevniku` níž), ne písně samotné. Stejná píseň může
+  mít v různých zpěvnících (různé kapely/repertoáry) různá čísla, a dva různé
+  zpěvníky mohou libovolně sdílet stejné číslo pro dvě různé písně — kolize
+  se hlídá jen VNITŘ jednoho zpěvníku (DB constraint na `(zpevnik, kod)`).
+  Nový zpěvník bez vlastních čísel proto vždycky může čistě začít na 100/101,
+  bez ohledu na to, co používá kterýkoli jiný zpěvník.
 
 ### verze_pisne
 - `pisen` — FK na kmenovou píseň
@@ -287,7 +293,15 @@ Webová aplikace pro správu a čtení zpěvníků kapely (a víc kapel). Členo
 ### zpevnik
 - `nazev`, `slozka` (stromová struktura složek)
 - `verejny_token` — pro veřejný odkaz (nullable)
-- M2M na písně (píseň může být ve víc zpěvnících, ve zpěvníku je vždy kmenová píseň, ne konkrétní verze)
+- M2M na písně PŘES `polozka_zpevniku` (píseň může být ve víc zpěvnících, ve
+  zpěvníku je vždy kmenová píseň, ne konkrétní verze)
+
+### polozka_zpevniku (přes co jde M2M zpevnik↔pisen)
+- `zpevnik`, `pisen` — FK
+- `kod` — číslo písně V TOMHLE zpěvníku (unikátní jen tady, ne globálně;
+  stejný vzor jako `polozka_setlistu` u setlistů, jen s číslem navíc)
+- constraint: `(zpevnik, kod)` unikátní, `(zpevnik, pisen)` unikátní (píseň
+  nejde do stejného zpěvníku zařadit dvakrát)
 
 ### setlist
 - Trvalé pojmenované pořadí písní (příprava na koncert, k projetí doma, k tisku).

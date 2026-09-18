@@ -4,6 +4,7 @@ from .models import (
     Anotace,
     Pisen,
     PolozkaSetlistu,
+    PolozkaZpevniku,
     Session,
     Setlist,
     Slozka,
@@ -21,10 +22,10 @@ class VerzePisneInline(admin.TabularInline):
 
 @admin.register(Pisen)
 class PisenAdmin(admin.ModelAdmin):
-    list_display = ["kod", "nazev", "interpret", "tonina", "tempo"]
+    list_display = ["nazev", "interpret", "tonina", "tempo"]
     list_filter = ["tonina"]
-    search_fields = ["kod", "nazev", "interpret"]
-    ordering = ["kod"]
+    search_fields = ["nazev", "interpret"]
+    ordering = ["nazev"]
     inlines = [VerzePisneInline]
 
 
@@ -32,7 +33,7 @@ class PisenAdmin(admin.ModelAdmin):
 class VerzePisneAdmin(admin.ModelAdmin):
     list_display = ["pisen", "typ_obsahu", "stav", "vlastnik", "puvodni_nazev_souboru", "upraveno"]
     list_filter = ["typ_obsahu", "stav"]
-    search_fields = ["pisen__nazev", "pisen__kod", "puvodni_nazev_souboru"]
+    search_fields = ["pisen__nazev", "puvodni_nazev_souboru"]
     readonly_fields = ["puvodni_nazev_souboru"]
 
 
@@ -49,12 +50,22 @@ def vygenerovat_verejny_token(modeladmin, request, queryset):
         zpevnik.vygeneruj_verejny_token()
 
 
+class PolozkaZpevnikuInline(admin.TabularInline):
+    model = PolozkaZpevniku
+    extra = 1
+    fields = ["kod", "pisen"]
+    ordering = ["kod"]
+
+
 @admin.register(Zpevnik)
 class ZpevnikAdmin(admin.ModelAdmin):
     list_display = ["nazev", "slozka", "verejny_token"]
     list_filter = ["slozka"]
     search_fields = ["nazev"]
-    filter_horizontal = ["pisne"]
+    # `filter_horizontal` na `pisne` nejde — M2M s explicitním `through`
+    # (kód je vlastnost zařazení, ne písně, viz models.py) potřebuje inline
+    # na sám through model, ne widget na holou M2M.
+    inlines = [PolozkaZpevnikuInline]
     actions = [vygenerovat_verejny_token]
 
 

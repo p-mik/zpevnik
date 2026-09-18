@@ -18,9 +18,14 @@ def cesta_pro_soubor_verze(instance, filename):
 
 
 class Pisen(models.Model):
-    """Kmenová píseň — nese jen metadata, obsah nesou verze."""
+    """Kmenová píseň — nese jen metadata, obsah nesou verze.
 
-    kod = models.PositiveIntegerField(unique=True, verbose_name="Kód")
+    ŽÁDNÝ vlastní kód — ten je vlastností zařazení do konkrétního zpěvníku
+    (viz PolozkaZpevniku), ne písně samotné. Stejná píseň může být ve dvou
+    zpěvnících různých kapel pod dvěma různými čísly; číslování je věc
+    zpěvníku/repertoáru, ne písně. Identita písně v databázi je PK (`id`),
+    to jediné je napříč appkou skutečně unikátní a neměnné."""
+
     nazev = models.CharField(max_length=255)
     interpret = models.CharField(max_length=255, blank=True)
     tonina = models.CharField(max_length=20, blank=True, verbose_name="Tónina")
@@ -33,10 +38,10 @@ class Pisen(models.Model):
     class Meta:
         verbose_name = "Píseň"
         verbose_name_plural = "Písně"
-        ordering = ["kod"]
+        ordering = ["nazev"]
 
     def __str__(self):
-        return f"{self.kod} — {self.nazev}"
+        return self.nazev
 
     def aktivni_verze(self, user=None):
         """Logika auto-loadu verze z README: (1) uživatelova nejnovější personal,
@@ -179,7 +184,11 @@ class Zpevnik(models.Model):
         db_index=True,
         help_text="Neuhodnutelný token pro veřejný (read-only) odkaz",
     )
-    pisne = models.ManyToManyField(Pisen, related_name="zpevniky", blank=True)
+    # `through` schválně — kód písně je vlastnost TOHOTO zařazení
+    # (PolozkaZpevniku), ne písně samotné. Viz Pisen a PolozkaZpevniku výš/níž.
+    pisne = models.ManyToManyField(
+        Pisen, through="PolozkaZpevniku", related_name="zpevniky", blank=True
+    )
 
     class Meta:
         verbose_name = "Zpěvník"
@@ -202,6 +211,35 @@ class Zpevnik(models.Model):
         self.verejny_token = secrets.token_urlsafe(32)
         self.save(update_fields=["verejny_token"])
         return self.verejny_token
+
+
+class PolozkaZpevniku(models.Model):
+    """Píseň v konkrétním zpěvníku — kód je vlastnost TOHOTO zařazení, ne
+    písně samotné (viz Pisen). Stejná píseň může být ve dvou zpěvnících
+    různých kapel/repertoárů pod dvěma různými čísly zároveň — proto číslo
+    žije tady, ne na Pisen. VerzePisne a Anotace se tohohle netýkají, na
+    Pisen se odkazují přes PK, ten je pořád jednoznačný a stálý napříč
+    appkou."""
+
+    zpevnik = models.ForeignKey(Zpevnik, on_delete=models.CASCADE, related_name="polozky")
+    pisen = models.ForeignKey(Pisen, on_delete=models.CASCADE, related_name="polozky_zpevniku")
+    kod = models.PositiveIntegerField(verbose_name="Kód")
+
+    class Meta:
+        verbose_name = "Položka zpěvníku"
+        verbose_name_plural = "Položky zpěvníku"
+        ordering = ["kod"]
+        constraints = [
+            # Kód je unikátní jen VNITŘ zpěvníku, ne globálně — to je celý
+            # smysl týhle tabulky.
+            models.UniqueConstraint(fields=["zpevnik", "kod"], name="unikatni_kod_ve_zpevniku"),
+            # A píseň nejde do stejného zpěvníku zařadit dvakrát (i kdyby
+            # pod jiným kódem) — to by nedávalo smysl.
+            models.UniqueConstraint(fields=["zpevnik", "pisen"], name="pisen_jednou_ve_zpevniku"),
+        ]
+
+    def __str__(self):
+        return f"{self.zpevnik} #{self.kod}: {self.pisen}"
 
 
 class Setlist(models.Model):

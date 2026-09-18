@@ -15,7 +15,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from .apps import zkontroluj_servirovani_souboru
-from .models import Anotace, Pisen, Slozka, VerzePisne, Zpevnik
+from .models import Anotace, Pisen, PolozkaZpevniku, Slozka, VerzePisne, Zpevnik
 
 # Minimální, ale platné PDF (rozhodují úvodní magic bytes "%PDF-").
 PDF_OBSAH = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n%%EOF\n"
@@ -72,15 +72,15 @@ class VerejnyZpevnikTests(TestCase):
     def setUp(self):
         self.client = APIClient()
 
-        self.pisen = Pisen.objects.create(kod=1, nazev="Testovací píseň")
-        self.cizi_pisen = Pisen.objects.create(kod=2, nazev="Jiná píseň")
+        self.pisen = Pisen.objects.create(nazev="Testovací píseň")
+        self.cizi_pisen = Pisen.objects.create(nazev="Jiná píseň")
 
         self.zpevnik = Zpevnik.objects.create(nazev="Testovací zpěvník")
-        self.zpevnik.pisne.add(self.pisen)
+        PolozkaZpevniku.objects.create(zpevnik=self.zpevnik, pisen=self.pisen, kod=1)
         self.zpevnik.vygeneruj_verejny_token()
 
         self.jiny_zpevnik = Zpevnik.objects.create(nazev="Jiný zpěvník")
-        self.jiny_zpevnik.pisne.add(self.cizi_pisen)
+        PolozkaZpevniku.objects.create(zpevnik=self.jiny_zpevnik, pisen=self.cizi_pisen, kod=2)
         self.jiny_zpevnik.vygeneruj_verejny_token()
 
         self.clen = User.objects.create_user("clen_verejny", password="heslo123")
@@ -132,7 +132,7 @@ class VerejnyZpevnikTests(TestCase):
 class NeprihlasenyPristupTests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        Pisen.objects.create(kod=10, nazev="Skrytá píseň")
+        Pisen.objects.create(nazev="Skrytá píseň")
 
     def test_seznam_pisni_vyzaduje_prihlaseni(self):
         response = self.client.get("/api/pisne/")
@@ -158,7 +158,7 @@ class NeprihlasenyPristupTests(TestCase):
 
 class ClenEditaceCiziPersonalVerzeTests(TestCase):
     def setUp(self):
-        self.pisen = Pisen.objects.create(kod=20, nazev="Sdílená píseň")
+        self.pisen = Pisen.objects.create(nazev="Sdílená píseň")
         self.alice = User.objects.create_user("alice", password="heslo123")
         self.bob = User.objects.create_user("bob", password="heslo123")
         self.verze = VerzePisne.objects.create(
@@ -200,7 +200,7 @@ class ClenEditaceCiziPersonalVerzeTests(TestCase):
 
 class AktivniVerzeLogikaTests(TestCase):
     def setUp(self):
-        self.pisen = Pisen.objects.create(kod=30, nazev="Logika verzí")
+        self.pisen = Pisen.objects.create(nazev="Logika verzí")
         self.uzivatel = User.objects.create_user("clen2", password="heslo123")
         self.jiny = User.objects.create_user("clen3", password="heslo123")
 
@@ -253,7 +253,7 @@ class CsrfEnforcementTests(TestCase):
         client.login(username="staff1", password="heslo123")
         response = client.post(
             "/api/pisne/",
-            data={"kod": 99, "nazev": "Bez CSRF"},
+            data={"nazev": "Bez CSRF"},
             content_type="application/json",
         )
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
@@ -265,7 +265,7 @@ class CsrfEnforcementTests(TestCase):
         csrftoken = client.cookies["csrftoken"].value
         response = client.post(
             "/api/pisne/",
-            data={"kod": 100, "nazev": "S CSRF"},
+            data={"nazev": "S CSRF"},
             content_type="application/json",
             HTTP_X_CSRFTOKEN=csrftoken,
         )
@@ -299,7 +299,7 @@ class SouboroveTestyZaklad(TestCase):
 class UploadPdfTests(SouboroveTestyZaklad):
     def setUp(self):
         super().setUp()
-        self.pisen = Pisen.objects.create(kod=500, nazev="Píseň s notami")
+        self.pisen = Pisen.objects.create(nazev="Píseň s notami")
 
     def test_admin_nahraje_pdf(self):
         self.client.force_authenticate(self.admin)
@@ -449,7 +449,7 @@ class UploadPdfTests(SouboroveTestyZaklad):
 class StahovaniSouboruTests(SouboroveTestyZaklad):
     def setUp(self):
         super().setUp()
-        self.pisen = Pisen.objects.create(kod=600, nazev="Píseň ke stažení")
+        self.pisen = Pisen.objects.create(nazev="Píseň ke stažení")
         self.bezna = self.nahraj(self.pisen, VerzePisne.STAV_CONFIRMED)
         self.personal_alice = self.nahraj(
             self.pisen, VerzePisne.STAV_PERSONAL, vlastnik=self.alice
@@ -528,74 +528,94 @@ class VerejnyPristupKSouboruTests(SouboroveTestyZaklad):
     def setUp(self):
         super().setUp()
         # Zpěvník s tokenem: jedna píseň s confirmed verzí, jedna jen s personal.
-        self.pisen = Pisen.objects.create(kod=700, nazev="Veřejná píseň")
-        self.jen_personal = Pisen.objects.create(kod=701, nazev="Jen osobní verze")
+        self.pisen = Pisen.objects.create(nazev="Veřejná píseň")
+        self.jen_personal = Pisen.objects.create(nazev="Jen osobní verze")
         self.bezna = self.nahraj(self.pisen, VerzePisne.STAV_CONFIRMED)
         self.personal = self.nahraj(
             self.jen_personal, VerzePisne.STAV_PERSONAL, vlastnik=self.alice
         )
 
         self.zpevnik = Zpevnik.objects.create(nazev="Veřejný zpěvník")
-        self.zpevnik.pisne.add(self.pisen, self.jen_personal)
+        self.kod = 700
+        self.kod_jen_personal = 701
+        PolozkaZpevniku.objects.create(zpevnik=self.zpevnik, pisen=self.pisen, kod=self.kod)
+        PolozkaZpevniku.objects.create(
+            zpevnik=self.zpevnik, pisen=self.jen_personal, kod=self.kod_jen_personal
+        )
         self.token = self.zpevnik.vygeneruj_verejny_token()
 
-        # Píseň mimo tenhle zpěvník (je v jiném, taky veřejném).
-        self.cizi_pisen = Pisen.objects.create(kod=800, nazev="Cizí píseň")
+        # Píseň mimo tenhle zpěvník (je v jiném, taky veřejném) — SCHVÁLNĚ se
+        # stejným kódem jako `self.pisen` výš: kolize čísel mezi dvěma
+        # nezávislými zpěvníky je teď v pořádku, kolidovat smí jen v rámci
+        # JEDNOHO (viz PolozkaZpevniku.Meta.constraints).
+        self.cizi_pisen = Pisen.objects.create(nazev="Cizí píseň")
         self.cizi_verze = self.nahraj(self.cizi_pisen, VerzePisne.STAV_CONFIRMED)
         self.jiny_zpevnik = Zpevnik.objects.create(nazev="Jiný zpěvník")
-        self.jiny_zpevnik.pisne.add(self.cizi_pisen)
+        self.kod_cizi = self.kod
+        PolozkaZpevniku.objects.create(
+            zpevnik=self.jiny_zpevnik, pisen=self.cizi_pisen, kod=self.kod_cizi
+        )
         self.jiny_token = self.jiny_zpevnik.vygeneruj_verejny_token()
 
     def url(self, token, kod):
         return f"/api/verejny/{token}/pisen/{kod}/soubor/"
 
     def test_verejny_token_da_soubor_bez_prihlaseni(self):
-        response = self.client.get(self.url(self.token, self.pisen.kod))
+        response = self.client.get(self.url(self.token, self.kod))
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
             response["X-Accel-Redirect"], "/protected/" + self.bezna.soubor.name
         )
 
     def test_verejny_token_nikdy_neda_personal_verzi(self):
-        response = self.client.get(self.url(self.token, self.jen_personal.kod))
+        response = self.client.get(self.url(self.token, self.kod_jen_personal))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertNotIn("X-Accel-Redirect", response)
 
-    def test_verejny_token_neda_pisen_z_jineho_zpevniku(self):
-        # Píseň existuje a má veřejnou verzi, ale v tomhle zpěvníku není.
-        response = self.client.get(self.url(self.token, self.cizi_pisen.kod))
+    def test_verejny_token_neda_neexistujici_kod(self):
+        response = self.client.get(self.url(self.token, 999))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
-        # A přes svůj vlastní token dostupná je — takže to fakt dělá kontrola
-        # příslušnosti, ne nějaká jiná náhoda.
+
+    def test_stejny_kod_ve_dvou_zpevnicich_se_nemicha(self):
+        # Stejné číslo (self.kod_cizi == self.kod) existuje ve DVOU různých
+        # zpěvnících nezávisle na sobě — smí, kolidovat nesmí jen v rámci
+        # JEDNOHO (viz PolozkaZpevniku.Meta.constraints). Přes token
+        # `self.zpevnik` musí vrátit JEHO píseň, ne tu cizí.
+        response = self.client.get(self.url(self.token, self.kod_cizi))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(
-            self.client.get(self.url(self.jiny_token, self.cizi_pisen.kod)).status_code,
+            response["X-Accel-Redirect"], "/protected/" + self.bezna.soubor.name
+        )
+        # A přes SVŮJ vlastní token je cizí píseň dostupná taky — nezávisle.
+        self.assertEqual(
+            self.client.get(self.url(self.jiny_token, self.kod_cizi)).status_code,
             status.HTTP_200_OK,
         )
 
     def test_neplatny_token_neda_nic(self):
         for token in ["neexistujici", "x", self.token + "a", self.token[:-1]]:
-            response = self.client.get(self.url(token, self.pisen.kod))
+            response = self.client.get(self.url(token, self.kod))
             self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND, token)
 
     def test_odvolany_token_prestane_fungovat(self):
         stary = self.token
         self.zpevnik.vygeneruj_verejny_token()  # rotace tokenu
-        response = self.client.get(self.url(stary, self.pisen.kod))
+        response = self.client.get(self.url(stary, self.kod))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_zpevnik_bez_tokenu_neni_dostupny(self):
         self.zpevnik.verejny_token = None
         self.zpevnik.save()
-        response = self.client.get(self.url(self.token, self.pisen.kod))
+        response = self.client.get(self.url(self.token, self.kod))
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
 
     def test_vypis_zpevniku_nabizi_url_jen_k_verejnym_souborum(self):
         response = self.client.get(f"/api/verejny/{self.token}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         podle_kodu = {p["kod"]: p for p in response.data["pisne"]}
-        self.assertIsNotNone(podle_kodu[self.pisen.kod]["soubor_url"])
+        self.assertIsNotNone(podle_kodu[self.kod]["soubor_url"])
         # Píseň, která má jen personal verzi, veřejné URL nedostane.
-        self.assertIsNone(podle_kodu[self.jen_personal.kod]["soubor_url"])
+        self.assertIsNone(podle_kodu[self.kod_jen_personal]["soubor_url"])
         # A nikde se neprozradí cesta na disk.
         self.assertNotIn(self.bezna.soubor.name, str(response.data))
 
@@ -605,7 +625,7 @@ class AnotaceTests(SouboroveTestyZaklad):
 
     def setUp(self):
         super().setUp()
-        self.pisen = Pisen.objects.create(kod=600, nazev="Píseň s poznámkami")
+        self.pisen = Pisen.objects.create(nazev="Píseň s poznámkami")
         self.verze = self.nahraj(self.pisen, VerzePisne.STAV_CONFIRMED)
         self.url = f"/api/verze-pisni/{self.verze.id}/anotace/"
 
@@ -778,7 +798,7 @@ class AnotaceTests(SouboroveTestyZaklad):
 class MazaniSouboruTests(SouboroveTestyZaklad):
     def setUp(self):
         super().setUp()
-        self.pisen = Pisen.objects.create(kod=900, nazev="Píseň k mazání")
+        self.pisen = Pisen.objects.create(nazev="Píseň k mazání")
 
     def test_smazani_verze_nechava_soubor_na_disku(self):
         """Vědomé rozhodnutí: mazání verze soubor nemaže (viz README)."""
@@ -869,14 +889,23 @@ class HromadnyImportTests(TestCase):
         response = self.zavolej(self.kniha(), self.zakladni_plan())
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
+    def podle_kodu(self, response):
+        """Kód je od fáze 2b vlastnost zařazení do zpěvníku, ne písně —
+        odpověď importu (`response.data["pisne"]`) je teď jediné místo, kde
+        jde "kód z plánu" spárovat s PK nově založené písně, pokud plán
+        necílí na žádný zpěvník (řada testů níž kategorie/celý zpěvník
+        záměrně vynechává, aby otestovala jen samotné řezání/validaci)."""
+        return {p["kod"]: p for p in response.data["pisne"]}
+
     def test_admin_importuje_vicestrankovou_pisen(self):
         self.client.force_authenticate(self.admin)
         response = self.zavolej(self.kniha(3), self.zakladni_plan())
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(Pisen.objects.count(), 2)
 
-        prvni = Pisen.objects.get(kod=101)
-        druha = Pisen.objects.get(kod=102)
+        podle_kodu = self.podle_kodu(response)
+        prvni = Pisen.objects.get(id=podle_kodu[101]["id"])
+        druha = Pisen.objects.get(id=podle_kodu[102]["id"])
         self.assertEqual(prvni.nazev, "První píseň")
         self.assertEqual(druha.interpret, "")
 
@@ -903,20 +932,43 @@ class HromadnyImportTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(Pisen.objects.count(), 0)
 
-    def test_kod_uz_v_databazi_odmitne_cely_import(self):
-        Pisen.objects.create(kod=101, nazev="Existující píseň")
+    def test_kod_uz_ve_cilovem_zpevniku_odmitne_cely_import(self):
+        """Kód je od fáze 2b vlastnost zařazení do KONKRÉTNÍHO zpěvníku, ne
+        písně — kolize se proto řeší jen proti zpěvníku, který plán osloví
+        jménem (tady `cely_zpevnik`), ne globálně přes celou DB."""
+        existujici = Pisen.objects.create(nazev="Existující píseň")
+        cil = Zpevnik.objects.create(nazev="Moje kniha")
+        PolozkaZpevniku.objects.create(zpevnik=cil, pisen=existujici, kod=101)
+
         self.client.force_authenticate(self.admin)
-        response = self.zavolej(self.kniha(3), self.zakladni_plan())
+        plan = self.zakladni_plan()
+        plan["cely_zpevnik"] = {"nazev": "Moje kniha", "vytvorit": True}
+        response = self.zavolej(self.kniha(3), plan)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         # Ani kod=102 (validní, nekolidující) se nesmí založit — buď vše, nebo nic.
         self.assertEqual(Pisen.objects.count(), 1)
-        self.assertFalse(Pisen.objects.filter(kod=102).exists())
+        self.assertEqual(cil.polozky.count(), 1)
 
-    def test_druhe_spusteni_stejneho_importu_nevyrobi_duplicity(self):
-        """Idempotence: kód je unique i v DB, druhý běh se stejným plánem
-        se odmítne dřív, než by cokoliv založil znovu."""
+    def test_stejny_kod_v_jinem_zpevniku_nekoliduje(self):
+        """Dvě různé kapely/repertoáry mohou mít stejné číslo zároveň — kód
+        je jedinečný jen VNITŘ jednoho zpěvníku, ne napříč všemi."""
+        existujici = Pisen.objects.create(nazev="Existující píseň jinde")
+        jina_kapela = Zpevnik.objects.create(nazev="Jiná kapela")
+        PolozkaZpevniku.objects.create(zpevnik=jina_kapela, pisen=existujici, kod=101)
+
         self.client.force_authenticate(self.admin)
         plan = self.zakladni_plan()
+        plan["cely_zpevnik"] = {"nazev": "Moje nová kniha", "vytvorit": True}
+        response = self.zavolej(self.kniha(3), plan)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(Pisen.objects.count(), 3)
+
+    def test_druhe_spusteni_stejneho_importu_do_stejne_knihy_nevyrobi_duplicity(self):
+        """Idempotence: druhý běh se stejným plánem do STEJNÉHO zpěvníku
+        (jménem) se odmítne dřív, než by cokoliv založil znovu."""
+        self.client.force_authenticate(self.admin)
+        plan = self.zakladni_plan()
+        plan["cely_zpevnik"] = {"nazev": "Moje kniha", "vytvorit": True}
 
         prvni = self.zavolej(self.kniha(3), plan)
         self.assertEqual(prvni.status_code, status.HTTP_201_CREATED)
@@ -925,6 +977,28 @@ class HromadnyImportTests(TestCase):
         druhy = self.zavolej(self.kniha(3), plan)
         self.assertEqual(druhy.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(Pisen.objects.count(), 2)
+
+    def test_novy_zpevnik_zacina_cistym_kodem_bez_ohledu_na_db(self):
+        """To hlavní, oč ve fázi 2b šlo: nový zpěvník bez vlastních čísel
+        může vždycky začít na 100/101, i když DB obsahuje úplně jiné, byť
+        stejně nízké kódy — patří jinému zpěvníku."""
+        existujici = Pisen.objects.create(nazev="Píseň v jiné knize")
+        jina_kniha = Zpevnik.objects.create(nazev="Úplně jiná kniha")
+        PolozkaZpevniku.objects.create(zpevnik=jina_kniha, pisen=existujici, kod=101)
+        PolozkaZpevniku.objects.create(
+            zpevnik=jina_kniha,
+            pisen=Pisen.objects.create(nazev="Druhá v jiné knize"),
+            kod=102,
+        )
+
+        self.client.force_authenticate(self.admin)
+        plan = self.zakladni_plan()  # kody 101, 102 - stejne jako "jina_kniha"
+        plan["cely_zpevnik"] = {"nazev": "Čerstvá kniha", "vytvorit": True}
+        response = self.zavolej(self.kniha(3), plan)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+        cerstva = Zpevnik.objects.get(nazev="Čerstvá kniha")
+        self.assertEqual(sorted(cerstva.polozky.values_list("kod", flat=True)), [101, 102])
 
     def test_stranka_mimo_rozsah_odmitnuta(self):
         self.client.force_authenticate(self.admin)
@@ -971,10 +1045,10 @@ class HromadnyImportTests(TestCase):
 
         plouzaky = Zpevnik.objects.get(nazev="Ploužáky")
         self.assertEqual(plouzaky.slozka.nazev, "Ploužáky")
-        self.assertEqual(list(plouzaky.pisne.values_list("kod", flat=True)), [101])
+        self.assertEqual(list(plouzaky.polozky.values_list("kod", flat=True)), [101])
 
         pomalejsi = Zpevnik.objects.get(nazev="Pomalejší")
-        self.assertEqual(list(pomalejsi.pisne.values_list("kod", flat=True)), [205])
+        self.assertEqual(list(pomalejsi.polozky.values_list("kod", flat=True)), [205])
 
     def test_kategorie_oznacena_vytvorit_false_se_preskoci(self):
         self.client.force_authenticate(self.admin)
@@ -1009,7 +1083,7 @@ class HromadnyImportTests(TestCase):
         self.assertEqual(Slozka.objects.filter(nazev="Ploužáky").count(), 1)
         zpevnik = Zpevnik.objects.get(nazev="Ploužáky")
         self.assertEqual(
-            sorted(zpevnik.pisne.values_list("kod", flat=True)), [101, 103]
+            sorted(zpevnik.polozky.values_list("kod", flat=True)), [101, 103]
         )
 
     def test_prazdny_plan_odmitnut(self):
@@ -1034,10 +1108,10 @@ class HromadnyImportTests(TestCase):
 
         cely = Zpevnik.objects.get(nazev="ŠUBAPS zpěvník 2026")
         self.assertIsNone(cely.slozka)
-        self.assertEqual(sorted(cely.pisne.values_list("kod", flat=True)), [101, 205])
+        self.assertEqual(sorted(cely.polozky.values_list("kod", flat=True)), [101, 205])
         # kod 205 nebyl v žádné vytvořené kategorii, ale v celé knize být musí
         plouzaky = Zpevnik.objects.get(nazev="Ploužáky")
-        self.assertEqual(list(plouzaky.pisne.values_list("kod", flat=True)), [101])
+        self.assertEqual(list(plouzaky.polozky.values_list("kod", flat=True)), [101])
 
     def test_cely_zpevnik_neni_povinny(self):
         self.client.force_authenticate(self.admin)
@@ -1074,7 +1148,7 @@ class HromadnyImportTests(TestCase):
 
         self.assertEqual(Zpevnik.objects.filter(nazev="Kniha").count(), 1)
         kniha = Zpevnik.objects.get(nazev="Kniha")
-        self.assertEqual(sorted(kniha.pisne.values_list("kod", flat=True)), [101, 102])
+        self.assertEqual(sorted(kniha.polozky.values_list("kod", flat=True)), [101, 102])
 
 
 class SpaIndexCacheTests(TestCase):

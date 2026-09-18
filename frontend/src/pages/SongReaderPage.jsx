@@ -6,6 +6,7 @@ import { resolveVerze } from '../pdf/resolveVerze'
 import { useSongNavigation } from '../pdf/useSongNavigation'
 import { useAnotace, useVarovaniPriOdchodu } from '../pdf/useAnotace'
 import { novaAnotace } from '../pdf/anotaceModel'
+import { kodVeZpevniku } from '../pdf/kodVeZpevniku'
 import ReaderView from '../pdf/ReaderView'
 import VersionSwitcher from '../pdf/VersionSwitcher'
 import UploadVersionButton from '../pdf/UploadVersionButton'
@@ -13,6 +14,12 @@ import AnnotationLayer from '../pdf/AnnotationLayer'
 import AnnotationToolbar from '../pdf/AnnotationToolbar'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
+
+// Kód je vlastnost zařazení do KONKRÉTNÍHO zpěvníku (viz kodVeZpevniku.js) —
+// bez zpevnikId ho appka nemá odkud vzít, odznak se pak prostě nezobrazí.
+function formatKod(kod) {
+  return kod != null ? String(kod).padStart(3, '0') : undefined
+}
 
 export default function SongReaderPage() {
   const auth = useReaderAuth()
@@ -100,7 +107,7 @@ function CtenaPisen({ song, reload, sessionLost, pozadovanaVerze }) {
       unavailableMessage={unavailableMessage}
       backHref={`/pisne/${song.id}`}
       backLabel="Zpět na píseň"
-      codeLabel={String(song.kod).padStart(3, '0')}
+      codeLabel={formatKod(kodVeZpevniku(song, zpevnikId))}
       title={song.nazev}
       subtitle={song.interpret}
       sessionBanner={sessionLost}

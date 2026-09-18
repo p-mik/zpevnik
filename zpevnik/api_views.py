@@ -16,6 +16,7 @@ from .models import (
     Anotace,
     Pisen,
     PolozkaSetlistu,
+    PolozkaZpevniku,
     Setlist,
     Slozka,
     VerzePisne,
@@ -39,12 +40,17 @@ from .serializers import (
 
 
 class PisenViewSet(viewsets.ModelViewSet):
+    """Plochý seznam napříč VŠEMI zpěvníky — bez `kod` filtru/řazení: kód je
+    od fáze 2b vlastnost zařazení do konkrétního zpěvníku (viz
+    PolozkaZpevniku), ne písně, takže tady žádné jednoznačné číslo není.
+    Hledání/procházení podle kódu patří na zpěvníkem SCOPENÝ pohled
+    (ZpevnikSerializer.pisne), ne sem."""
+
     permission_classes = [IsStaffOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["kod"]
     search_fields = ["nazev", "interpret"]
-    ordering_fields = ["kod", "nazev"]
-    ordering = ["kod"]
+    ordering_fields = ["nazev"]
+    ordering = ["nazev"]
 
     def get_queryset(self):
         if self.action == "retrieve":
@@ -156,7 +162,7 @@ class ZpevnikViewSet(viewsets.ModelViewSet):
     permission_classes = [IsStaffOrReadOnly]
 
     def get_queryset(self):
-        return Zpevnik.objects.select_related("slozka").prefetch_related("pisne")
+        return Zpevnik.objects.select_related("slozka").prefetch_related("polozky__pisen")
 
 
 class SetlistViewSet(viewsets.ModelViewSet):
@@ -184,7 +190,8 @@ class VerejnyZpevnikView(APIView):
 
     def get(self, request, token):
         zpevnik = get_object_or_404(
-            Zpevnik.objects.prefetch_related("pisne__verze"), verejny_token=token
+            Zpevnik.objects.prefetch_related("polozky__pisen__verze"),
+            verejny_token=token,
         )
         serializer = VerejnyZpevnikSerializer(
             zpevnik, context={"request": request, "verejny_token": token}
@@ -197,7 +204,9 @@ class VerejnySouborView(APIView):
 
     Řetěz oprávnění (každý článek musí projít):
       1. token -> právě jeden zpěvník (neplatný/odvolaný token = 404),
-      2. píseň musí být v TOMHLE zpěvníku (dotaz jde přes zpevnik.pisne),
+      2. píseň s tímhle kódem musí existovat V TOMHLE zpěvníku (kód je
+         vlastnost zařazení do zpěvníku, PolozkaZpevniku — dotaz jde přes
+         zpevnik.polozky, ne přes Pisen, ten už kód nemá),
       3. verzi vybírá server přes aktivni_verze(user=None), která z principu
          nikdy nevrátí personal verzi — klient číslo verze vůbec neposílá.
 
@@ -215,8 +224,12 @@ class VerejnySouborView(APIView):
             raise Http404("Neplatný token.")
 
         zpevnik = get_object_or_404(Zpevnik, verejny_token=token)
-        # Kontrola příslušnosti: hledá se jen mezi písněmi tohoto zpěvníku.
-        pisen = get_object_or_404(zpevnik.pisne, kod=kod)
+        # Kontrola příslušnosti: hledá se jen mezi POLOŽKAMI tohoto zpěvníku
+        # (kód platí jen v jeho rámci), ne globálně přes Pisen.
+        polozka = get_object_or_404(
+            PolozkaZpevniku.objects.select_related("pisen"), zpevnik=zpevnik, kod=kod
+        )
+        pisen = polozka.pisen
 
         verze = pisen.aktivni_verze(user=None)
         if verze is None or not verze.soubor:
@@ -259,11 +272,12 @@ class ImportView(APIView):
         serializer.is_valid(raise_exception=True)
 
         vysledek = proved_import(soubor, serializer.validated_data)
+        kod_podle_pisne = vysledek["kod_podle_pisne"]
 
         return Response(
             {
                 "pisne": [
-                    {"id": p.id, "kod": p.kod, "nazev": p.nazev}
+                    {"id": p.id, "kod": kod_podle_pisne[p.id], "nazev": p.nazev}
                     for p in vysledek["pisne"]
                 ],
                 "slozky": [s.nazev for s in vysledek["slozky"]],

@@ -1,4 +1,4 @@
-"""Hromadný import zpěvníku z jednoho PDF (fáze 1e).
+"""Hromadný import zpěvníku z jednoho PDF (fáze 1e, kódy per zpěvník od 2b).
 
 Parsování textu (hledání kódu/názvu/interpreta v hlavičce stránky) proběhlo
 na klientovi přes PDF.js — 88stránkové PDF by se v jednom HTTP requestu
@@ -7,12 +7,17 @@ kontrolní tabulku) a originální soubor. Server plánu věří v tom, co stejn
 nejde ověřit líp než člověk (kód/název/interpret) — sám jen fyzicky rozřeže
 PDF a ověří to, co levně ověřit jde: rozsahy stránek a unikátnost kódů.
 
-Idempotence: kód písně je jediný smysluplný přirozený klíč, který import má
-k dispozici (`Pisen.kod` je navíc unique i na úrovni DB). Import se PŘED
-založením čehokoliv podívá, jestli některý z plánovaných kódů už v databázi
-není — pokud ano, celý import se odmítne (nic se nezaloží) s seznamem
-kolidujících kódů. Druhé spuštění se stejným (nebo překrývajícím se) plánem
-tak nikdy nevyrobí duplicitní písně — buď se nic nestane (a je jasné proč),
+Kód je od fáze 2b vlastnost zařazení do KONKRÉTNÍHO zpěvníku (PolozkaZpevniku),
+ne písně — dvě různé knihy si tak nepřekáží ve vlastním číslování a nový
+zpěvník bez vlastních čísel může vždycky čistě začít od 100/101, ať v
+databázi existuje cokoliv jiného.
+
+Idempotence: kolize se kontroluje jen proti zpěvníkům, které import osloví
+JMÉNEM a které DB už obsahuje (nový zpěvník je prázdný, tam kolidovat není
+s čím). Pokud tam kterýkoliv z plánovaných kódů už je, celý import se
+odmítne (nic se nezaloží) se seznamem kolidujících kódů a zpěvníku, kde jsou.
+Druhé spuštění se stejným (nebo překrývajícím se) plánem do TÉHOŽ zpěvníku
+tak nikdy nevyrobí duplicitní čísla — buď se nic nestane (a je jasné proč),
 nebo uživatel kódy v tabulce oprav a doimportuje jen nové písně.
 """
 
@@ -24,7 +29,7 @@ from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError
 from rest_framework.exceptions import ValidationError
 
-from .models import Pisen, Slozka, VerzePisne, Zpevnik
+from .models import Pisen, PolozkaZpevniku, Slozka, VerzePisne, Zpevnik
 from .validatory import PDF_MAGIC, zvaliduj_pdf
 
 
@@ -68,7 +73,7 @@ def proved_import(soubor_pdf, plan):
     kategorie_plan = plan.get("kategorie") or []
     cely_zpevnik_plan = plan.get("cely_zpevnik")
 
-    _zkontroluj_plan(pisne_plan, pocet_stran)
+    _zkontroluj_plan(pisne_plan, pocet_stran, kategorie_plan, cely_zpevnik_plan)
 
     # --- rozřezání PDF (CPU/IO, žádné DB zápisy — mimo transakci schválně) ---
     narezane = []
@@ -87,10 +92,13 @@ def proved_import(soubor_pdf, plan):
     vytvorene_pisne = []
     vytvorene_slozky = []
     vytvorene_zpevniky = []
+    # kód z plánu si pisen.kod už neponese (ten na Pisen vůbec není) — dokud
+    # se píseň nezařadí do zpěvníku (PolozkaZpevniku), musí se pamatovat
+    # zvlášť podle PK nově vytvořené písně.
+    kod_podle_pisne = {}
     with transaction.atomic():
         for polozka, obsah in narezane:
             pisen = Pisen.objects.create(
-                kod=polozka["kod"],
                 nazev=polozka["nazev"],
                 interpret=polozka.get("interpret", ""),
             )
@@ -101,12 +109,13 @@ def proved_import(soubor_pdf, plan):
                 stav=VerzePisne.STAV_DOWNLOAD,
             )
             vytvorene_pisne.append(pisen)
+            kod_podle_pisne[pisen.id] = polozka["kod"]
 
         for kat in kategorie_plan:
             if not kat.get("vytvorit", True):
                 continue
             pisne_v_kategorii = [
-                p for p in vytvorene_pisne if str(p.kod)[0] == kat["digit"]
+                p for p in vytvorene_pisne if str(kod_podle_pisne[p.id])[0] == kat["digit"]
             ]
             if not pisne_v_kategorii:
                 continue
@@ -116,7 +125,13 @@ def proved_import(soubor_pdf, plan):
             zpevnik, _ = Zpevnik.objects.get_or_create(
                 nazev=kat["nazev"], slozka=slozka
             )
-            zpevnik.pisne.add(*pisne_v_kategorii)
+            # Ne zpevnik.pisne.add(*pisne) — M2M s `through`, co má navíc
+            # povinné pole (kód), takové hromadné `.add()` neumí (dal by
+            # všem stejnou hodnotu). Řádek po řádku, každý se svým kódem.
+            for p in pisne_v_kategorii:
+                PolozkaZpevniku.objects.create(
+                    zpevnik=zpevnik, pisen=p, kod=kod_podle_pisne[p.id]
+                )
             vytvorene_slozky.append(slozka)
             vytvorene_zpevniky.append(zpevnik)
 
@@ -128,17 +143,22 @@ def proved_import(soubor_pdf, plan):
             cely_zpevnik, _ = Zpevnik.objects.get_or_create(
                 nazev=cely_zpevnik_plan["nazev"]
             )
-            cely_zpevnik.pisne.add(*vytvorene_pisne)
+            for p in vytvorene_pisne:
+                PolozkaZpevniku.objects.create(
+                    zpevnik=cely_zpevnik, pisen=p, kod=kod_podle_pisne[p.id]
+                )
             vytvorene_zpevniky.append(cely_zpevnik)
 
     return {
         "pisne": vytvorene_pisne,
         "slozky": vytvorene_slozky,
         "zpevniky": vytvorene_zpevniky,
+        # Kód z plánu — pro odpověď API (Pisen sám o sobě kód nenese, viz výš).
+        "kod_podle_pisne": kod_podle_pisne,
     }
 
 
-def _zkontroluj_plan(pisne_plan, pocet_stran):
+def _zkontroluj_plan(pisne_plan, pocet_stran, kategorie_plan, cely_zpevnik_plan):
     if not pisne_plan:
         raise ValidationError({"pisne": ["Plán neobsahuje žádnou píseň."]})
 
@@ -153,19 +173,30 @@ def _zkontroluj_plan(pisne_plan, pocet_stran):
             }
         )
 
-    jiz_v_db = sorted(
-        Pisen.objects.filter(kod__in=kody).values_list("kod", flat=True)
-    )
-    if jiz_v_db:
-        raise ValidationError(
-            {
-                "pisne": [
-                    f"Tyhle kódy už v databázi existují, import by je zdvojil: "
-                    f"{jiz_v_db}. Oprav je v tabulce (nebo je z importu vyřaď) "
-                    f"a zkus to znovu."
-                ]
-            }
-        )
+    # Kolize s DB: kód je teď vlastnost zařazení do KONKRÉTNÍHO zpěvníku, ne
+    # písně — kontroluje se proto jen proti zpěvníkům, které tenhle import
+    # osloví jménem A které DB už obsahuje. Nově založený zpěvník je prázdný,
+    # tam kolidovat není s čím (proto může nová kniha bez vlastních kódů
+    # vždycky čistě začít na 100/101, ať už v DB existuje cokoliv jiného).
+    cilove_nazvy = {
+        kat["nazev"] for kat in kategorie_plan if kat.get("vytvorit", True)
+    }
+    if cely_zpevnik_plan and cely_zpevnik_plan.get("vytvorit", True):
+        cilove_nazvy.add(cely_zpevnik_plan["nazev"])
+
+    for zpevnik in Zpevnik.objects.filter(nazev__in=cilove_nazvy):
+        obsazene = set(zpevnik.polozky.values_list("kod", flat=True))
+        kolize = sorted(obsazene & set(kody))
+        if kolize:
+            raise ValidationError(
+                {
+                    "pisne": [
+                        f"Ve zpěvníku „{zpevnik.nazev}“ už tyhle kódy existují, "
+                        f"import by je zdvojil: {kolize}. Oprav je v tabulce "
+                        f"(nebo je z importu vyřaď) a zkus to znovu."
+                    ]
+                }
+            )
 
     vsechny_stranky = []
     for p in pisne_plan:
