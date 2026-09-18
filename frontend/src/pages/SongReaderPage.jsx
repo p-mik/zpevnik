@@ -163,6 +163,9 @@ function CtenaPisen({ song, reload, sessionLost, pozadovanaVerze }) {
             const objekt = novaAnotace(strana, x, y, typProNove)
             anotace.pridej(objekt)
             setVybranyId(objekt.id)
+            // Návratová hodnota: AnnotationLayer podle ní rovnou otevře
+            // editaci textu nového pole, bez druhého dvojkliku navíc.
+            return objekt.id
           }}
           onZmenit={anotace.zmen}
           onSmazat={(id) => {

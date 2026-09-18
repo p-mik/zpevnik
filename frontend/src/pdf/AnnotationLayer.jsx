@@ -69,7 +69,15 @@ export default function AnnotationLayer({
     // Jen prázdné místo — dvojklik na poli otevírá editaci jeho textu.
     if (e.target !== vrstvaRef.current) return
     const { x, y } = zlomkyZUdalosti(e)
-    onVytvorit?.(x, y)
+    // Nové pole se rovnou otevře k psaní — druhý dvojklik přímo do něj by byl
+    // zbytečný krok navíc. `onVytvorit` proto vrací id vytvořeného pole
+    // (rodič ho zná, vzniká tam přes novaAnotace), textarea ho pak vezme
+    // přes autoFocus.
+    const noveId = onVytvorit?.(x, y)
+    if (noveId) {
+      textPredEditaciRef.current = ''
+      setEditovanyId(noveId)
+    }
   }
 
   function zacniTah(e, objekt, druh) {
