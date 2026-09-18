@@ -865,6 +865,16 @@ class HromadnyImportTests(TestCase):
         self.assertEqual(sorted(kniha.pisne.values_list("kod", flat=True)), [101, 102])
 
 
+class SpaIndexCacheTests(TestCase):
+    """index.html je jediná nehashovaná část frontendu a ukazuje na hashované
+    bundly — bez `no-cache` by prohlížeč po nasazení držel starou appku."""
+
+    def test_index_se_nekesuje(self):
+        response = Client().get("/pisne/1/ctecka")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Cache-Control"], "no-cache")
+
+
 class E001SystemCheckTests(TestCase):
     """Kontrola je vědomě vázaná na ENVIRONMENT, ne na DEBUG — Django test
     runner DEBUG vždy vynutí na False, takže vazba na DEBUG by kontrolu
