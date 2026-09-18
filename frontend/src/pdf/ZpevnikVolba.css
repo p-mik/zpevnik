@@ -1,0 +1,86 @@
+.zpevnik-volba {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+  max-width: 36ch;
+  margin: var(--space-7) auto;
+  padding: var(--space-6);
+}
+
+.zpevnik-volba h2 {
+  font-family: var(--font-display);
+  margin: 0;
+}
+
+.zpevnik-volba p {
+  margin: 0;
+}
+
+.zpevnik-volba-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.zpevnik-volba-btn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  min-height: var(--touch-min);
+  padding: var(--space-3) var(--space-4);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.zpevnik-volba-nazev {
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+/* app (čtečka): papír + inkoust, stejné jako .state-block */
+.zpevnik-volba-app {
+  color: var(--app-ink);
+}
+.zpevnik-volba-app h2 {
+  font-size: var(--text-xl);
+}
+.zpevnik-volba-app p {
+  color: var(--app-ink-70);
+}
+.zpevnik-volba-app .zpevnik-volba-btn {
+  border: var(--border-w) solid var(--app-ink);
+  background: var(--app-paper);
+  color: var(--app-ink);
+}
+.zpevnik-volba-app .zpevnik-volba-btn:hover {
+  background: var(--app-ink);
+  color: var(--app-paper);
+}
+
+/* stage: tmavá deska, stejný jazyk jako .stage-unavailable/.stage-btn */
+.zpevnik-volba-stage {
+  color: var(--stage-ink);
+}
+.zpevnik-volba-stage h2 {
+  font-size: var(--text-lg);
+  color: var(--stage-accent);
+}
+.zpevnik-volba-stage p {
+  color: var(--stage-muted);
+}
+.zpevnik-volba-stage .zpevnik-volba-btn {
+  border: none;
+  background: var(--stage-ink);
+  color: var(--stage-bg);
+}
+.zpevnik-volba-stage .zpevnik-volba-btn:hover {
+  opacity: 0.85;
+}

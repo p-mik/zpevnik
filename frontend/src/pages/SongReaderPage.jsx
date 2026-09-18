@@ -1,17 +1,19 @@
 import { useEffect, useState } from 'react'
-import { Navigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { useApiResource } from '../hooks/useApiResource'
 import { useReaderAuth } from '../pdf/useReaderAuth'
 import { resolveVerze } from '../pdf/resolveVerze'
 import { useSongNavigation } from '../pdf/useSongNavigation'
+import { useZpevnikKontext } from '../pdf/useZpevnikKontext'
 import { useAnotace, useVarovaniPriOdchodu } from '../pdf/useAnotace'
 import { novaAnotace } from '../pdf/anotaceModel'
-import { kodVeZpevniku } from '../pdf/kodVeZpevniku'
+import { kodVeZpevniku, zarazeniVeZpevniku } from '../pdf/kodVeZpevniku'
 import ReaderView from '../pdf/ReaderView'
 import VersionSwitcher from '../pdf/VersionSwitcher'
 import UploadVersionButton from '../pdf/UploadVersionButton'
 import AnnotationLayer from '../pdf/AnnotationLayer'
 import AnnotationToolbar from '../pdf/AnnotationToolbar'
+import ZpevnikVolba from '../pdf/ZpevnikVolba'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 
@@ -59,8 +61,8 @@ export default function SongReaderPage() {
 }
 
 function CtenaPisen({ song, reload, sessionLost, pozadovanaVerze }) {
-  const [searchParams, setSearchParams] = useSearchParams()
-  const zpevnikId = searchParams.get('z')
+  const [, setSearchParams] = useSearchParams()
+  const { zpevnikId, potrebaVolby, volby, zvolZpevnik } = useZpevnikKontext(song)
   const { prevSong, nextSong } = useSongNavigation(String(song.id), zpevnikId)
   const { currentVerze, unavailableTitle, unavailableMessage } = resolveVerze(
     song,
@@ -100,6 +102,20 @@ function CtenaPisen({ song, reload, sessionLost, pozadovanaVerze }) {
     if (vybrany) anotace.zmen(vybrany.id, { styl })
   }
 
+  // Píseň je ve víc zpěvnících a žádný nebyl použitý naposled v týhle relaci
+  // (viz useZpevnikKontext) — čtečka bez vyřešeného kontextu neotvírá noty
+  // "bez kódu", nechá napřed vybrat (viz PC_zpevnik_kontext_zpevniku).
+  if (potrebaVolby) {
+    return (
+      <div className="song-detail-page">
+        <Link to={`/pisne/${song.id}`} className="breadcrumb-back">
+          ← Zpět na píseň
+        </Link>
+        <ZpevnikVolba title={song.nazev} volby={volby} onZvolit={zvolZpevnik} variant="app" />
+      </div>
+    )
+  }
+
   return (
     <ReaderView
       pdfPath={currentVerze ? `/api/verze-pisni/${currentVerze.id}/soubor/` : null}
@@ -110,6 +126,8 @@ function CtenaPisen({ song, reload, sessionLost, pozadovanaVerze }) {
       codeLabel={formatKod(kodVeZpevniku(song, zpevnikId))}
       title={song.nazev}
       subtitle={song.interpret}
+      zpevnikLabel={zarazeniVeZpevniku(song, zpevnikId)?.zpevnik_nazev}
+      zpevnikId={zpevnikId}
       sessionBanner={sessionLost}
       versionSwitcher={
         <VersionSwitcher verze={song.verze} currentId={currentVerze?.id} onChange={prepniNaVerzi} />

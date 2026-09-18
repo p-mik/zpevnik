@@ -85,7 +85,9 @@
 
 /* Kód je od fáze 2b vlastnost zařazení do KONKRÉTNÍHO zpěvníku, ne písně
    (viz PolozkaZpevniku) — stejná píseň tu proto může mít víc čísel, jedno
-   za každý zpěvník, ve kterém je. */
+   za každý zpěvník, ve kterém je. Každé zařazení je zároveň odkaz rovnou do
+   čtečky S TÍM zpěvníkem (viz PC_zpevnik_kontext_zpevniku) — kontext se
+   pak nemusí dohledávat/potvrzovat znovu. */
 .song-zarazeni {
   display: flex;
   flex-wrap: wrap;
@@ -99,6 +101,12 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  text-decoration: none;
+  color: inherit;
+  min-height: var(--touch-min);
+}
+.song-zarazeni-item:hover .song-zarazeni-nazev {
+  text-decoration: underline;
 }
 
 .song-zarazeni-nazev {

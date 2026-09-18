@@ -3,10 +3,12 @@ import { useApiResource } from '../hooks/useApiResource'
 import { useReaderAuth } from '../pdf/useReaderAuth'
 import { resolveVerze } from '../pdf/resolveVerze'
 import { useSongNavigation } from '../pdf/useSongNavigation'
+import { useZpevnikKontext } from '../pdf/useZpevnikKontext'
 import { useAnotace } from '../pdf/useAnotace'
-import { kodVeZpevniku } from '../pdf/kodVeZpevniku'
+import { kodVeZpevniku, zarazeniVeZpevniku } from '../pdf/kodVeZpevniku'
 import StageView from '../pdf/StageView'
 import AnnotationLayer from '../pdf/AnnotationLayer'
+import ZpevnikVolba from '../pdf/ZpevnikVolba'
 import LoadingState from '../components/LoadingState'
 import '../pdf/StageView.css'
 
@@ -64,8 +66,7 @@ export default function StageModePage() {
 }
 
 function HranaPisen({ song, backHref, sessionLost, pozadovanaVerze }) {
-  const [searchParams] = useSearchParams()
-  const zpevnikId = searchParams.get('z')
+  const { zpevnikId, potrebaVolby, volby, zvolZpevnik } = useZpevnikKontext(song)
   const { prevSong, nextSong } = useSongNavigation(String(song.id), zpevnikId)
   const { currentVerze, unavailableTitle, unavailableMessage } = resolveVerze(
     song,
@@ -76,6 +77,20 @@ function HranaPisen({ song, backHref, sessionLost, pozadovanaVerze }) {
 
   const zSuffix = zpevnikId ? `?z=${zpevnikId}` : ''
 
+  // Píseň je ve víc zpěvnících a žádný nebyl použitý naposled v týhle relaci
+  // — na pódiu obzvlášť nesmí hádat, tak nechá napřed vybrat (viz
+  // PC_zpevnik_kontext_zpevniku).
+  if (potrebaVolby) {
+    return (
+      <div className="stage-root stage-root-static">
+        <Link to={backHref} className="stage-btn stage-volba-back">
+          ← Zpět
+        </Link>
+        <ZpevnikVolba title={song.nazev} volby={volby} onZvolit={zvolZpevnik} variant="stage" />
+      </div>
+    )
+  }
+
   return (
     <StageView
       pdfPath={currentVerze ? `/api/verze-pisni/${currentVerze.id}/soubor/` : null}
@@ -83,6 +98,8 @@ function HranaPisen({ song, backHref, sessionLost, pozadovanaVerze }) {
       unavailableMessage={unavailableMessage}
       title={song.nazev}
       codeLabel={formatKod(kodVeZpevniku(song, zpevnikId))}
+      zpevnikLabel={zarazeniVeZpevniku(song, zpevnikId)?.zpevnik_nazev}
+      zpevnikId={zpevnikId}
       exitHref={backHref}
       sessionLost={sessionLost}
       prevSongHref={prevSong ? `/pisne/${prevSong.id}/stage${zSuffix}` : undefined}

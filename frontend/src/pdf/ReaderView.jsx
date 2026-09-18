@@ -23,6 +23,8 @@ export default function ReaderView({
   codeLabel,
   title,
   subtitle,
+  zpevnikLabel,
+  zpevnikId,
   versionSwitcher,
   uploadButton,
   stageHref,
@@ -81,7 +83,14 @@ export default function ReaderView({
   if (unavailableMessage) {
     return (
       <div className="reader-page">
-        <ReaderTopbar backHref={backHref} backLabel={backLabel} codeLabel={codeLabel} title={title} subtitle={subtitle} />
+        <ReaderTopbar
+          backHref={backHref}
+          backLabel={backLabel}
+          codeLabel={codeLabel}
+          title={title}
+          subtitle={subtitle}
+          zpevnikLabel={zpevnikLabel}
+        />
         <EmptyState title={unavailableTitle || 'Bez not'} description={unavailableMessage} actionLabel="Zpět" actionHref={backHref} />
       </div>
     )
@@ -95,12 +104,14 @@ export default function ReaderView({
         codeLabel={codeLabel}
         title={title}
         subtitle={subtitle}
+        zpevnikLabel={zpevnikLabel}
         versionSwitcher={versionSwitcher}
         uploadButton={uploadButton}
         annotationToggle={annotationToggle}
         stageHref={stageHref}
         pickerHrefFor={pickerHrefFor}
         currentSongId={currentSongId}
+        zpevnikId={zpevnikId}
       />
 
       {annotationBar}
@@ -183,12 +194,14 @@ function ReaderTopbar({
   codeLabel,
   title,
   subtitle,
+  zpevnikLabel,
   versionSwitcher,
   uploadButton,
   annotationToggle,
   stageHref,
   pickerHrefFor,
   currentSongId,
+  zpevnikId,
 }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const titleRef = useRef(null)
@@ -210,6 +223,8 @@ function ReaderTopbar({
         <span className="reader-title-text">
           {title}
           {subtitle && <span className="reader-subtitle"> · {subtitle}</span>}
+          {/* Ve kterém zpěvníku jsem — nenápadně, viz PC_zpevnik_kontext_zpevniku. */}
+          {zpevnikLabel && <span className="reader-subtitle reader-zpevnik-label"> · {zpevnikLabel}</span>}
         </span>
         <span className="reader-title-caret" aria-hidden="true">
           {pickerOpen ? '▴' : '▾'}
@@ -229,12 +244,13 @@ function ReaderTopbar({
           </Link>
         )}
       </div>
-      {pickerOpen && (
+      {pickerOpen && zpevnikId && (
         <SongQuickPicker
           onClose={() => setPickerOpen(false)}
           anchorRef={titleRef}
           hrefFor={pickerHrefFor}
           currentSongId={currentSongId}
+          zpevnikId={zpevnikId}
         />
       )}
     </header>

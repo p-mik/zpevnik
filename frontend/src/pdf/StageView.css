@@ -73,6 +73,13 @@
   margin: 0 0 var(--space-5);
 }
 
+/* Zpět nad ZpevnikVolba (viz StageModePage) — stejné umístění jako .stage-exit. */
+.stage-volba-back {
+  position: absolute;
+  top: calc(var(--space-4) + var(--safe-top));
+  left: calc(var(--space-4) + var(--safe-left));
+}
+
 .stage-btn {
   display: inline-flex;
   align-items: center;
@@ -175,6 +182,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   min-width: 0;
+}
+
+/* Ve kterém zpěvníku jsem — nenápadně, viz PC_zpevnik_kontext_zpevniku. */
+.stage-zpevnik-label {
+  color: var(--stage-muted);
+  font-weight: 400;
 }
 
 .stage-overlay-caret {

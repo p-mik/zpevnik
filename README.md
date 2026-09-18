@@ -245,6 +245,13 @@ Webová aplikace pro správu a čtení zpěvníků kapely (a víc kapel). Členo
 **Co appka JE:** zpěvník + čtečka + session + osobní poznámky.
 **Co appka NENÍ:** správa financí kapely, plánování akcí, mailing, notový editor. Scope creep zakázán.
 
+**Vše je pod zpěvníkem.** Čtečka, stage mode, setlisty a (budoucí) session jsou
+vždy podkategorií jednoho zpěvníku. Setlist nemíchá písně z víc zpěvníků. Píseň
+se nikdy nezobrazuje „bez zpěvníku" — kód existuje jen uvnitř zpěvníku, takže
+bez kontextu by čtečka musela buď lhát, nebo mlčet. Proto každá cesta do čtečky
+musí kontext zpěvníku nést nebo dopočítat (viz `polozka_zpevniku` a chování
+čtečky níž) — nikde nesmí zůstat stav „kontext chybí, tak kód neukážeme".
+
 ---
 
 ## Role a přístup
@@ -302,6 +309,14 @@ Webová aplikace pro správu a čtení zpěvníků kapely (a víc kapel). Členo
   stejný vzor jako `polozka_setlistu` u setlistů, jen s číslem navíc)
 - constraint: `(zpevnik, kod)` unikátní, `(zpevnik, pisen)` unikátní (píseň
   nejde do stejného zpěvníku zařadit dvakrát)
+- **vědomě přijatý důsledek pro import:** idempotence importu je teď slabší.
+  Import stejného PDF podruhé do STEJNÉHO zpěvníku (podle jména) pořád
+  nevyrobí duplicity — kolize kódů uvnitř zpěvníku to pohlídá. Ale stejné PDF
+  naimportované do JINAK POJMENOVANÉHO zpěvníku (překlep v názvu, nový ročník
+  „ŠUBAPS 2027" místo „ŠUBAPS") vyrobí DUPLICITNÍ `pisen` záznamy — kolize se
+  totiž záměrně hlídá jen v rámci cílového zpěvníku, ne globálně (viz výš).
+  Přijato: to je přesně ten kompromis za to, že nový zpěvník vždycky čistě
+  začne na 100/101 bez ohledu na zbytek databáze.
 
 ### setlist
 - Trvalé pojmenované pořadí písní (příprava na koncert, k projetí doma, k tisku).

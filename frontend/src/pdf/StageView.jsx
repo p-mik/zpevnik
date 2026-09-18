@@ -25,6 +25,8 @@ export default function StageView({
   unavailableMessage,
   title,
   codeLabel,
+  zpevnikLabel,
+  zpevnikId,
   exitHref,
   sessionLost,
   prevSongHref,
@@ -177,17 +179,21 @@ export default function StageView({
             aria-label="Přepnout na jinou píseň"
           >
             {codeLabel && <span className="stage-code">{codeLabel}</span>}
-            <span className="stage-overlay-title-text">{title}</span>
+            <span className="stage-overlay-title-text">
+              {title}
+              {zpevnikLabel && <span className="stage-zpevnik-label"> · {zpevnikLabel}</span>}
+            </span>
             <span className="stage-overlay-caret" aria-hidden="true">
               {pickerOpen ? '▴' : '▾'}
             </span>
           </button>
-          {pickerOpen && (
+          {pickerOpen && zpevnikId && (
             <SongQuickPicker
               onClose={closePicker}
               anchorRef={titleRef}
               hrefFor={pickerHrefFor}
               currentSongId={currentSongId}
+              zpevnikId={zpevnikId}
             />
           )}
         </div>

@@ -1,49 +1,61 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useEffect, useMemo, useRef, useState } from 'react'
 import SearchBar, { parseSearchQuery } from '../components/SearchBar'
 import SongRow, { SongList } from '../components/SongRow'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import EmptyState from '../components/EmptyState'
-import { useDebouncedValue } from '../hooks/useDebouncedValue'
-import { useInfiniteList } from '../hooks/useInfiniteList'
+import { useApiResource } from '../hooks/useApiResource'
 import './SongQuickPicker.css'
 
-// Rozbalovací rychlý výběr písně — stejné hledání (kód/název) a nekonečný
-// scroll jako hlavní seznam písní, jen v malém panelu u titulku čtečky.
-// Výběr je normální odkaz (SongRow). Panel se po něm zavře výslovně
-// (onClose('select')) — spolehnout se jen na to, že navigace panel "zboří",
-// nejde: výběr právě otevřené písně URL nezmění a panel by zůstal viset.
+// Rozbalovací rychlý výběr písně — hledání podle kódu/názvu, v malém panelu
+// u titulku čtečky. Výběr je normální odkaz (SongRow). Panel se po něm
+// zavře výslovně (onClose('select')) — spolehnout se jen na to, že navigace
+// panel "zboří", nejde: výběr právě otevřené písně URL nezmění a panel by
+// zůstal viset.
 // `anchorRef` = tlačítko, které panel otevírá. Pointerdown na něm se NESMÍ
 // brát jako "klik mimo" — jinak by druhý klik na titulek panel nejdřív zavřel
 // (pointerdown) a hned zas otevřel (click toggle), takže by nešel zavřít.
 // `hrefFor(song)` = kam vede výběr (výchozí je čtečka, stage mode chce stage).
 // `onClose(reason)` dostane 'outside' | 'escape' — stage mode podle toho
 // pozná, že tap mimo panel má panel jen zavřít, a ne zároveň otočit stránku.
-// `currentSongId` = právě otevřená píseň: po otevření se seznam donačte až
-// k ní, nascrolluje na ni a zvýrazní ji, ať se nezačíná vždy od 101.
-export default function SongQuickPicker({ onClose, anchorRef, hrefFor, currentSongId }) {
+// `currentSongId` = právě otevřená píseň: po otevření se seznam nascrolluje
+// na ni a zvýrazní ji, ať se nezačíná vždy od začátku.
+//
+// `zpevnikId` — hledání je VŽDY v rámci jednoho zpěvníku (viz
+// PC_zpevnik_kontext_zpevniku: čtečka i stage mode mají kontext vždy
+// vyřešený, viz useZpevnikKontext). Číselný dotaz = přesná shoda kódu V TOM
+// zpěvníku (na pódiu se píše "312" a hledá se hned, žádné dotazy na server).
+// Zpěvník má typicky nízké desítky až stovky písní, takže se stáhne celý
+// najednou (stejně jako SongbookPage) a filtruje/řadí se na klientu —
+// rychlejší a jednodušší než stránkovaný dotaz na `/api/pisne/`, který navíc
+// od fáze 2b kód vůbec nezná (je to vlastnost zařazení, ne písně).
+export default function SongQuickPicker({ onClose, anchorRef, hrefFor, currentSongId, zpevnikId }) {
   const [query, setQuery] = useState('')
-  const debouncedQuery = useDebouncedValue(query, 250)
-  const params = useMemo(() => parseSearchQuery(debouncedQuery), [debouncedQuery])
-  const { items, loading, loadingMore, error, hasMore, loadMore } = useInfiniteList('/api/pisne/', params)
+  const { data: zpevnik, loading, error } = useApiResource(`/api/zpevniky/${zpevnikId}/`)
 
   const panelRef = useRef(null)
-  const sentinelRef = useRef(null)
   const listWrapRef = useRef(null)
   const scrolledToCurrentRef = useRef(false)
-  const isSearching = debouncedQuery.trim() !== ''
+  const isSearching = query.trim() !== ''
 
-  // Seznam je stránkovaný — aktuální píseň může být až na další stránce,
-  // tak se dotahuje, dokud se neobjeví (nebo dokud je co dotahovat). Jen
-  // jednou po otevření a jen bez hledání: kdo hledá, chce vidět výsledky.
+  const items = useMemo(() => {
+    const vse = zpevnik?.pisne || []
+    const sorted = [...vse].sort((a, b) => a.kod - b.kod)
+    const { kod, search } = parseSearchQuery(query)
+    if (kod != null) return sorted.filter((s) => String(s.kod) === kod)
+    if (search) {
+      const q = search.toLocaleLowerCase('cs')
+      return sorted.filter(
+        (s) => s.nazev.toLocaleLowerCase('cs').includes(q) || s.interpret?.toLocaleLowerCase('cs').includes(q),
+      )
+    }
+    return sorted
+  }, [zpevnik, query])
+
+  // Po otevření (bez hledání) se seznam nascrolluje k právě otevřené písni,
+  // ať se nezačíná vždy od prvního kódu.
   useEffect(() => {
     if (scrolledToCurrentRef.current || currentSongId == null || isSearching || loading) return
-    const found = items.some((song) => String(song.id) === String(currentSongId))
-    if (!found) {
-      if (hasMore && !loadingMore) loadMore()
-      else if (!hasMore) scrolledToCurrentRef.current = true
-      return
-    }
     scrolledToCurrentRef.current = true
     const wrap = listWrapRef.current
     const row = wrap?.querySelector('.song-row-current')
@@ -51,7 +63,7 @@ export default function SongQuickPicker({ onClose, anchorRef, hrefFor, currentSo
     const wrapRect = wrap.getBoundingClientRect()
     const rowRect = row.getBoundingClientRect()
     wrap.scrollTop += rowRect.top - wrapRect.top - (wrap.clientHeight - rowRect.height) / 2
-  }, [items, loading, loadingMore, hasMore, loadMore, currentSongId, isSearching])
+  }, [items, loading, currentSongId, isSearching])
 
   // Panel sahá až dolů k okraji obrazovky. Kde začíná, závisí na výšce
   // lišty nad ním (čtečka vs. stage, zalomení na úzkém displeji) — změří se
@@ -66,19 +78,6 @@ export default function SongQuickPicker({ onClose, anchorRef, hrefFor, currentSo
     window.addEventListener('resize', fit)
     return () => window.removeEventListener('resize', fit)
   }, [])
-
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (!el || !hasMore) return
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0].isIntersecting) loadMore()
-      },
-      { rootMargin: '200px' },
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [hasMore, loadMore])
 
   useEffect(() => {
     function onKeyDown(e) {
@@ -112,24 +111,21 @@ export default function SongQuickPicker({ onClose, anchorRef, hrefFor, currentSo
         {!loading && error && <ErrorState message="Seznam písní se nepodařilo načíst." />}
         {!loading && !error && items.length === 0 && (
           <EmptyState
-            title={isSearching ? `Nic jsme nenašli pro „${debouncedQuery.trim()}“` : 'Ve zpěvníku zatím nic není'}
+            title={isSearching ? `Nic jsme nenašli pro „${query.trim()}“` : 'Ve zpěvníku zatím nic není'}
             description={isSearching ? 'Zkus jiný kód nebo část názvu.' : undefined}
           />
         )}
         {!loading && !error && items.length > 0 && (
-          <>
-            <SongList>
-              {items.map((song) => (
-                <SongRow
-                  key={song.id}
-                  song={song}
-                  href={hrefFor?.(song)}
-                  current={String(song.id) === String(currentSongId)}
-                />
-              ))}
-            </SongList>
-            {hasMore && <div ref={sentinelRef} aria-hidden="true" />}
-          </>
+          <SongList>
+            {items.map((song) => (
+              <SongRow
+                key={song.id}
+                song={song}
+                href={hrefFor?.(song)}
+                current={String(song.id) === String(currentSongId)}
+              />
+            ))}
+          </SongList>
         )}
       </div>
     </div>

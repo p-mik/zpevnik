@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { useApiResource } from '../hooks/useApiResource'
-import { useSongNavigation } from '../pdf/useSongNavigation'
+import { useGlobalSongNavigation } from '../pdf/useSongNavigation'
 import { STAV_LABELS, TYP_OBSAHU_LABELS } from '../constants'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
@@ -32,9 +32,11 @@ function SousedniPisen({ pisen, smer }) {
 export default function SongDetailPage() {
   const { id } = useParams()
   const { data: song, loading, error, reload } = useApiResource(`/api/pisne/${id}/`)
-  // Listování po kódu přes celý zpěvník — tahle stránka je rozcestník, ne
-  // slepá ulička, do které se člověk dostane a musí zpátky přes menu.
-  const { prevSong, nextSong } = useSongNavigation(id, null)
+  // Listování napříč VŠÍM podle jména — tahle stránka je rozcestník mezi
+  // zpěvníky, ne slepá ulička, do které se člověk dostane a musí zpátky přes
+  // menu. Čtečka/stage mode naopak listují v rámci jednoho zpěvníku podle
+  // kódu (viz useSongNavigation) — jiný účel, jiný hook.
+  const { prevSong, nextSong } = useGlobalSongNavigation(id)
 
   if (loading) return <LoadingState label="Načítám píseň…" />
   if (error) {
@@ -65,9 +67,11 @@ export default function SongDetailPage() {
           {song.zarazeni?.length > 0 && (
             <ul className="song-zarazeni" aria-label="Číslo v jednotlivých zpěvnících">
               {song.zarazeni.map((z) => (
-                <li key={z.id} className="song-zarazeni-item">
-                  <span className="code-chip">{String(z.kod).padStart(3, '0')}</span>
-                  <span className="song-zarazeni-nazev">{z.zpevnik_nazev}</span>
+                <li key={z.id}>
+                  <Link to={`/pisne/${song.id}/ctecka?z=${z.zpevnik}`} className="song-zarazeni-item">
+                    <span className="code-chip">{String(z.kod).padStart(3, '0')}</span>
+                    <span className="song-zarazeni-nazev">{z.zpevnik_nazev}</span>
+                  </Link>
                 </li>
               ))}
             </ul>

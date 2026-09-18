@@ -6,7 +6,12 @@
 // Bez zpevnikId (nebo když v něm píseň není) vrací null — appka pak
 // jednoduše nezobrazí žádný odznak, místo aby hádala.
 export function kodVeZpevniku(song, zpevnikId) {
+  return zarazeniVeZpevniku(song, zpevnikId)?.kod ?? null
+}
+
+// Totéž, ale celá položka zařazení (i název zpěvníku) — pro nenápadný
+// popisek "ve kterém zpěvníku jsem" ve čtečce/stage módu.
+export function zarazeniVeZpevniku(song, zpevnikId) {
   if (!zpevnikId || !song?.zarazeni) return null
-  const polozka = song.zarazeni.find((z) => String(z.zpevnik) === String(zpevnikId))
-  return polozka ? polozka.kod : null
+  return song.zarazeni.find((z) => String(z.zpevnik) === String(zpevnikId)) || null
 }
