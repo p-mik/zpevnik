@@ -12,10 +12,19 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .import_pisni import proved_import
-from .models import Pisen, PolozkaSetlistu, Setlist, Slozka, VerzePisne, Zpevnik
+from .models import (
+    Anotace,
+    Pisen,
+    PolozkaSetlistu,
+    Setlist,
+    Slozka,
+    VerzePisne,
+    Zpevnik,
+)
 from .permissions import IsStaffOrReadOnly, VerzePisnePermission
 from .soubory import odpoved_se_souborem, smi_cist_verzi
 from .serializers import (
+    AnotaceSerializer,
     ImportPlanSerializer,
     PisenDetailSerializer,
     PisenListSerializer,
@@ -85,6 +94,45 @@ class VerzePisneViewSet(viewsets.ModelViewSet):
         if novy_stav == VerzePisne.STAV_PERSONAL and serializer.instance.vlastnik_id is None:
             extra["vlastnik"] = user
         serializer.save(**extra)
+
+    @action(detail=True, methods=["get", "put"], url_path="anotace")
+    def anotace(self, request, pk=None):
+        """MOJE poznámky k téhle verzi (fáze 2a).
+
+        Anotace jsou osobní: dotaz je vždy zúžený na `request.user`, takže ani
+        admin se přes tenhle endpoint k cizím poznámkám nedostane — u cizí
+        verze dostane prostě svoje (zatím prázdné), ne cizí.
+
+        Vážou se na konkrétní VerzePisne, ne na píseň: pozice platí nad
+        konkrétním PDF, na jiné verzi by seděly jinde.
+
+        PUT ukládá celé pole naráz. Autor je jeden, souběžná editace ze dvou
+        zařízení se neřeší — poslední zápis vyhrává.
+        """
+        verze = get_object_or_404(VerzePisne, pk=pk)
+        if not smi_cist_verzi(request.user, verze):
+            # 404 stejně jako u souboru: o cizí personal verzi se nemá dozvědět
+            # ani to, že existuje.
+            raise Http404("Verze nenalezena.")
+
+        if request.method == "GET":
+            # Čtení nesmí zakládat řádek: čtečka se ptá při každém otevření
+            # písně, takže by pouhé prolistování zpěvníku vyrobilo prázdnou
+            # anotaci ke každé verzi.
+            anotace = Anotace.objects.filter(
+                verze_pisne=verze, vlastnik=request.user
+            ).first()
+            if anotace is None:
+                return Response({"data": [], "upraveno": None})
+            return Response(AnotaceSerializer(anotace).data)
+
+        anotace, _ = Anotace.objects.get_or_create(
+            verze_pisne=verze, vlastnik=request.user
+        )
+        serializer = AnotaceSerializer(anotace, data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
 
     @action(detail=True, methods=["get"], url_path="soubor")
     def soubor(self, request, pk=None):

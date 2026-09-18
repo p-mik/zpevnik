@@ -1,14 +1,37 @@
 import { Link, useParams } from 'react-router-dom'
 import { useApiResource } from '../hooks/useApiResource'
+import { useSongNavigation } from '../pdf/useSongNavigation'
 import { STAV_LABELS, TYP_OBSAHU_LABELS } from '../constants'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import '../components/ui.css'
 import './SongDetailPage.css'
 
+function SousedniPisen({ pisen, smer }) {
+  const popisek = smer === 'predchozi' ? 'Předchozí' : 'Další'
+  if (!pisen) {
+    return (
+      <span className="btn song-nav-btn" aria-disabled="true">
+        {smer === 'predchozi' ? `‹ ${popisek}` : `${popisek} ›`}
+      </span>
+    )
+  }
+  return (
+    <Link to={`/pisne/${pisen.id}`} className="btn song-nav-btn">
+      {smer === 'predchozi' && '‹ '}
+      <span className="song-nav-kod">{String(pisen.kod).padStart(3, '0')}</span>
+      <span className="song-nav-nazev">{pisen.nazev}</span>
+      {smer === 'dalsi' && ' ›'}
+    </Link>
+  )
+}
+
 export default function SongDetailPage() {
   const { id } = useParams()
   const { data: song, loading, error, reload } = useApiResource(`/api/pisne/${id}/`)
+  // Listování po kódu přes celý zpěvník — tahle stránka je rozcestník, ne
+  // slepá ulička, do které se člověk dostane a musí zpátky přes menu.
+  const { prevSong, nextSong } = useSongNavigation(id, null)
 
   if (loading) return <LoadingState label="Načítám píseň…" />
   if (error) {
@@ -24,6 +47,14 @@ export default function SongDetailPage() {
 
   return (
     <div className="song-detail-page">
+      <nav className="song-detail-nav" aria-label="Procházení písní">
+        <SousedniPisen pisen={prevSong} smer="predchozi" />
+        <Link to="/pisne" className="song-nav-seznam">
+          Seznam písní
+        </Link>
+        <SousedniPisen pisen={nextSong} smer="dalsi" />
+      </nav>
+
       <div className="song-detail-head">
         <span className="code-chip">{String(song.kod).padStart(3, '0')}</span>
         <div>

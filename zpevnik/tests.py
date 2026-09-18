@@ -15,7 +15,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from .apps import zkontroluj_servirovani_souboru
-from .models import Pisen, Slozka, VerzePisne, Zpevnik
+from .models import Anotace, Pisen, Slozka, VerzePisne, Zpevnik
 
 # Minimální, ale platné PDF (rozhodují úvodní magic bytes "%PDF-").
 PDF_OBSAH = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n%%EOF\n"
@@ -598,6 +598,181 @@ class VerejnyPristupKSouboruTests(SouboroveTestyZaklad):
         self.assertIsNone(podle_kodu[self.jen_personal.kod]["soubor_url"])
         # A nikde se neprozradí cesta na disk.
         self.assertNotIn(self.bezna.soubor.name, str(response.data))
+
+
+class AnotaceTests(SouboroveTestyZaklad):
+    """Osobní poznámky nad konkrétní verzí (fáze 2a)."""
+
+    def setUp(self):
+        super().setUp()
+        self.pisen = Pisen.objects.create(kod=600, nazev="Píseň s poznámkami")
+        self.verze = self.nahraj(self.pisen, VerzePisne.STAV_CONFIRMED)
+        self.url = f"/api/verze-pisni/{self.verze.id}/anotace/"
+
+    def objekt(self, **zmeny):
+        zaklad = {
+            "id": "a1",
+            "strana": 1,
+            "x": 0.42,
+            "y": 0.17,
+            "sirka": 0.2,
+            "text": "REF 2x",
+            "styl": "normal",
+            "velikost": "normalni",
+        }
+        zaklad.update(zmeny)
+        return zaklad
+
+    def test_nova_verze_nema_zadne_poznamky(self):
+        self.client.force_authenticate(self.alice)
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["data"], [])
+
+    def test_cteni_nezaklada_zaznam(self):
+        """Čtečka se ptá při každém otevření písně — prolistování zpěvníku
+        nesmí vyrobit prázdnou anotaci ke každé verzi."""
+        self.client.force_authenticate(self.alice)
+        self.client.get(self.url)
+        self.client.get(self.url)
+        self.assertEqual(Anotace.objects.count(), 0)
+
+        self.client.put(self.url, {"data": [self.objekt()]}, format="json")
+        self.assertEqual(Anotace.objects.count(), 1)
+
+    def test_ulozeni_a_nacteni(self):
+        self.client.force_authenticate(self.alice)
+        objekty = [self.objekt(), self.objekt(id="a2", styl="akord", text="Ami")]
+        response = self.client.put(self.url, {"data": objekty}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        znovu = self.client.get(self.url)
+        self.assertEqual(znovu.data["data"], objekty)
+        # Souřadnice musí přežít roundtrip přesně — na nich stojí umístění.
+        self.assertEqual(znovu.data["data"][0]["x"], 0.42)
+        self.assertEqual(znovu.data["data"][0]["y"], 0.17)
+
+    def test_opakovane_ulozeni_prepise_a_nezaloz_druhy_zaznam(self):
+        self.client.force_authenticate(self.alice)
+        self.client.put(self.url, {"data": [self.objekt()]}, format="json")
+        self.client.put(self.url, {"data": [self.objekt(text="jiny")]}, format="json")
+        self.assertEqual(
+            Anotace.objects.filter(verze_pisne=self.verze, vlastnik=self.alice).count(), 1
+        )
+        self.assertEqual(self.client.get(self.url).data["data"][0]["text"], "jiny")
+
+    def test_poznamky_jsou_osobni(self):
+        """Každý vidí jen svoje — a to i admin, který jinak smí všechno."""
+        self.client.force_authenticate(self.alice)
+        self.client.put(self.url, {"data": [self.objekt(text="Alicina")]}, format="json")
+
+        self.client.force_authenticate(self.bob)
+        self.assertEqual(self.client.get(self.url).data["data"], [])
+
+        self.client.force_authenticate(self.admin)
+        self.assertEqual(self.client.get(self.url).data["data"], [])
+
+        # Bobovo uložení nesmí přepsat Alicino.
+        self.client.force_authenticate(self.bob)
+        self.client.put(self.url, {"data": [self.objekt(text="Bobova")]}, format="json")
+        self.client.force_authenticate(self.alice)
+        self.assertEqual(self.client.get(self.url).data["data"][0]["text"], "Alicina")
+
+    def test_cizi_personal_verze_je_neviditelna(self):
+        cizi = self.nahraj(self.pisen, VerzePisne.STAV_PERSONAL, vlastnik=self.bob)
+        self.client.force_authenticate(self.alice)
+        response = self.client.get(f"/api/verze-pisni/{cizi.id}/anotace/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_neprihlaseny_nema_pristup(self):
+        response = self.client.get(self.url)
+        self.assertIn(
+            response.status_code,
+            {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN},
+        )
+
+    def test_souradnice_mimo_stranku(self):
+        self.client.force_authenticate(self.alice)
+        for zmena in ({"x": 1.4}, {"y": -0.2}, {"x": 0.9, "sirka": 0.3}):
+            with self.subTest(zmena=zmena):
+                response = self.client.put(
+                    self.url, {"data": [self.objekt(**zmena)]}, format="json"
+                )
+                self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_neznamy_styl_a_chybejici_pole(self):
+        self.client.force_authenticate(self.alice)
+        spatne = self.client.put(
+            self.url, {"data": [self.objekt(styl="duha")]}, format="json"
+        )
+        self.assertEqual(spatne.status_code, status.HTTP_400_BAD_REQUEST)
+
+        bez_strany = self.objekt()
+        del bez_strany["strana"]
+        response = self.client.put(self.url, {"data": [bez_strany]}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_duplicitni_id_a_prilis_mnoho_poznamek(self):
+        self.client.force_authenticate(self.alice)
+        dvakrat = self.client.put(
+            self.url, {"data": [self.objekt(), self.objekt()]}, format="json"
+        )
+        self.assertEqual(dvakrat.status_code, status.HTTP_400_BAD_REQUEST)
+
+        moc = [self.objekt(id=f"a{i}") for i in range(201)]
+        response = self.client.put(self.url, {"data": moc}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_dlouhy_text_odmitnut(self):
+        self.client.force_authenticate(self.alice)
+        response = self.client.put(
+            self.url, {"data": [self.objekt(text="x" * 2001)]}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_mono_zachova_mezery_a_radky(self):
+        """Tab/rytmus stojí na mezerách — DRF by je jinak sám ořezal."""
+        self.client.force_authenticate(self.alice)
+        tab = "e|--0--|\nB|--1--|"
+        self.client.put(
+            self.url,
+            {"data": [self.objekt(styl="mono", text=tab)]},
+            format="json",
+        )
+        self.assertEqual(self.client.get(self.url).data["data"][0]["text"], tab)
+
+    def test_velikost_pisma(self):
+        self.client.force_authenticate(self.alice)
+        odpoved = self.client.put(
+            self.url, {"data": [self.objekt(velikost="mala")]}, format="json"
+        )
+        self.assertEqual(odpoved.status_code, status.HTTP_200_OK)
+        self.assertEqual(self.client.get(self.url).data["data"][0]["velikost"], "mala")
+
+        spatne = self.client.put(
+            self.url, {"data": [self.objekt(velikost="obri")]}, format="json"
+        )
+        self.assertEqual(spatne.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_starsi_poznamka_bez_velikosti_se_precte(self):
+        """Poznámky uložené před zavedením velikosti klíč nemají — musí vyjít
+        jako střední, ne shodit čtení celé vrstvy."""
+        stara = self.objekt()
+        del stara["velikost"]
+        Anotace.objects.create(
+            verze_pisne=self.verze, vlastnik=self.alice, data=[stara]
+        )
+        self.client.force_authenticate(self.alice)
+        odpoved = self.client.get(self.url)
+        self.assertEqual(odpoved.status_code, status.HTTP_200_OK)
+        self.assertEqual(odpoved.data["data"][0]["velikost"], "normalni")
+
+    def test_poznamky_patri_ke_konkretni_verzi(self):
+        druha = self.nahraj(self.pisen, VerzePisne.STAV_DOWNLOAD)
+        self.client.force_authenticate(self.alice)
+        self.client.put(self.url, {"data": [self.objekt()]}, format="json")
+        response = self.client.get(f"/api/verze-pisni/{druha.id}/anotace/")
+        self.assertEqual(response.data["data"], [])
 
 
 class MazaniSouboruTests(SouboroveTestyZaklad):

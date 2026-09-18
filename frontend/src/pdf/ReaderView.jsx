@@ -31,6 +31,9 @@ export default function ReaderView({
   nextSongHref,
   pickerHrefFor,
   currentSongId,
+  annotationToggle,
+  annotationBar,
+  renderOverlay,
 }) {
   const navigate = useNavigate()
   const containerRef = useRef(null)
@@ -94,10 +97,13 @@ export default function ReaderView({
         subtitle={subtitle}
         versionSwitcher={versionSwitcher}
         uploadButton={uploadButton}
+        annotationToggle={annotationToggle}
         stageHref={stageHref}
         pickerHrefFor={pickerHrefFor}
         currentSongId={currentSongId}
       />
+
+      {annotationBar}
 
       {sessionBanner && (
         <div className="toast-error reader-banner" role="status">
@@ -132,6 +138,7 @@ export default function ReaderView({
                 pageNumber={page}
                 zoom={zoom}
                 ariaLabel={`Strana ${page} z ${numPages}`}
+                overlay={renderOverlay?.(page)}
               />
             </div>
           </div>
@@ -178,6 +185,7 @@ function ReaderTopbar({
   subtitle,
   versionSwitcher,
   uploadButton,
+  annotationToggle,
   stageHref,
   pickerHrefFor,
   currentSongId,
@@ -208,6 +216,7 @@ function ReaderTopbar({
         </span>
       </button>
       <div className="reader-topbar-actions">
+        {annotationToggle}
         {uploadButton}
         {versionSwitcher}
         {stageHref && (

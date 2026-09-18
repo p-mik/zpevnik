@@ -10,6 +10,7 @@ export default function PdfPageCanvas({
   ariaLabel,
   placeholderClassName,
   zoom = 1,
+  overlay,
 }) {
   const containerRef = useRef(null)
   const [result, setResult] = useState(() => peek?.(pageNumber) ?? null)
@@ -47,6 +48,14 @@ export default function PdfPageCanvas({
     result.canvas.style.height = `${result.cssHeight * zoom}px`
   }, [result, ariaLabel, zoom])
 
+  // Overlay (anotace) musí ležet přesně na stránce, ne na `.pdf-page-wrap` —
+  // ten stránku jen centruje a bývá větší (min-width/min-height). Proto tenhle
+  // mezikrok: box s přesným rozměrem vykreslené stránky, do kterého se vejde
+  // canvas i vrstva nad ním. `--anotace-sirka` z něj dědí velikosti písma,
+  // takže poznámky rostou se zoomem spolu s notami.
+  const sirka = result ? result.cssWidth * zoom : null
+  const vyska = result ? result.cssHeight * zoom : null
+
   return (
     <div className="pdf-page-wrap">
       {!result && (
@@ -54,7 +63,17 @@ export default function PdfPageCanvas({
           Načítám stránku…
         </span>
       )}
-      <div ref={containerRef} className="pdf-page-canvas" />
+      <div
+        className="pdf-page-stack"
+        style={
+          result
+            ? { width: `${sirka}px`, height: `${vyska}px`, '--anotace-sirka': `${sirka}px` }
+            : undefined
+        }
+      >
+        <div ref={containerRef} className="pdf-page-canvas" />
+        {result && overlay}
+      </div>
     </div>
   )
 }

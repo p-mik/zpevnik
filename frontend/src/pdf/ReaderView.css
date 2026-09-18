@@ -80,6 +80,17 @@
   margin-left: auto;
 }
 
+.reader-anotace-prepinac {
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-4);
+}
+
+.reader-anotace-aktivni,
+.reader-anotace-aktivni:hover {
+  background: var(--app-ink);
+  color: var(--app-paper);
+}
+
 .reader-banner {
   border-radius: 0;
   border-left: none;

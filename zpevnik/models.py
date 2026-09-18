@@ -297,6 +297,17 @@ class Anotace(models.Model):
         verbose_name = "Anotace"
         verbose_name_plural = "Anotace"
         ordering = ["-upraveno"]
+        constraints = [
+            # Na dvojici (verze, uživatel) existuje nejvýš jeden záznam —
+            # celá sada poznámek se ukládá najednou jako jedno pole, takže
+            # druhý řádek by znamenal tiše rozdvojené poznámky. Postgres bere
+            # NULL jako různé hodnoty, takže tohle neomezuje anotace vedené
+            # na kmenové písni (verze_pisne = NULL).
+            models.UniqueConstraint(
+                fields=["verze_pisne", "vlastnik"],
+                name="unikatni_anotace_verze_vlastnik",
+            )
+        ]
 
     def __str__(self):
         cil = self.verze_pisne or self.pisen

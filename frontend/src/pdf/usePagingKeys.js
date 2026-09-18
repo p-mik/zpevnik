@@ -4,7 +4,7 @@ const PREV_KEYS = new Set(['ArrowLeft', 'ArrowUp', 'PageUp'])
 const NEXT_KEYS = new Set(['ArrowRight', 'ArrowDown', 'PageDown', ' '])
 const TYPING_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT'])
 
-function isTypingTarget(target) {
+export function isTypingTarget(target) {
   if (!(target instanceof Element)) return false
   return TYPING_TAGS.has(target.tagName) || target.isContentEditable
 }

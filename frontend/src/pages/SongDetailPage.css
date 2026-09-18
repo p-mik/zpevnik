@@ -1,3 +1,69 @@
+/* Rozcestník nahoře: krok na sousední píseň nebo zpátky na seznam. Bez toho
+   je detail slepá ulička, ze které vede jen menu. */
+.song-detail-nav {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.song-nav-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 22rem;
+  padding: var(--space-2) var(--space-4);
+  text-decoration: none;
+}
+.song-nav-btn:last-child {
+  justify-content: flex-end;
+  text-align: right;
+}
+.song-nav-btn:hover:not([aria-disabled='true']) {
+  background: var(--app-ink);
+  color: var(--app-paper);
+}
+
+/* Konec zpěvníku — tlačítko zůstane kvůli stabilnímu rozvržení, ale nevede nikam. */
+.song-nav-btn[aria-disabled='true'] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.song-nav-kod {
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.song-nav-nazev {
+  font-family: var(--font-body);
+  font-weight: 400;
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.song-nav-seznam {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 var(--space-4);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+}
+
+@media (max-width: 640px) {
+  .song-nav-nazev {
+    display: none;
+  }
+}
+
 .song-detail-head {
   display: flex;
   align-items: flex-start;

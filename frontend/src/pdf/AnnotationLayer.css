@@ -1,0 +1,126 @@
+/* Vrstva leží přesně na stránce (viz .pdf-page-stack). Mimo režim úprav
+   nesmí brát kliknutí — jinak by ve stage módu spolkla tap zóny pro listování
+   a ve čtečce zoom. */
+.anotace-vrstva {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.anotace-editor {
+  pointer-events: auto;
+}
+
+.anotace {
+  position: absolute;
+  box-sizing: border-box;
+  /* Velikosti se skládají až tady, ne v tokens.css — tady je --anotace-sirka
+     (šířka vykreslené stránky) zděděná z obalu stránky, takže poznámka roste
+     se zoomem spolu s notami. */
+  --sirka-stranky: var(--anotace-sirka, var(--anotace-sirka-zaloha));
+  --nasobic: var(--anotace-nasobic-normalni);
+  --linka: max(1px, calc(var(--sirka-stranky) * var(--anotace-pomer-linka)));
+  --padding: calc(var(--sirka-stranky) * var(--anotace-pomer-padding) * var(--nasobic));
+  font-size: calc(var(--sirka-stranky) * var(--anotace-pomer-text) * var(--nasobic));
+  line-height: 1.25;
+  padding: var(--padding);
+  /* pre-wrap: nové řádky i mezery nesou význam (tab, rytmus). */
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+/* Tři velikosti — malá se vejde i mezi dva řádky textu. Násobí se i padding,
+   aby malá poznámka byla opravdu placatá, ne jen s drobným písmem. */
+.anotace[data-velikost='mala'] {
+  --nasobic: var(--anotace-nasobic-mala);
+}
+.anotace[data-velikost='velka'] {
+  --nasobic: var(--anotace-nasobic-velka);
+}
+
+.anotace-editor .anotace {
+  cursor: grab;
+}
+
+.anotace-text-input {
+  display: block;
+  width: 100%;
+  min-height: 3em;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  line-height: inherit;
+  resize: none;
+  outline: none;
+}
+
+/* --- vzhled objektů ---
+   Tvar je společný, mění se jen barvy podle palety: čtečka bere --app-anotace-*,
+   stage --stage-anotace-*. Obě sady mají schválně stejné hodnoty, takže editor
+   ukazuje přesně to, co bude na pódiu. */
+
+.anotace-app .anotace {
+  --deska: var(--app-anotace-bg);
+  --text: var(--app-anotace-ink);
+  --akord: var(--app-anotace-akord);
+  --znacka-deska: var(--app-anotace-znacka-bg);
+  --znacka-text: var(--app-anotace-znacka-ink);
+}
+
+.anotace-stage .anotace {
+  --deska: var(--stage-anotace-bg);
+  --text: var(--stage-anotace-ink);
+  --akord: var(--stage-anotace-akord);
+  --znacka-deska: var(--stage-anotace-znacka-bg);
+  --znacka-text: var(--stage-anotace-znacka-ink);
+}
+
+.anotace {
+  font-family: var(--font-body);
+  background: var(--deska);
+  color: var(--text);
+  border: none;
+}
+
+.anotace[data-styl='mono'] {
+  font-family: var(--font-mono);
+}
+
+.anotace[data-styl='akord'] {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--sirka-stranky) * var(--anotace-pomer-akord) * var(--nasobic));
+  color: var(--akord);
+  padding: 0 var(--padding);
+}
+
+.anotace[data-styl='znacka'] {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: calc(var(--sirka-stranky) * var(--anotace-pomer-znacka) * var(--nasobic));
+  letter-spacing: 0.04em;
+  background: var(--znacka-deska);
+  color: var(--znacka-text);
+  text-align: center;
+}
+
+/* --- vybrané pole v editoru --- */
+
+.anotace-vybrana {
+  outline: var(--linka) solid var(--app-primary);
+  outline-offset: var(--linka);
+}
+
+.anotace-uchyt {
+  position: absolute;
+  right: calc(var(--linka) * -2);
+  bottom: calc(var(--linka) * -2);
+  width: calc(var(--sirka-stranky) * var(--anotace-pomer-uchyt));
+  height: calc(var(--sirka-stranky) * var(--anotace-pomer-uchyt));
+  background: var(--app-primary);
+  cursor: ew-resize;
+  touch-action: none;
+}

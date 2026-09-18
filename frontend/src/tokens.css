@@ -24,9 +24,20 @@
   --stage-muted: #6b6b63;
   --stage-accent: #ff8a3d;
 
+  /* Anotace ve stage módu — protějšek --app-anotace-* níž. Hodnoty jsou
+     schválně zrcadlené, ne sdílené: palety app a stage zůstávají oddělené,
+     ale poznámka musí vypadat stejně tam, kde vzniká, i tam, kde se čte. */
+  --stage-anotace-bg: rgba(10, 10, 10, 0.92);
+  --stage-anotace-ink: #edede6;
+  --stage-anotace-akord: #ff8a3d;
+  --stage-anotace-znacka-bg: #ff8a3d;
+  --stage-anotace-znacka-ink: #0a0a0a;
+
   /* typografie */
   --font-display: 'Oswald', 'Arial Narrow', sans-serif;
   --font-body: 'Work Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Jen pro tab/rytmus v poznámkách — tam nese význam i mezera. */
+  --font-mono: ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
 
   --text-xs: 0.8125rem;
   --text-sm: 0.9375rem;
@@ -53,6 +64,42 @@
 
   /* dotykový cíl */
   --touch-min: 44px;
+
+  /* Anotace — velikosti jsou zlomek šířky vykreslené stránky, ne pevné px.
+     Poznámka je součást not: musí růst se zoomem a sedět stejně na PC i na
+     tabletu. Šířku stránky dosazuje čtečka do `--anotace-sirka` na obalu
+     stránky (viz PdfPageCanvas).
+
+     Tady schválně jen POMĚRY, ne hotové velikosti: `var()` uvnitř custom
+     property se vyhodnocuje tam, kde je proměnná definovaná. Kdyby se
+     `calc(var(--anotace-sirka) * …)` počítal rovnou tady na :root, sáhl by
+     po --anotace-sirka na :root — kde není — a všude by se natvrdo použila
+     záložní hodnota. Výsledek se proto skládá až v .anotace, kam je šířka
+     stránky zděděná. */
+  --anotace-sirka-zaloha: 600px;
+  --anotace-pomer-text: 0.026;
+  --anotace-pomer-akord: 0.023;
+  --anotace-pomer-znacka: 0.027;
+  --anotace-pomer-padding: 0.008;
+  --anotace-pomer-linka: 0.003;
+  --anotace-pomer-uchyt: 0.022;
+
+  /* Tři velikosti poznámky. Malá se vejde mezi řádky textu, velká je na
+     věci, které musí být vidět přes celé pódium. */
+  --anotace-nasobic-mala: 0.72;
+  --anotace-nasobic-normalni: 1;
+  --anotace-nasobic-velka: 1.35;
+
+  /* Anotace ve čtečce. Stejný vzhled jako ve stage módu (viz --stage-anotace-*)
+     — co si člověk nastaví v editoru, to na pódiu uvidí; rozdílný náhled a
+     výsledek je horší vada než dvě sady tokenů se stejnými hodnotami.
+     Tmavá deska proto, že poznámka leží na bílé stránce not: nesmí splynout
+     s tiskem a musí být čitelná i v šeru. */
+  --app-anotace-bg: rgba(24, 22, 17, 0.92);
+  --app-anotace-ink: #f4efe1;
+  --app-anotace-akord: #ff8a3d;
+  --app-anotace-znacka-bg: #ff8a3d;
+  --app-anotace-znacka-ink: #181611;
 
   /* Bezpečné zóny displeje (výřez, zaoblené rohy, home indikátor). Appka jede
      s viewport-fit=cover, aby stage mode dosáhl až k hranám displeje, takže

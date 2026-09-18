@@ -1,0 +1,102 @@
+.anotace-lista {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: var(--border-w) solid var(--app-ink);
+  background: var(--app-paper);
+}
+
+.anotace-lista-nastroje,
+.anotace-lista-ulozeni {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.anotace-napoveda {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--app-ink-70);
+}
+
+.anotace-styly,
+.anotace-predvolby {
+  display: flex;
+  border: var(--border-w) solid var(--app-ink);
+}
+
+.anotace-styl,
+.anotace-predvolba {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  padding: var(--space-2) var(--space-3);
+  min-height: var(--touch-min);
+  background: transparent;
+  color: var(--app-ink);
+  border: none;
+  border-right: var(--border-w) solid var(--app-ink);
+  cursor: pointer;
+}
+.anotace-styl:last-child,
+.anotace-predvolba:last-child {
+  border-right: none;
+}
+.anotace-styl:hover,
+.anotace-predvolba:hover {
+  background: var(--app-ink-18);
+}
+
+.anotace-styl-aktivni,
+.anotace-styl-aktivni:hover {
+  background: var(--app-ink);
+  color: var(--app-paper);
+}
+
+.anotace-smazat {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  padding: var(--space-2) var(--space-4);
+  min-height: var(--touch-min);
+  background: transparent;
+  color: var(--app-error);
+  border: var(--border-w) solid var(--app-error);
+  cursor: pointer;
+}
+.anotace-smazat:hover {
+  background: var(--app-error);
+  color: var(--app-paper);
+}
+
+.anotace-stav {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+  color: var(--app-ink-70);
+}
+
+/* Neuložený stav musí být vidět — proto barva, ne jen jiné slovo. */
+.anotace-stav-zmeneno {
+  color: var(--app-primary);
+}
+
+.anotace-chyba {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-3);
+  background: var(--app-error);
+  color: var(--app-paper);
+}
+
+.anotace-ulozit,
+.anotace-konec {
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-4);
+}

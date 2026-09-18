@@ -2,7 +2,15 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from rest_framework import serializers
 
-from .models import Pisen, PolozkaSetlistu, Setlist, Slozka, VerzePisne, Zpevnik
+from .models import (
+    Anotace,
+    Pisen,
+    PolozkaSetlistu,
+    Setlist,
+    Slozka,
+    VerzePisne,
+    Zpevnik,
+)
 from .validatory import bezpecny_puvodni_nazev, zvaliduj_pdf
 
 
@@ -57,6 +65,63 @@ class VerzePisneSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         return super().update(instance, self._uloz_puvodni_nazev(validated_data))
+
+
+# --- Anotace (fáze 2a) ---
+# Souřadnice jsou zlomky rozměru stránky (0–1), NE pixely: tytéž poznámky se
+# čtou na PC i na tabletu, při zoomu a po otočení displeje. Pixely by platily
+# jen pro to jedno okno, ve kterém vznikly.
+
+STYLY_ANOTACI = ["normal", "mono", "akord", "znacka"]
+VELIKOSTI_ANOTACI = ["mala", "normalni", "velka"]
+MAX_ANOTACI = 200
+MAX_DELKA_TEXTU = 2000
+
+
+class AnotaceObjektSerializer(serializers.Serializer):
+    """Jeden objekt v anotační vrstvě. Ve v1 jen textové pole ve čtyřech stylech."""
+
+    id = serializers.CharField(max_length=64)
+    strana = serializers.IntegerField(min_value=1)
+    x = serializers.FloatField(min_value=0, max_value=1)
+    y = serializers.FloatField(min_value=0, max_value=1)
+    sirka = serializers.FloatField(min_value=0.02, max_value=1)
+    text = serializers.CharField(
+        max_length=MAX_DELKA_TEXTU, allow_blank=True, trim_whitespace=False
+    )
+    styl = serializers.ChoiceField(choices=STYLY_ANOTACI, default="normal")
+    # `default` platí i při čtení: poznámky uložené před zavedením velikosti
+    # nemají klíč vůbec a vyjdou jako "normalni", místo aby serializaci shodily.
+    velikost = serializers.ChoiceField(choices=VELIKOSTI_ANOTACI, default="normalni")
+
+    def validate(self, attrs):
+        # Pole nesmí přetéct přes pravý okraj stránky — jinak by se na užším
+        # displeji ořízlo a text by zmizel. Drobná tolerance kvůli tomu, že
+        # klient počítá v pixelech a dělí je šířkou stránky.
+        if attrs["x"] + attrs["sirka"] > 1.0001:
+            raise serializers.ValidationError(
+                "Pole přesahuje pravý okraj stránky (x + sirka musí být nejvýš 1)."
+            )
+        return attrs
+
+
+class AnotaceSerializer(serializers.ModelSerializer):
+    data = AnotaceObjektSerializer(many=True)
+
+    class Meta:
+        model = Anotace
+        fields = ["data", "upraveno"]
+        read_only_fields = ["upraveno"]
+
+    def validate_data(self, value):
+        if len(value) > MAX_ANOTACI:
+            raise serializers.ValidationError(
+                f"Na jednu verzi jde uložit nejvýš {MAX_ANOTACI} poznámek."
+            )
+        identifikatory = [objekt["id"] for objekt in value]
+        if len(set(identifikatory)) != len(identifikatory):
+            raise serializers.ValidationError("Poznámky mají duplicitní id.")
+        return value
 
 
 class PisenListSerializer(serializers.ModelSerializer):

@@ -31,6 +31,7 @@ export default function StageView({
   nextSongHref,
   pickerHrefFor,
   currentSongId,
+  renderOverlay,
 }) {
   const navigate = useNavigate()
   const containerRef = useRef(null)
@@ -160,6 +161,7 @@ export default function StageView({
             pageNumber={page}
             ariaLabel={`Strana ${page} z ${numPages}`}
             placeholderClassName="stage-loading pdf-page-placeholder"
+            overlay={renderOverlay?.(page)}
           />
         )}
       </div>

@@ -7,6 +7,11 @@
   min-height: 200px;
 }
 
+/* Přesně rozměr vykreslené stránky — kotva pro anotační vrstvu nad ní. */
+.pdf-page-stack {
+  position: relative;
+}
+
 .pdf-page-canvas canvas {
   display: block;
 }
