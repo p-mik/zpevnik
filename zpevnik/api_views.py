@@ -1,3 +1,5 @@
+import json
+
 from django.contrib.auth import authenticate, login, logout
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -9,10 +11,12 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .import_pisni import proved_import
 from .models import Pisen, PolozkaSetlistu, Setlist, Slozka, VerzePisne, Zpevnik
 from .permissions import IsStaffOrReadOnly, VerzePisnePermission
 from .soubory import odpoved_se_souborem, smi_cist_verzi
 from .serializers import (
+    ImportPlanSerializer,
     PisenDetailSerializer,
     PisenListSerializer,
     PolozkaSetlistuSerializer,
@@ -163,6 +167,49 @@ class VerejnySouborView(APIView):
             raise Http404("Píseň nemá veřejně dostupný soubor.")
 
         return odpoved_se_souborem(verze)
+
+
+class ImportView(APIView):
+    """Hromadný import zpěvníku z jednoho PDF — jen admin (fáze 1e).
+
+    Parsování (hledání kódu/názvu/interpreta v hlavičce stránky) proběhlo na
+    klientovi přes PDF.js — sem přichází jen POTVRZENÝ plán, který si
+    uživatel prošel a opravil v kontrolní tabulce. Server sám nic neparsuje,
+    jen ověří tvar plánu a fyzicky rozřeže PDF (viz zpevnik/import_pisni.py).
+    """
+
+    permission_classes = [permissions.IsAdminUser]
+
+    def post(self, request):
+        soubor = request.FILES.get("soubor")
+        if not soubor:
+            return Response(
+                {"soubor": ["Soubor je povinný."]}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            plan_data = json.loads(request.data.get("plan", ""))
+        except (TypeError, ValueError):
+            return Response(
+                {"plan": ["Plán není platné JSON."]}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        serializer = ImportPlanSerializer(data=plan_data)
+        serializer.is_valid(raise_exception=True)
+
+        vysledek = proved_import(soubor, serializer.validated_data)
+
+        return Response(
+            {
+                "pisne": [
+                    {"id": p.id, "kod": p.kod, "nazev": p.nazev}
+                    for p in vysledek["pisne"]
+                ],
+                "slozky": [s.nazev for s in vysledek["slozky"]],
+                "zpevniky": [z.nazev for z in vysledek["zpevniky"]],
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # --- Auth (standardní Django session login, Google OAuth přijde později) ---

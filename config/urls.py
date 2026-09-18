@@ -3,6 +3,7 @@ from django.urls import include, path, re_path
 from rest_framework.routers import DefaultRouter
 
 from zpevnik.api_views import (
+    ImportView,
     PisenViewSet,
     PolozkaSetlistuViewSet,
     SetlistViewSet,
@@ -36,6 +37,7 @@ urlpatterns = [
         VerejnySouborView.as_view(),
         name="verejny-soubor",
     ),
+    path("api/import/", ImportView.as_view(), name="import"),
     path("api/", include(router.urls)),
     path("", index, name="index"),
     # Zachytávač pro React Router — bez tohohle 404ne Django dřív, než se SPA

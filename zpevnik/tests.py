@@ -1,3 +1,5 @@
+import io
+import json
 import os
 import shutil
 import tempfile
@@ -8,11 +10,12 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
+from pypdf import PdfReader, PdfWriter
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from .apps import zkontroluj_servirovani_souboru
-from .models import Pisen, VerzePisne, Zpevnik
+from .models import Pisen, Slozka, VerzePisne, Zpevnik
 
 # Minimální, ale platné PDF (rozhodují úvodní magic bytes "%PDF-").
 PDF_OBSAH = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n%%EOF\n"
@@ -20,6 +23,17 @@ PDF_OBSAH = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n%%EOF\n"
 
 def pdf_upload(nazev="noty.pdf", obsah=PDF_OBSAH):
     return SimpleUploadedFile(nazev, obsah, content_type="application/pdf")
+
+
+def vicestrankove_pdf_bytes(pocet_stran):
+    """Skutečně platné PDF (na rozdíl od PDF_OBSAH výše) — potřebuje ho pypdf
+    umět reálně otevřít a rozřezat, ne jen projít kontrolou magic bytes."""
+    writer = PdfWriter()
+    for _ in range(pocet_stran):
+        writer.add_blank_page(width=200, height=200)
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
 
 
 class ZpevnikTokenViditelnostTests(TestCase):
@@ -592,6 +606,263 @@ class MazaniSouboruTests(SouboroveTestyZaklad):
         # Výchozí odklad 30 dnů — čerstvý osiřelý soubor musí přežít.
         call_command("uklid_souboru", "--smazat", stdout=StringIO())
         self.assertTrue(os.path.exists(cesta))
+
+
+class HromadnyImportTests(TestCase):
+    """Import (fáze 1e) — jen admin, atomicita, idempotence přes kód."""
+
+    def setUp(self):
+        self.media = tempfile.mkdtemp(prefix="zpevnik-test-import-")
+        prepinac = override_settings(MEDIA_ROOT=self.media, X_ACCEL_REDIRECT=True)
+        prepinac.enable()
+        self.addCleanup(prepinac.disable)
+        self.addCleanup(shutil.rmtree, self.media, True)
+
+        self.client = APIClient()
+        self.admin = User.objects.create_user(
+            "admin_import", password="heslo123", is_staff=True
+        )
+        self.clen = User.objects.create_user("clen_import", password="heslo123")
+
+    def kniha(self, pocet_stran=3):
+        return SimpleUploadedFile(
+            "kniha.pdf",
+            vicestrankove_pdf_bytes(pocet_stran),
+            content_type="application/pdf",
+        )
+
+    def zavolej(self, soubor, plan):
+        return self.client.post(
+            "/api/import/",
+            {"soubor": soubor, "plan": json.dumps(plan)},
+            format="multipart",
+        )
+
+    def zakladni_plan(self):
+        return {
+            "pisne": [
+                {"kod": 101, "nazev": "První píseň", "interpret": "Kapela A", "stranky": [1]},
+                # dvoustránková píseň — druhá strana jako "pokračování"
+                {"kod": 102, "nazev": "Druhá píseň", "interpret": "", "stranky": [2, 3]},
+            ]
+        }
+
+    def test_clen_nesmi_importovat(self):
+        self.client.force_authenticate(self.clen)
+        response = self.zavolej(self.kniha(), self.zakladni_plan())
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(Pisen.objects.count(), 0)
+
+    def test_neprihlaseny_nesmi_importovat(self):
+        response = self.zavolej(self.kniha(), self.zakladni_plan())
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_admin_importuje_vicestrankovou_pisen(self):
+        self.client.force_authenticate(self.admin)
+        response = self.zavolej(self.kniha(3), self.zakladni_plan())
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(Pisen.objects.count(), 2)
+
+        prvni = Pisen.objects.get(kod=101)
+        druha = Pisen.objects.get(kod=102)
+        self.assertEqual(prvni.nazev, "První píseň")
+        self.assertEqual(druha.interpret, "")
+
+        verze_prvni = prvni.verze.get()
+        self.assertEqual(verze_prvni.stav, VerzePisne.STAV_DOWNLOAD)
+        self.assertTrue(verze_prvni.soubor)
+        # sama o sobě musí jít znovu otevřít jako platné jednostránkové PDF
+        with verze_prvni.soubor.open("rb") as f:
+            self.assertEqual(len(PdfReader(f).pages), 1)
+
+        verze_druha = druha.verze.get()
+        with verze_druha.soubor.open("rb") as f:
+            self.assertEqual(len(PdfReader(f).pages), 2)
+
+    def test_duplicitni_kod_v_ramci_planu_odmitnuto(self):
+        self.client.force_authenticate(self.admin)
+        plan = {
+            "pisne": [
+                {"kod": 101, "nazev": "A", "stranky": [1]},
+                {"kod": 101, "nazev": "B", "stranky": [2]},
+            ]
+        }
+        response = self.zavolej(self.kniha(2), plan)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Pisen.objects.count(), 0)
+
+    def test_kod_uz_v_databazi_odmitne_cely_import(self):
+        Pisen.objects.create(kod=101, nazev="Existující píseň")
+        self.client.force_authenticate(self.admin)
+        response = self.zavolej(self.kniha(3), self.zakladni_plan())
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        # Ani kod=102 (validní, nekolidující) se nesmí založit — buď vše, nebo nic.
+        self.assertEqual(Pisen.objects.count(), 1)
+        self.assertFalse(Pisen.objects.filter(kod=102).exists())
+
+    def test_druhe_spusteni_stejneho_importu_nevyrobi_duplicity(self):
+        """Idempotence: kód je unique i v DB, druhý běh se stejným plánem
+        se odmítne dřív, než by cokoliv založil znovu."""
+        self.client.force_authenticate(self.admin)
+        plan = self.zakladni_plan()
+
+        prvni = self.zavolej(self.kniha(3), plan)
+        self.assertEqual(prvni.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(Pisen.objects.count(), 2)
+
+        druhy = self.zavolej(self.kniha(3), plan)
+        self.assertEqual(druhy.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Pisen.objects.count(), 2)
+
+    def test_stranka_mimo_rozsah_odmitnuta(self):
+        self.client.force_authenticate(self.admin)
+        plan = {"pisne": [{"kod": 101, "nazev": "A", "stranky": [999]}]}
+        response = self.zavolej(self.kniha(2), plan)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Pisen.objects.count(), 0)
+
+    def test_stejna_strana_ve_dvou_pisnich_odmitnuta(self):
+        self.client.force_authenticate(self.admin)
+        plan = {
+            "pisne": [
+                {"kod": 101, "nazev": "A", "stranky": [1, 2]},
+                {"kod": 102, "nazev": "B", "stranky": [2]},
+            ]
+        }
+        response = self.zavolej(self.kniha(3), plan)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Pisen.objects.count(), 0)
+
+    def test_soubor_ktery_neni_pdf_odmitnut(self):
+        self.client.force_authenticate(self.admin)
+        nepdf = SimpleUploadedFile(
+            "kniha.pdf", b"toto neni pdf", content_type="application/pdf"
+        )
+        response = self.zavolej(nepdf, self.zakladni_plan())
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(Pisen.objects.count(), 0)
+
+    def test_kategorie_vytvori_slozku_a_zpevnik_a_prirazeni_pisni(self):
+        self.client.force_authenticate(self.admin)
+        plan = {
+            "pisne": [
+                {"kod": 101, "nazev": "A", "stranky": [1]},
+                {"kod": 205, "nazev": "B", "stranky": [2]},
+            ],
+            "kategorie": [
+                {"digit": "1", "nazev": "Ploužáky", "vytvorit": True},
+                {"digit": "2", "nazev": "Pomalejší", "vytvorit": True},
+            ],
+        }
+        response = self.zavolej(self.kniha(2), plan)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+        plouzaky = Zpevnik.objects.get(nazev="Ploužáky")
+        self.assertEqual(plouzaky.slozka.nazev, "Ploužáky")
+        self.assertEqual(list(plouzaky.pisne.values_list("kod", flat=True)), [101])
+
+        pomalejsi = Zpevnik.objects.get(nazev="Pomalejší")
+        self.assertEqual(list(pomalejsi.pisne.values_list("kod", flat=True)), [205])
+
+    def test_kategorie_oznacena_vytvorit_false_se_preskoci(self):
+        self.client.force_authenticate(self.admin)
+        plan = {
+            "pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}],
+            "kategorie": [{"digit": "1", "nazev": "Ploužáky", "vytvorit": False}],
+        }
+        response = self.zavolej(self.kniha(1), plan)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(Slozka.objects.filter(nazev="Ploužáky").exists())
+
+    def test_opakovany_import_do_stejne_kategorie_nezdvoji_slozku(self):
+        """Druhé kolo s NOVÝMI kódy do stejné kategorie musí přiřadit do
+        stejné složky/zpěvníku, ne vyrobit druhou 'Ploužáky'."""
+        self.client.force_authenticate(self.admin)
+        plan1 = {
+            "pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}],
+            "kategorie": [{"digit": "1", "nazev": "Ploužáky", "vytvorit": True}],
+        }
+        self.assertEqual(
+            self.zavolej(self.kniha(1), plan1).status_code, status.HTTP_201_CREATED
+        )
+
+        plan2 = {
+            "pisne": [{"kod": 103, "nazev": "C", "stranky": [1]}],
+            "kategorie": [{"digit": "1", "nazev": "Ploužáky", "vytvorit": True}],
+        }
+        self.assertEqual(
+            self.zavolej(self.kniha(1), plan2).status_code, status.HTTP_201_CREATED
+        )
+
+        self.assertEqual(Slozka.objects.filter(nazev="Ploužáky").count(), 1)
+        zpevnik = Zpevnik.objects.get(nazev="Ploužáky")
+        self.assertEqual(
+            sorted(zpevnik.pisne.values_list("kod", flat=True)), [101, 103]
+        )
+
+    def test_prazdny_plan_odmitnut(self):
+        self.client.force_authenticate(self.admin)
+        response = self.zavolej(self.kniha(1), {"pisne": []})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_cely_zpevnik_obsahuje_vsechny_pisne_bez_ohledu_na_kategorie(self):
+        """Kategorie jsou navíc pro procházení, ne náhrada za knihu jako
+        celek — ta musí jít jedním odkazem/setlistem nezávisle na nich."""
+        self.client.force_authenticate(self.admin)
+        plan = {
+            "pisne": [
+                {"kod": 101, "nazev": "A", "stranky": [1]},
+                {"kod": 205, "nazev": "B", "stranky": [2]},
+            ],
+            "kategorie": [{"digit": "1", "nazev": "Ploužáky", "vytvorit": True}],
+            "cely_zpevnik": {"nazev": "ŠUBAPS zpěvník 2026", "vytvorit": True},
+        }
+        response = self.zavolej(self.kniha(2), plan)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+        cely = Zpevnik.objects.get(nazev="ŠUBAPS zpěvník 2026")
+        self.assertIsNone(cely.slozka)
+        self.assertEqual(sorted(cely.pisne.values_list("kod", flat=True)), [101, 205])
+        # kod 205 nebyl v žádné vytvořené kategorii, ale v celé knize být musí
+        plouzaky = Zpevnik.objects.get(nazev="Ploužáky")
+        self.assertEqual(list(plouzaky.pisne.values_list("kod", flat=True)), [101])
+
+    def test_cely_zpevnik_neni_povinny(self):
+        self.client.force_authenticate(self.admin)
+        plan = {
+            "pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}],
+            "cely_zpevnik": {"nazev": "Cokoliv", "vytvorit": False},
+        }
+        response = self.zavolej(self.kniha(1), plan)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertFalse(Zpevnik.objects.filter(nazev="Cokoliv").exists())
+
+    def test_cely_zpevnik_bez_pole_v_planu_nic_nezalozi(self):
+        """Starší/minimální plán bez cely_zpevnik vůbec nesmí spadnout."""
+        self.client.force_authenticate(self.admin)
+        response = self.zavolej(self.kniha(1), {"pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}]})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+    def test_opakovany_import_doplni_stejny_cely_zpevnik(self):
+        self.client.force_authenticate(self.admin)
+        plan1 = {
+            "pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}],
+            "cely_zpevnik": {"nazev": "Kniha", "vytvorit": True},
+        }
+        self.assertEqual(
+            self.zavolej(self.kniha(1), plan1).status_code, status.HTTP_201_CREATED
+        )
+        plan2 = {
+            "pisne": [{"kod": 102, "nazev": "B", "stranky": [1]}],
+            "cely_zpevnik": {"nazev": "Kniha", "vytvorit": True},
+        }
+        self.assertEqual(
+            self.zavolej(self.kniha(1), plan2).status_code, status.HTTP_201_CREATED
+        )
+
+        self.assertEqual(Zpevnik.objects.filter(nazev="Kniha").count(), 1)
+        kniha = Zpevnik.objects.get(nazev="Kniha")
+        self.assertEqual(sorted(kniha.pisne.values_list("kod", flat=True)), [101, 102])
 
 
 class E001SystemCheckTests(TestCase):

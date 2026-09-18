@@ -1,0 +1,98 @@
+.import-page h1 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: 0 0 var(--space-3);
+}
+
+.import-intro {
+  color: var(--app-ink-70);
+  max-width: 60ch;
+  margin: 0 0 var(--space-5);
+}
+
+.import-upload {
+  padding: var(--space-6);
+}
+
+.import-file-input {
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+}
+
+.import-parse-error {
+  color: var(--app-error);
+  margin: var(--space-4) 0 0;
+}
+
+.import-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.import-summary-problems {
+  font-weight: 600;
+  color: var(--app-error);
+}
+
+.import-cely-zpevnik {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.import-cely-zpevnik-nazev {
+  flex: 1 1 auto;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+
+.import-actions {
+  display: flex;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.import-submit-error {
+  margin-bottom: var(--space-4);
+}
+
+.import-result {
+  padding: var(--space-6);
+}
+
+.import-result h2 {
+  font-family: var(--font-display);
+  margin: 0 0 var(--space-3);
+}
+
+.import-result-list {
+  list-style: none;
+  margin: var(--space-4) 0;
+  padding: 0;
+  max-height: 20em;
+  overflow-y: auto;
+  border: var(--border-w) solid var(--app-ink);
+}
+
+.import-result-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-top: var(--border-w) solid var(--app-ink-18);
+}
+.import-result-list li:first-child {
+  border-top: none;
+}
+
+.import-result-list .code-chip {
+  font-size: var(--text-sm);
+  text-decoration: none;
+}

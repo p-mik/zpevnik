@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthContext'
 import './Header.css'
 
 export default function Header() {
-  const { logout } = useAuth()
+  const { user, logout } = useAuth()
   const navigate = useNavigate()
 
   async function handleLogout() {
@@ -25,6 +25,7 @@ export default function Header() {
         <NavItem to="/pisne">Písně</NavItem>
         <NavItem to="/slozky">Zpěvníky</NavItem>
         <NavItem to="/setlisty">Setlisty</NavItem>
+        {user?.role === 'admin' && <NavItem to="/import">Import</NavItem>}
         <button type="button" className="nav-item nav-ghost" onClick={handleLogout}>
           Odhlásit
         </button>

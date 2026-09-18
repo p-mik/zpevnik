@@ -48,3 +48,13 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# Zdrojová/testovací PDF (cizí obsah, necommitovat) — bez lomítka na začátku
+# platí v celém stromu, ne jen v kořeni repa. Kdyby někdy bylo potřeba
+# commitnout PDF jako fixture, musí se přidat přes `git add -f`.
+*.pdf
+
+# Lokální override docker-compose (viz poznámka u web.volumes v README) —
+# v produkci se /opt/zpevnik/media váže na skutečnou cestu na serveru, tady
+# na Windows to samo o sobě nedrží obsah mezi restarty Docker Desktopu.
+docker-compose.override.yml

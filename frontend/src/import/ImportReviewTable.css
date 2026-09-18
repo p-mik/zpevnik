@@ -1,0 +1,135 @@
+.import-table-wrap {
+  overflow-x: auto;
+  border: var(--border-w) solid var(--app-ink);
+  margin-bottom: var(--space-6);
+}
+
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.import-table th {
+  text-align: left;
+  font-family: var(--font-display);
+  font-weight: 600;
+  padding: var(--space-3);
+  border-bottom: var(--border-w-lg) solid var(--app-ink);
+  background: var(--app-paper);
+  position: sticky;
+  top: 0;
+  white-space: nowrap;
+}
+
+.import-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-w) solid var(--app-ink-18);
+  vertical-align: middle;
+}
+
+.import-row-discard {
+  background: var(--app-ink-18);
+}
+
+.import-col-page {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  width: 3em;
+}
+
+.import-col-thumb {
+  width: 100px;
+}
+
+.import-col-kod {
+  width: 6em;
+}
+
+.import-input-kod {
+  width: 5.5em;
+}
+
+.import-nazev-cell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.import-nazev-cell .field-input {
+  min-width: 14em;
+}
+
+.import-suggest-btn {
+  flex-shrink: 0;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: var(--text-xs);
+  min-width: 2.2em;
+  min-height: 2.2em;
+  border: var(--border-w) solid var(--app-ink);
+  background: transparent;
+  cursor: pointer;
+}
+.import-suggest-btn:hover {
+  background: var(--app-ink-18);
+}
+
+.import-col-interpret .field-input {
+  min-width: 10em;
+}
+
+.import-muted {
+  color: var(--app-ink-45);
+  font-style: italic;
+}
+
+.import-discarded {
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+}
+
+.import-col-akce {
+  min-width: 12em;
+}
+
+.import-action-select {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  padding: var(--space-2);
+  border: var(--border-w) solid var(--app-ink);
+  background: var(--app-paper);
+  color: var(--app-ink);
+  min-height: var(--touch-min);
+}
+
+.import-problems {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.problem-badge {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 0.1em var(--space-2);
+  white-space: nowrap;
+  border: var(--border-w) solid var(--app-ink);
+}
+
+.problem-badge-error {
+  background: var(--app-error);
+  color: var(--app-paper);
+  border-color: var(--app-error);
+}
+
+.problem-badge-warning {
+  background: transparent;
+  color: var(--app-ink-70);
+}

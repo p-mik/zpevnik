@@ -1,0 +1,49 @@
+.import-kategorie-list {
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  border: var(--border-w) solid var(--app-ink);
+  border-top: none;
+}
+
+.import-kategorie-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-top: var(--border-w) solid var(--app-ink);
+}
+
+.import-kategorie-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.import-kategorie-checkbox input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--app-primary);
+}
+
+.import-kategorie-digit {
+  font-size: var(--text-sm);
+}
+
+.import-kategorie-nazev {
+  flex: 1 1 auto;
+  min-width: 10em;
+}
+
+.import-kategorie-pocet {
+  font-size: var(--text-sm);
+  color: var(--app-ink-70);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.import-kategorie-empty {
+  color: var(--app-ink-70);
+}

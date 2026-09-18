@@ -215,3 +215,46 @@ class VerejnyZpevnikSerializer(serializers.ModelSerializer):
     class Meta:
         model = Zpevnik
         fields = ["nazev", "pisne"]
+
+
+# --- Hromadný import (fáze 1e) — validace POTVRZENÉHO plánu, ne parsování ---
+# Parsování PDF proběhlo na klientovi; tady se jen ověřuje TVAR plánu, který
+# poslal. Obsahová validace (kódy, rozsahy stránek) je v zpevnik/import_pisni.py,
+# protože potřebuje znát skutečný počet stran nahraného PDF.
+
+
+class ImportPisenPlanSerializer(serializers.Serializer):
+    kod = serializers.IntegerField(min_value=1)
+    nazev = serializers.CharField(max_length=255)
+    interpret = serializers.CharField(
+        max_length=255, allow_blank=True, required=False, default=""
+    )
+    stranky = serializers.ListField(
+        child=serializers.IntegerField(min_value=1), allow_empty=False
+    )
+
+
+class ImportKategoriePlanSerializer(serializers.Serializer):
+    digit = serializers.CharField(max_length=1, min_length=1)
+    nazev = serializers.CharField(max_length=255)
+    vytvorit = serializers.BooleanField(default=True)
+
+
+class ImportCelyZpevnikPlanSerializer(serializers.Serializer):
+    """Jeden Zpevnik se všemi importovanými písněmi — "ta kniha jako celek",
+    nezávisle na Slozka/Zpevnik rozpadu po kategoriích (viz import_pisni.py).
+    """
+
+    nazev = serializers.CharField(max_length=255)
+    vytvorit = serializers.BooleanField(default=True)
+
+
+class ImportPlanSerializer(serializers.Serializer):
+    pisne = ImportPisenPlanSerializer(many=True)
+    kategorie = ImportKategoriePlanSerializer(many=True, required=False, default=list)
+    cely_zpevnik = ImportCelyZpevnikPlanSerializer(required=False, allow_null=True, default=None)
+
+    def validate_pisne(self, value):
+        if not value:
+            raise serializers.ValidationError("Plán neobsahuje žádnou píseň.")
+        return value

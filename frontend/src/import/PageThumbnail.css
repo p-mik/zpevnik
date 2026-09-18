@@ -1,0 +1,23 @@
+.page-thumb {
+  width: 90px;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: var(--border-w) solid var(--app-ink);
+  background: var(--app-paper);
+  flex-shrink: 0;
+}
+
+.page-thumb img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.page-thumb-placeholder {
+  display: block;
+  width: 100%;
+  height: 60px;
+  background: var(--app-ink-18);
+}

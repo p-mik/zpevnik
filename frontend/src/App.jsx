@@ -12,12 +12,13 @@ import SetlistsPlaceholderPage from './pages/SetlistsPlaceholderPage'
 import PublicSongbookPage from './pages/PublicSongbookPage'
 import NotFoundPage from './pages/NotFoundPage'
 
-// PDF.js je těžká knihovna (~500 kB) — čtečka a stage mode se natáhnou, jen
-// když je uživatel opravdu otevře, ne při každém načtení appky.
+// PDF.js je těžká knihovna (~500 kB) — čtečka, stage mode a import se
+// natáhnou, jen když je uživatel opravdu otevře, ne při každém načtení appky.
 const SongReaderPage = lazy(() => import('./pages/SongReaderPage'))
 const StageModePage = lazy(() => import('./pages/StageModePage'))
 const PublicSongReaderPage = lazy(() => import('./pages/PublicSongReaderPage'))
 const PublicStageModePage = lazy(() => import('./pages/PublicStageModePage'))
+const ImportPage = lazy(() => import('./pages/ImportPage'))
 
 export default function App() {
   return (
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="/slozky/:id" element={<FoldersPage />} />
             <Route path="/zpevniky/:id" element={<SongbookPage />} />
             <Route path="/setlisty" element={<SetlistsPlaceholderPage />} />
+            <Route path="/import" element={<ImportPage />} />
           </Route>
 
           <Route path="*" element={<NotFoundPage />} />
