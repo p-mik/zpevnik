@@ -35,8 +35,11 @@
   /* typografie */
   --font-display: 'Oswald', 'Arial Narrow', sans-serif;
   --font-body: 'Work Sans', -apple-system, 'Segoe UI', Roboto, sans-serif;
-  /* Jen pro tab/rytmus v poznámkách — tam nese význam i mezera. */
-  --font-mono: ui-monospace, 'Cascadia Mono', 'Courier New', monospace;
+  /* Jen pro tab/rytmus v poznámkách — tam nese význam i mezera. Musí být
+     self-hostovaný, ne systémový monospace stack: ten se platforma od
+     platformy liší v šířce znaku (Menlo na iOS, Consolas na Windows), takže
+     stejná zlomková šířka pole vypadala na iPadu a PC jinak "naplněná". */
+  --font-mono: 'JetBrains Mono', 'Courier New', monospace;
 
   --text-xs: 0.8125rem;
   --text-sm: 0.9375rem;
