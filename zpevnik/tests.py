@@ -327,6 +327,43 @@ class UploadPdfTests(SouboroveTestyZaklad):
         self.assertEqual(verze.stav, VerzePisne.STAV_PERSONAL)
         self.assertEqual(verze.vlastnik_id, self.bob.id)
 
+    def test_admin_nahraje_osobni_verzi_a_dostane_ji_do_vlastnictvi(self):
+        """Osobní verze bez vlastníka by byla nedostupná i svému autorovi —
+        Pisen.aktivni_verze() páruje osobní verze právě přes vlastníka, a
+        `vlastnik` je v serializeru read-only, takže ho musí dosadit server."""
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            "/api/verze-pisni/",
+            {"pisen": self.pisen.id, "stav": "personal", "soubor": pdf_upload()},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        verze = VerzePisne.objects.get(id=response.data["id"])
+        self.assertEqual(verze.stav, VerzePisne.STAV_PERSONAL)
+        self.assertEqual(verze.vlastnik_id, self.admin.id)
+        # A rovnou se i nabídne jako aktivní verze pro svého autora.
+        self.assertEqual(self.pisen.aktivni_verze(user=self.admin).id, verze.id)
+
+    def test_adminova_neosobni_verze_zustava_bez_vlastnika(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            "/api/verze-pisni/",
+            {"pisen": self.pisen.id, "stav": "confirmed", "soubor": pdf_upload()},
+            format="multipart",
+        )
+        verze = VerzePisne.objects.get(id=response.data["id"])
+        self.assertIsNone(verze.vlastnik_id)
+
+    def test_admin_upravou_nepreveme_cizi_osobni_verzi(self):
+        verze = self.nahraj(self.pisen, VerzePisne.STAV_PERSONAL, vlastnik=self.bob)
+        self.client.force_authenticate(self.admin)
+        response = self.client.patch(
+            f"/api/verze-pisni/{verze.id}/", {"typ_obsahu": "pdf"}, format="multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        verze.refresh_from_db()
+        self.assertEqual(verze.vlastnik_id, self.bob.id)
+
     def test_neni_pdf_jen_prejmenovane(self):
         self.client.force_authenticate(self.admin)
         png = SimpleUploadedFile(

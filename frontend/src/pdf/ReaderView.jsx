@@ -24,6 +24,7 @@ export default function ReaderView({
   title,
   subtitle,
   versionSwitcher,
+  uploadButton,
   stageHref,
   sessionBanner,
   prevSongHref,
@@ -92,6 +93,7 @@ export default function ReaderView({
         title={title}
         subtitle={subtitle}
         versionSwitcher={versionSwitcher}
+        uploadButton={uploadButton}
         stageHref={stageHref}
         pickerHrefFor={pickerHrefFor}
         currentSongId={currentSongId}
@@ -175,6 +177,7 @@ function ReaderTopbar({
   title,
   subtitle,
   versionSwitcher,
+  uploadButton,
   stageHref,
   pickerHrefFor,
   currentSongId,
@@ -205,6 +208,7 @@ function ReaderTopbar({
         </span>
       </button>
       <div className="reader-topbar-actions">
+        {uploadButton}
         {versionSwitcher}
         {stageHref && (
           <Link

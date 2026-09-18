@@ -5,21 +5,9 @@ import { parseAllPages } from './parsePdfPages'
 import { groupPagesIntoSongs, analyzeProblems, planJeValidni } from './planAnalysis'
 import { navrhniNazvyKategorii, buildKategorieState } from './deriveKategorie'
 import { submitImport } from './submitImport'
-import { ApiError } from '../api/client'
+import { extractErrorMessage } from '../api/errors'
 
-function zplostiChybu(hodnota) {
-  if (typeof hodnota === 'string') return [hodnota]
-  if (Array.isArray(hodnota)) return hodnota.flatMap(zplostiChybu)
-  if (hodnota && typeof hodnota === 'object') return Object.values(hodnota).flatMap(zplostiChybu)
-  return [String(hodnota)]
-}
-
-function extractErrorMessage(err) {
-  if (!(err instanceof ApiError)) return 'Import se nepodařilo provést.'
-  if (err.detail) return err.detail
-  if (err.fieldErrors) return zplostiChybu(err.fieldErrors).join(' ')
-  return 'Import se nepodařilo provést.'
-}
+const CHYBA_IMPORTU = 'Import se nepodařilo provést.'
 
 // STEP: 'upload' -> 'parsing' -> 'review' -> 'kategorie' -> 'submitting' -> 'result'
 export function useImportWizard() {
@@ -118,7 +106,7 @@ export function useImportWizard() {
       setResult({ ok: true, data })
       setStep('result')
     } catch (err) {
-      setSubmitError(extractErrorMessage(err))
+      setSubmitError(extractErrorMessage(err, CHYBA_IMPORTU))
       setStep('kategorie')
     }
   }, [songs, kategorie, celyZpevnik])

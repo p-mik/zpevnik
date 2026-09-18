@@ -59,19 +59,32 @@ class VerzePisneViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
-        if user.is_staff:
-            serializer.save()
-        else:
+        if not user.is_staff:
             # Člen smí vytvořit jen vlastní 'personal' verzi — server přepíše,
             # co by případně poslal v těle požadavku.
             serializer.save(stav=VerzePisne.STAV_PERSONAL, vlastnik=user)
+            return
+        # Admin smí vytvořit libovolný stav, ale osobní verze musí mít majitele:
+        # `vlastnik` je v serializeru read-only, takže by jinak vznikla osobní
+        # verze bez vlastníka — tu by si nenačetl ani její autor, protože
+        # Pisen.aktivni_verze() páruje osobní verze právě přes vlastnika.
+        extra = {}
+        if serializer.validated_data.get("stav") == VerzePisne.STAV_PERSONAL:
+            extra["vlastnik"] = user
+        serializer.save(**extra)
 
     def perform_update(self, serializer):
         user = self.request.user
-        if user.is_staff:
-            serializer.save()
-        else:
+        if not user.is_staff:
             serializer.save(stav=VerzePisne.STAV_PERSONAL, vlastnik=user)
+            return
+        # Doplnit vlastníka jen tam, kde žádný není — jinak by admin úpravou
+        # cizí osobní verze převzal její vlastnictví.
+        extra = {}
+        novy_stav = serializer.validated_data.get("stav", serializer.instance.stav)
+        if novy_stav == VerzePisne.STAV_PERSONAL and serializer.instance.vlastnik_id is None:
+            extra["vlastnik"] = user
+        serializer.save(**extra)
 
     @action(detail=True, methods=["get"], url_path="soubor")
     def soubor(self, request, pk=None):

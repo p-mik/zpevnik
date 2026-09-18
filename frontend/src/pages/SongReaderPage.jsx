@@ -5,6 +5,7 @@ import { resolveVerze } from '../pdf/resolveVerze'
 import { useSongNavigation } from '../pdf/useSongNavigation'
 import ReaderView from '../pdf/ReaderView'
 import VersionSwitcher from '../pdf/VersionSwitcher'
+import UploadVersionButton from '../pdf/UploadVersionButton'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 
@@ -37,6 +38,14 @@ export default function SongReaderPage() {
 
   const zSuffix = zpevnikId ? `?z=${zpevnikId}` : ''
 
+  function prepniNaVerzi(verzeId) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('verze', String(verzeId))
+      return next
+    })
+  }
+
   return (
     <ReaderView
       pdfPath={currentVerze ? `/api/verze-pisni/${currentVerze.id}/soubor/` : null}
@@ -49,16 +58,17 @@ export default function SongReaderPage() {
       subtitle={song.interpret}
       sessionBanner={auth.sessionLost}
       versionSwitcher={
-        <VersionSwitcher
-          verze={song.verze}
-          currentId={currentVerze?.id}
-          onChange={(verzeId) =>
-            setSearchParams((prev) => {
-              const next = new URLSearchParams(prev)
-              next.set('verze', String(verzeId))
-              return next
-            })
-          }
+        <VersionSwitcher verze={song.verze} currentId={currentVerze?.id} onChange={prepniNaVerzi} />
+      }
+      uploadButton={
+        <UploadVersionButton
+          pisenId={song.id}
+          onUploaded={(verzeId) => {
+            // Pořadí: nejdřív URL, pak načtení písně — přepínač verzí novou
+            // položku uvidí až po reloadu a rovnou ji ukáže jako vybranou.
+            prepniNaVerzi(verzeId)
+            reload()
+          }}
         />
       }
       stageHref={currentVerze ? `/pisne/${id}/stage?verze=${currentVerze.id}${zpevnikId ? `&z=${zpevnikId}` : ''}` : undefined}
