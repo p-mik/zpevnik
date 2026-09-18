@@ -53,6 +53,15 @@
 
   /* dotykový cíl */
   --touch-min: 44px;
+
+  /* Bezpečné zóny displeje (výřez, zaoblené rohy, home indikátor). Appka jede
+     s viewport-fit=cover, aby stage mode dosáhl až k hranám displeje, takže
+     odsazení si musí hlídat sama. V prohlížeči a na zařízeních bez výřezu
+     jsou všechny nulové, takže se tím nic nerozbije. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
 }
 
 * {
@@ -72,6 +81,13 @@ body {
   font-size: var(--text-base);
   line-height: 1.55;
   margin: 0;
+  /* Vodorovné bezpečné zóny (výřez na šířku) řeší appka jednou tady, za
+     všechny běžné stránky. Svisle se nepaddinguje schválně — čtečka staví na
+     `height: 100dvh` a jakýkoli svislý padding na body by jí vyrobil přetečení;
+     horní a spodní odsazení si proto berou konkrétní lišty samy. Stage mode je
+     `position: fixed`, tomu tohle nepomůže a řeší si všechny čtyři strany sám. */
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
   -webkit-font-smoothing: antialiased;
 }
 

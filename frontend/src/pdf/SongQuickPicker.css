@@ -11,9 +11,10 @@
   display: flex;
   flex-direction: column;
   /* Až ke spodnímu okraji obrazovky — kde panel začíná (pod titulkem),
-     hlásí komponenta do --song-picker-top, zbytek si spočítá CSS. */
-  height: calc(100vh - var(--song-picker-top, 0px) - var(--space-4));
-  height: calc(100dvh - var(--song-picker-top, 0px) - var(--space-4));
+     hlásí komponenta do --song-picker-top, zbytek si spočítá CSS. Dole se
+     ještě uhne home indikátoru. */
+  height: calc(100vh - var(--song-picker-top, 0px) - var(--space-4) - var(--safe-bottom));
+  height: calc(100dvh - var(--song-picker-top, 0px) - var(--space-4) - var(--safe-bottom));
 }
 
 .song-picker .search-bar {

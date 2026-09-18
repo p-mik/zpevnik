@@ -6,6 +6,8 @@
      desktopech nemarní tolik místa po stranách. */
   max-width: 1100px;
   margin: 0 auto;
-  padding: 0 var(--space-5) var(--space-8);
+  /* Spodní odsazení počítá s home indikátorem — bez toho by na iPadu v režimu
+     „přidáno na plochu“ poslední řádek seznamu ležel pod ním. */
+  padding: 0 var(--space-5) calc(var(--space-8) + var(--safe-bottom));
 }
 

@@ -2,7 +2,9 @@
   display: flex;
   flex-direction: column;
   border: var(--border-w-lg) solid var(--app-ink);
-  margin: var(--space-5) auto;
+  /* Nahoře navíc bezpečná zóna — v režimu „přidáno na plochu“ sahá appka pod
+     stavovou lištu (viz black-translucent v index.html). */
+  margin: calc(var(--space-5) + var(--safe-top)) auto var(--space-5);
   /* .app-main má stejný max-width, ale navíc `padding: 0 var(--space-5)`
      kolem obsahu — bez odečtení stejné šířky by levý/pravý okraj hlavičky
      nesouhlasil s tím, co je pod ní (viz screenshot v konverzaci). */

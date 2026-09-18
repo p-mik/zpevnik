@@ -8,6 +8,7 @@ import { useWakeLock } from './useWakeLock'
 import { exitDocumentFullscreen } from './fullscreen'
 import PdfPageCanvas from './PdfPageCanvas'
 import SongQuickPicker from './SongQuickPicker'
+import StageInstallHint from './StageInstallHint'
 import './StageView.css'
 
 const OVERLAY_TIMEOUT_MS = 4000
@@ -213,6 +214,8 @@ export default function StageView({
           </div>
         )}
       </div>
+
+      <StageInstallHint />
     </div>
   )
 }

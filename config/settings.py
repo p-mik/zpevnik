@@ -105,6 +105,11 @@ STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
+# WhiteNoise má vlastní tabulku typů a .webmanifest v ní není — bez tohohle
+# by manifest chodil jako application/octet-stream. `mimetypes.add_type()` tu
+# nepomůže, WhiteNoise se modulu mimetypes neptá (viz whitenoise.media_types).
+WHITENOISE_MIMETYPES = {".webmanifest": "application/manifest+json"}
+
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.environ.get("MEDIA_ROOT", str(BASE_DIR / "media"))
 

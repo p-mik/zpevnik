@@ -2,8 +2,24 @@
 <html lang="cs">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: v režimu „přidáno na plochu“ má stage mode sáhnout
+         až k hranám displeje. Odsazení od výřezu a home indikátoru si komponenty
+         berou z env(safe-area-inset-*) přes tokeny --safe-* (viz tokens.css). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4efe1" />
     <title>Zpěvník</title>
+
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Safari web app manifest ignoruje: celoobrazovkový režim po „Přidat na
+         plochu“ i ikona se na iOS berou výhradně z těchhle tagů.
+         black-translucent nechá appku sáhnout i pod stavovou lištu — přesně to,
+         co stage mode potřebuje, a proto výš viewport-fit=cover. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Zpěvník" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon-180.png" />
   </head>
   <body>
     <div id="root"></div>

@@ -14,7 +14,8 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-3) var(--space-5);
-  padding: var(--space-4) var(--space-5);
+  /* Boční bezpečné zóny řeší body (viz tokens.css), svislé si lišty berou samy. */
+  padding: calc(var(--space-4) + var(--safe-top)) var(--space-5) var(--space-4);
   border-bottom: var(--border-w-lg) solid var(--app-ink);
 }
 
@@ -114,7 +115,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-5) calc(var(--space-3) + var(--safe-bottom));
   border-top: var(--border-w-lg) solid var(--app-ink);
 }
 

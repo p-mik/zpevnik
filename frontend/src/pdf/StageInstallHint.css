@@ -1,0 +1,45 @@
+/* Jen --stage-* tokeny, nikdy --app-*. Nápověda žije mimo .stage-overlay —
+   nesmí zmizet s ovládáním po čtyřech vteřinách, dokud ji nikdo neodbyl. */
+.stage-hint {
+  position: absolute;
+  left: calc(var(--space-5) + var(--safe-left));
+  right: calc(var(--space-5) + var(--safe-right));
+  /* Nad pruhem s počtem stran, ať ho nepřekrývá, když je ovládání vidět.
+     Bez z-index schválně: v DOM je až za .stage-overlay, takže je nad ním,
+     ale pod rozbaleným výběrem písně (ten má z-index 20). */
+  bottom: calc(var(--space-8) + var(--space-6) + var(--safe-bottom));
+  margin: 0 auto;
+  max-width: 30rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-5);
+  background: var(--stage-bg);
+  border: var(--border-w) solid var(--stage-accent);
+}
+
+.stage-hint-text {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--stage-ink);
+}
+
+.stage-hint-note {
+  display: block;
+  color: var(--stage-muted);
+}
+
+.stage-hint-dismiss {
+  flex-shrink: 0;
+  min-height: var(--touch-min);
+  padding: 0 var(--space-4);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  letter-spacing: 0.02em;
+  color: var(--stage-bg);
+  background: var(--stage-accent);
+  border: none;
+  cursor: pointer;
+}

@@ -15,6 +15,9 @@
   justify-content: center;
 }
 
+/* Stage mode je `position: fixed`, takže mu vodorovné odsazení z body nepomůže
+   — bezpečné zóny si bere na všech čtyřech stranách sám. Noty se tím zmenší
+   přesně o výřez a home indikátor (useFitScale padding odečítá). */
 .stage-tapzone {
   position: absolute;
   inset: 0;
@@ -22,6 +25,7 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
+  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
 }
 
 .stage-tapzone .pdf-page-wrap {
@@ -88,8 +92,8 @@
    klikací pole (padding), ale opticky drobné a nenápadné. */
 .stage-exit {
   position: absolute;
-  top: var(--space-4);
-  right: var(--space-5);
+  top: calc(var(--space-4) + var(--safe-top));
+  right: calc(var(--space-5) + var(--safe-right));
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -135,7 +139,9 @@
   align-items: center;
   /* Křížek žije mimo tenhle řádek (viz .stage-exit) — nechává se tu místo,
      ať se titulek nepřekrývá s jeho klikacím polem v pravém rohu. */
-  padding: var(--space-4) calc(var(--touch-min) + var(--space-6)) 0 var(--space-5);
+  padding: calc(var(--space-4) + var(--safe-top))
+    calc(var(--touch-min) + var(--space-6) + var(--safe-right)) 0
+    calc(var(--space-5) + var(--safe-left));
 }
 
 /* Titulek je <button> — rozbaluje rychlý výběr písně. Vizuálně jen text
@@ -186,6 +192,10 @@
   background: var(--stage-bg);
   color: var(--stage-ink);
   border-color: var(--stage-ink);
+  /* Uvnitř `position: fixed` vrstvy — vodorovné bezpečné zóny z body sem
+     nedosáhnou a absolutní `left/right` se měří od hrany, ne od paddingu. */
+  left: calc(var(--space-5) + var(--safe-left));
+  right: calc(var(--space-5) + var(--safe-right));
 }
 .stage-root .song-picker .search-bar {
   border-bottom-color: var(--stage-muted);
@@ -255,7 +265,8 @@
 .stage-overlay-bottom {
   display: flex;
   justify-content: center;
-  padding: var(--space-4);
+  padding: var(--space-4) calc(var(--space-4) + var(--safe-right))
+    calc(var(--space-4) + var(--safe-bottom)) calc(var(--space-4) + var(--safe-left));
   background: rgba(10, 10, 10, 0.82);
 }
 

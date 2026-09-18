@@ -367,6 +367,8 @@ Důvody: anotační vrstva a session UI jsou hustě interaktivní (React dle pra
 2. **Auth-chráněné servírování PDF** — Nginx `X-Accel-Redirect`: Django ověří práva, Nginx pošle soubor. (Django nesmí streamovat soubory samo — pomalé; Nginx nesmí servírovat media bez auth kontroly.)
 3. **PDF.js** na frontendu (čtečka + canvas overlay pro anotace)
 4. **django-allauth** (Google OAuth) — prerekvizita: založit OAuth credentials v Google Cloud Console (consent screen atd.)
+5. **PWA bez service workeru** — jen manifest (`frontend/public/manifest.webmanifest`) a iOS meta tagy v `frontend/index.html`. Důvod: stage mode potřebuje schovat lištu prohlížeče a Fullscreen API na iOS pro dokument neexistuje, takže jediná spolehlivá cesta je „Přidat na plochu“. Offline se neřeší, service worker proto žádný není. Appka jede s `viewport-fit=cover`, odsazení od výřezu a home indikátoru drží tokeny `--safe-*` v `tokens.css`. Manifest servíruje WhiteNoise, správný typ zajišťuje `WHITENOISE_MIMETYPES` v settings.
+   **Instalace na tabletu:** iPad Safari → Sdílet → Přidat na plochu; Android Chrome → menu → Přidat na plochu / Nainstalovat.
 
 **Session:** polling, žádné WebSockets. Bez Redis, bez Channels, bez ASGI migrace. Latence 2–3 s je pro „kapelník otočil stránku" v pohodě. WebSockets jen kdyby to reálně skřípalo.
 
@@ -380,7 +382,7 @@ Důvody: anotační vrstva a session UI jsou hustě interaktivní (React dle pra
 | Disk | ⚠️ server na 80 % (7,4 GB volných). PDF jsou malé (stovky kB), ale před nasazením úklid nebo upgrade disku |
 | Google OAuth | nutno založit credentials v Google Cloud Console (zdarma, klikací opruz) |
 | Backup | přidat novou DB do `/opt/backup/db_backup.sh` + media složku do zálohy (PDF nejsou v DB!) |
-| iPad | testovat čtečku v Safari — hlavní cílové zařízení vedle Android tabletů |
+| iPad | testovat čtečku v Safari — hlavní cílové zařízení vedle Android tabletů. Stage mode schová lištu prohlížeče jen po „Přidat na plochu“ (viz PWA výš) |
 
 ---
 
