@@ -1,6 +1,9 @@
 import json
 
 from django.contrib.auth import authenticate, login, logout
+from django.core.files.base import ContentFile
+from django.db import IntegrityError
+from django.db.models import Max
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -11,6 +14,7 @@ from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .akordy_pdf import vygeneruj_pdf
 from .import_pisni import proved_import
 from .models import (
     Anotace,
@@ -25,11 +29,14 @@ from .models import (
 from .permissions import IsStaffOrReadOnly, VerzePisnePermission
 from .soubory import odpoved_se_souborem, smi_cist_verzi
 from .serializers import (
+    AkordovyZapisSerializer,
     AnotaceSerializer,
     ImportPlanSerializer,
     PisenDetailSerializer,
     PisenListSerializer,
+    PisenVZpevnikuSerializer,
     PolozkaSetlistuSerializer,
+    PridatPisenSerializer,
     SetlistSerializer,
     SlozkaSerializer,
     UserSerializer,
@@ -37,6 +44,12 @@ from .serializers import (
     VerzePisneSerializer,
     ZpevnikSerializer,
 )
+
+# Prázdný akordový zápis — výchozí tělo pro PisenViewSet.verze_akordy, když
+# klient nepošle žádné (viz PC_zpevnik_akordovy_zapis.md: "prázdná, nebo s
+# tělem JSON"). 4/4 je nejběžnější výchozí takt, editor (fáze 2) ho může
+# hned přepnout.
+PRAZDNY_AKORDOVY_ZAPIS = {"schema": 1, "takt": {"dob": 4, "hodnota": 4}, "radky": []}
 
 
 class PisenViewSet(viewsets.ModelViewSet):
@@ -61,6 +74,44 @@ class PisenViewSet(viewsets.ModelViewSet):
         if self.action == "list":
             return PisenListSerializer
         return PisenDetailSerializer
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="verze-akordy",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def verze_akordy(self, request, pk=None):
+        """Nová verze se `zdroj=akordy` — prázdná, nebo rovnou s tělem JSON
+        (`{"akordy": {...}}`, viz AkordovyZapisSerializer). Vždycky osobní
+        koncept, stejně jako anotace: stav i vlastník si appka dosadí sama,
+        klient je poslat nemůže — libovolný přihlášený člen tak smí založit
+        vlastní akordovou verzi, aniž by z ní udělal rovnou "potvrzenou".
+
+        PDF se generuje rovnou při vytvoření (ne až při prvním uložení), ať
+        je verze hned použitelná ve čtečce/stage módu (viz akordy_pdf.py).
+        """
+        pisen = self.get_object()
+
+        vstup = (request.data or {}).get("akordy") or PRAZDNY_AKORDOVY_ZAPIS
+        serializer = AkordovyZapisSerializer(data=vstup)
+        serializer.is_valid(raise_exception=True)
+
+        pdf_bytes = vygeneruj_pdf(pisen, serializer.validated_data)
+        verze = VerzePisne.objects.create(
+            pisen=pisen,
+            typ_obsahu=VerzePisne.TYP_PDF,
+            zdroj=VerzePisne.ZDROJ_AKORDY,
+            akordy=serializer.validated_data,
+            stav=VerzePisne.STAV_PERSONAL,
+            vlastnik=request.user,
+        )
+        verze.soubor.save(f"akordy-{verze.pk}.pdf", ContentFile(pdf_bytes), save=True)
+
+        return Response(
+            VerzePisneSerializer(verze, context={"request": request}).data,
+            status=status.HTTP_201_CREATED,
+        )
 
 
 class VerzePisneViewSet(viewsets.ModelViewSet):
@@ -140,6 +191,55 @@ class VerzePisneViewSet(viewsets.ModelViewSet):
         serializer.save()
         return Response(serializer.data)
 
+    @action(detail=True, methods=["get", "put"], url_path="akordy")
+    def akordy(self, request, pk=None):
+        """Zdrojová data akordového zápisu (viz PC_zpevnik_akordovy_zapis.md
+        a AkordovyZapisSerializer). Jen u `zdroj=akordy` — na PDF verzi
+        (nahrané nebo z importu) `/akordy/` nedává smysl, proto 404 stejně
+        jako u cizí `personal` verze (viz `soubor`/`anotace` výš — stejná
+        4-4-4 logika viditelnosti).
+
+        PUT SYNCHRONNĚ přegeneruje `soubor` (viz akordy_pdf.vygeneruj_pdf) —
+        čtečka, stage mode i anotace dál pracují jen se souborem, o
+        existenci akordového zápisu nemusí vůbec vědět. Anotace jsou ale ve
+        zlomcích STRÁNKY — když se PDF přeskládá, mohou ujet, proto se v
+        odpovědi vrací i jejich počet (hlášku uživateli ukazuje editor,
+        fáze 2, ne API samo).
+        """
+        verze = get_object_or_404(VerzePisne.objects.select_related("pisen"), pk=pk)
+        if not smi_cist_verzi(request.user, verze):
+            raise Http404("Verze nenalezena.")
+        if verze.zdroj != VerzePisne.ZDROJ_AKORDY:
+            raise Http404("Tahle verze nemá akordový zápis.")
+
+        if request.method == "GET":
+            return Response(verze.akordy or {})
+
+        # PUT — zápis: get_object_or_404 výš obchází DRF get_object(), takže
+        # has_object_permission se sám nezavolá; VerzePisnePermission dá
+        # admin cokoliv, člena jen na jeho vlastní personal verzi.
+        self.check_object_permissions(request, verze)
+
+        serializer = AkordovyZapisSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        pdf_bytes = vygeneruj_pdf(verze.pisen, serializer.validated_data)
+        verze.akordy = serializer.validated_data
+        verze.soubor.save(f"akordy-{verze.pk}.pdf", ContentFile(pdf_bytes), save=False)
+        verze.save(update_fields=["akordy", "soubor", "upraveno"])
+
+        # Souhrnný počet napříč VŠEMI vlastníky (ne jen editující osoby) —
+        # reflow může posunout poznámky komukoli, kdo je na týhle verzi má,
+        # ne jen tomu, kdo zrovna ukládá. Vrací se jen počet, ne obsah ani
+        # čí jsou — to soukromí poznámek neporušuje.
+        pocet_anotaci = sum(
+            len(a.data) for a in Anotace.objects.filter(verze_pisne=verze)
+        )
+
+        return Response(
+            {"akordy": verze.akordy, "pocet_anotaci_ktere_mohly_ujet": pocet_anotaci}
+        )
+
     @action(detail=True, methods=["get"], url_path="soubor")
     def soubor(self, request, pk=None):
         """PDF verze — práva se ověří tady, soubor pak pošle nginx."""
@@ -163,6 +263,59 @@ class ZpevnikViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Zpevnik.objects.select_related("slozka").prefetch_related("polozky__pisen")
+
+    @action(detail=True, methods=["get"], url_path="dalsi-kod")
+    def dalsi_kod(self, request, pk=None):
+        """Návrh dalšího volného kódu V TOMHLE zpěvníku — jen návrh pro
+        předvyplnění formuláře (fáze 2). Skutečnou kolizi stejně ověří znovu
+        `pridat_pisen` při zápisu, tenhle endpoint nic nezamyká ani nerezervuje.
+        """
+        zpevnik = self.get_object()
+        maximum = zpevnik.polozky.aggregate(m=Max("kod"))["m"]
+        navrh = 101 if maximum is None else maximum + 1
+        return Response({"kod": navrh})
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="pridat-pisen",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def pridat_pisen(self, request, pk=None):
+        """Zařadí existující píseň do TOHOHLE zpěvníku pod daným kódem —
+        s kontrolou kolize (viz PolozkaZpevniku.unikatni_kod_ve_zpevniku).
+        Stejně jako `verze_akordy` na PisenViewSet: libovolný přihlášený
+        člen, ne jen admin — přidání JEDNÉ vlastní písně do zpěvníku je
+        aditivní osobní akce, ne správa zpěvníku jako celku (tu dál hlídá
+        IsStaffOrReadOnly na zbytku tohohle viewsetu)."""
+        zpevnik = self.get_object()
+        serializer = PridatPisenSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        pisen = serializer.validated_data["pisen"]
+        kod = serializer.validated_data["kod"]
+
+        if PolozkaZpevniku.objects.filter(zpevnik=zpevnik, kod=kod).exists():
+            return Response(
+                {"kod": [f"Kód {kod} je v tomhle zpěvníku už obsazený."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if PolozkaZpevniku.objects.filter(zpevnik=zpevnik, pisen=pisen).exists():
+            return Response(
+                {"pisen": ["Tahle píseň už v tomhle zpěvníku je."]},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            polozka = PolozkaZpevniku.objects.create(zpevnik=zpevnik, pisen=pisen, kod=kod)
+        except IntegrityError:
+            # Souběh dvou požadavků mezi kontrolou výš a zápisem — vzácné,
+            # ale DB constraint je poslední pojistka, ne jen UI kontrola.
+            return Response(
+                {"detail": "Kód nebo píseň mezitím obsadil někdo jiný, zkus to znovu."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        return Response(PisenVZpevnikuSerializer(polozka).data, status=status.HTTP_201_CREATED)
 
 
 class SetlistViewSet(viewsets.ModelViewSet):

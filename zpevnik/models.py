@@ -113,11 +113,30 @@ class VerzePisne(models.Model):
         (STAV_PERSONAL, "Osobní"),
     ]
 
+    ZDROJ_PDF = "pdf"
+    ZDROJ_AKORDY = "akordy"
+    ZDROJ_CHOICES = [
+        (ZDROJ_PDF, "Nahrané PDF"),
+        (ZDROJ_AKORDY, "Akordový zápis"),
+    ]
+
     pisen = models.ForeignKey(Pisen, on_delete=models.CASCADE, related_name="verze")
     typ_obsahu = models.CharField(
         max_length=10, choices=TYP_OBSAHU_CHOICES, default=TYP_PDF
     )
     soubor = models.FileField(upload_to=cesta_pro_soubor_verze, blank=True, null=True)
+    # Akordový zápis (viz PC_zpevnik_akordovy_zapis.md) — zdroj je vždycky
+    # JSON zápis, `soubor` je z něj VYGENEROVANÉ PDF (viz akordy_pdf.py), ne
+    # nahrané. Tím zadarmo funguje čtečka, stage mode i anotace — ty pracují
+    # jen se souborem, nikdy s `akordy` přímo. `zdroj=pdf` (default) je
+    # beze změny chování, `akordy` zůstává NULL — obojí platí pro všechny
+    # verze vytvořené před touhle funkcí.
+    zdroj = models.CharField(max_length=10, choices=ZDROJ_CHOICES, default=ZDROJ_PDF)
+    akordy = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Zdrojová data akordového zápisu (jen zdroj=akordy) — viz PC_zpevnik_akordovy_zapis.md",
+    )
     puvodni_nazev_souboru = models.CharField(
         max_length=255,
         blank=True,

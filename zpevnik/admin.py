@@ -31,10 +31,21 @@ class PisenAdmin(admin.ModelAdmin):
 
 @admin.register(VerzePisne)
 class VerzePisneAdmin(admin.ModelAdmin):
-    list_display = ["pisen", "typ_obsahu", "stav", "vlastnik", "puvodni_nazev_souboru", "upraveno"]
-    list_filter = ["typ_obsahu", "stav"]
+    list_display = [
+        "pisen",
+        "typ_obsahu",
+        "zdroj",
+        "stav",
+        "vlastnik",
+        "puvodni_nazev_souboru",
+        "upraveno",
+    ]
+    list_filter = ["typ_obsahu", "zdroj", "stav"]
     search_fields = ["pisen__nazev", "puvodni_nazev_souboru"]
-    readonly_fields = ["puvodni_nazev_souboru"]
+    # `akordy` a `soubor` se v adminu neupravují ručně — soubor je u
+    # zdroj=akordy VYGENEROVANÝ (viz akordy_pdf.py), přímá editace v adminu
+    # by ho rozjela s tím, co je v `akordy` (viz PC_zpevnik_akordovy_zapis.md).
+    readonly_fields = ["puvodni_nazev_souboru", "akordy"]
 
 
 @admin.register(Slozka)

@@ -38,11 +38,17 @@ class VerzePisneSerializer(serializers.ModelSerializer):
             "ma_soubor",
             "puvodni_nazev_souboru",
             "stav",
+            "zdroj",
             "vlastnik",
             "vytvoreno",
             "upraveno",
         ]
-        read_only_fields = ["vytvoreno", "upraveno", "puvodni_nazev_souboru"]
+        # `zdroj` je čtenářské i tady: nastavuje ho jen server (viz
+        # PisenViewSet.verze_akordy / VerzePisneViewSet.akordy), nikdy přímo
+        # klient přes obecný create/update — jinak by šlo založit zdroj=akordy
+        # bez akordového zápisu a bez vygenerovaného PDF, což by porušilo
+        # invariant "soubor u akordů je vždycky vygenerovaný, nikdy nahraný".
+        read_only_fields = ["vytvoreno", "upraveno", "puvodni_nazev_souboru", "zdroj"]
 
     def get_ma_soubor(self, obj):
         return bool(obj.soubor)
@@ -125,6 +131,92 @@ class AnotaceSerializer(serializers.ModelSerializer):
         return value
 
 
+# --- Akordový zápis (PC_zpevnik_akordovy_zapis, fáze 1) ---
+# Zdrojová data pro generovaný PDF (viz akordy_pdf.py) — VerzePisne se
+# `zdroj='akordy'` nese tenhle JSON MÍSTO nahraného souboru; `soubor` je z
+# něj vygenerovaný artefakt (viz VerzePisneViewSet.akordy). Schéma má
+# schválně verzi (`schema`) — budoucí rozšíření o text písně (mimo tenhle
+# task) přibude jako další nepovinné pole řádku, ne jako zlom schématu.
+
+MAX_RADKU_AKORDY = 200
+MAX_ZNAKU_BUNKA = 16
+MAX_TAKTU_NA_RADEK = 64
+MAX_DELKA_SEKCE = 30
+
+
+class TaktSerializer(serializers.Serializer):
+    dob = serializers.IntegerField(min_value=1, max_value=32)
+    hodnota = serializers.IntegerField(min_value=1, max_value=32)
+
+
+class RepeticeSerializer(serializers.Serializer):
+    # Indexy taktů V RÁMCI ŘÁDKU, 0-based, `do_taktu` včetně — validace proti
+    # skutečnému počtu taktů řádku (a proti překryvu) je až na
+    # AkordovyZapisSerializer.validate, kde je zná oboje najednou.
+    od_taktu = serializers.IntegerField(min_value=0)
+    do_taktu = serializers.IntegerField(min_value=0)
+    krat = serializers.IntegerField(min_value=2, max_value=16)
+
+    def validate(self, attrs):
+        if attrs["do_taktu"] < attrs["od_taktu"]:
+            raise serializers.ValidationError("`do_taktu` nesmí být před `od_taktu`.")
+        return attrs
+
+
+class AkordovyRadekSerializer(serializers.Serializer):
+    sekce = serializers.CharField(max_length=MAX_DELKA_SEKCE, allow_blank=True, default="")
+    # Prázdná buňka = drží se předchozí akord (viz zadání) — validní hodnota,
+    # ne chyba. `allow_empty=False`: řádek bez jediné buňky nedává smysl.
+    bunky = serializers.ListField(
+        child=serializers.CharField(max_length=MAX_ZNAKU_BUNKA, allow_blank=True),
+        allow_empty=False,
+    )
+    repetice = RepeticeSerializer(many=True, required=False, default=list)
+
+
+class AkordovyZapisSerializer(serializers.Serializer):
+    schema = serializers.IntegerField(min_value=1, max_value=1)
+    takt = TaktSerializer()
+    tempo = serializers.IntegerField(min_value=20, max_value=400, required=False, allow_null=True)
+    radky = AkordovyRadekSerializer(many=True, allow_empty=True)
+
+    def validate_radky(self, value):
+        if len(value) > MAX_RADKU_AKORDY:
+            raise serializers.ValidationError(f"Nejvýš {MAX_RADKU_AKORDY} řádků.")
+        return value
+
+    def validate(self, attrs):
+        # `len(bunky)` musí být násobek `dob` — tady, ne na řádku samotném,
+        # protože teprve tady je `takt.dob` po ruce. Repetice se zarovnávají
+        # na CELÉ TAKTY (viz zadání editoru), takže hranice taktu = index //
+        # dob, ne index buňky.
+        dob = attrs["takt"]["dob"]
+        for i, radek in enumerate(attrs["radky"]):
+            pocet_bunek = len(radek["bunky"])
+            if pocet_bunek % dob != 0:
+                raise serializers.ValidationError(
+                    f"Řádek {i + 1}: počet buněk ({pocet_bunek}) musí být násobek taktu ({dob})."
+                )
+            pocet_taktu = pocet_bunek // dob
+            if pocet_taktu > MAX_TAKTU_NA_RADEK:
+                raise serializers.ValidationError(
+                    f"Řádek {i + 1}: nejvýš {MAX_TAKTU_NA_RADEK} taktů na řádek."
+                )
+            obsazene = set()
+            for rep in radek["repetice"]:
+                if rep["do_taktu"] >= pocet_taktu:
+                    raise serializers.ValidationError(
+                        f"Řádek {i + 1}: repetice odkazuje na takt mimo řádek."
+                    )
+                rozsah = set(range(rep["od_taktu"], rep["do_taktu"] + 1))
+                if obsazene & rozsah:
+                    raise serializers.ValidationError(
+                        f"Řádek {i + 1}: repetice se v rámci řádku překrývají."
+                    )
+                obsazene |= rozsah
+        return attrs
+
+
 class PisenListSerializer(serializers.ModelSerializer):
     """Lehký seznam pro rychlý scroll — bez vnořených verzí.
 
@@ -193,6 +285,15 @@ class PisenVZpevnikuSerializer(serializers.ModelSerializer):
     class Meta:
         model = PolozkaZpevniku
         fields = ["id", "polozka_id", "kod", "nazev", "interpret"]
+
+
+class PridatPisenSerializer(serializers.Serializer):
+    """Vstup pro ZpevnikViewSet.pridat_pisen — zařazení existující písně do
+    zpěvníku pod daným kódem. Kolize (kód i píseň) se ověřují až ve view,
+    kde je zpěvník už po ruce (viz PolozkaZpevniku constraints)."""
+
+    pisen = serializers.PrimaryKeyRelatedField(queryset=Pisen.objects.all())
+    kod = serializers.IntegerField(min_value=1)
 
 
 class SlozkaSerializer(serializers.ModelSerializer):

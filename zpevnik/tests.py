@@ -16,6 +16,7 @@ from rest_framework.test import APIClient
 
 from .apps import zkontroluj_servirovani_souboru
 from .models import Anotace, Pisen, PolozkaZpevniku, Slozka, VerzePisne, Zpevnik
+from .serializers import AkordovyZapisSerializer
 
 # Minimální, ale platné PDF (rozhodují úvodní magic bytes "%PDF-").
 PDF_OBSAH = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n%%EOF\n"
@@ -1149,6 +1150,329 @@ class HromadnyImportTests(TestCase):
         self.assertEqual(Zpevnik.objects.filter(nazev="Kniha").count(), 1)
         kniha = Zpevnik.objects.get(nazev="Kniha")
         self.assertEqual(sorted(kniha.polozky.values_list("kod", flat=True)), [101, 102])
+
+
+class AkordovyZapisSerializerTests(TestCase):
+    """Validace schématu (viz PC_zpevnik_akordovy_zapis.md) — čisté
+    serializerové testy, bez DB/HTTP, ať se ověřuje jen logika samotná."""
+
+    def zaklad(self, **prepis):
+        data = {
+            "schema": 1,
+            "takt": {"dob": 4, "hodnota": 4},
+            "radky": [{"sekce": "Sloka", "bunky": ["A", "", "", ""], "repetice": []}],
+        }
+        data.update(prepis)
+        return data
+
+    def test_platny_zapis_projde(self):
+        serializer = AkordovyZapisSerializer(data=self.zaklad())
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_pocet_bunek_musi_byt_nasobek_taktu(self):
+        data = self.zaklad(
+            radky=[{"sekce": "X", "bunky": ["A", "G", "C"], "repetice": []}]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_prekryvajici_se_repetice_odmitnuty(self):
+        data = self.zaklad(
+            radky=[
+                {
+                    "sekce": "X",
+                    "bunky": ["A", "", "", ""] * 4,
+                    "repetice": [
+                        {"od_taktu": 0, "do_taktu": 2, "krat": 2},
+                        {"od_taktu": 1, "do_taktu": 3, "krat": 2},
+                    ],
+                }
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_repetice_mimo_radek_odmitnuta(self):
+        data = self.zaklad(
+            radky=[
+                {
+                    "sekce": "X",
+                    "bunky": ["A", "", "", ""] * 2,
+                    "repetice": [{"od_taktu": 0, "do_taktu": 5, "krat": 2}],
+                }
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_nesousedici_repetice_se_nepovazuji_za_prekryv(self):
+        data = self.zaklad(
+            radky=[
+                {
+                    "sekce": "X",
+                    "bunky": ["A", "", "", ""] * 6,
+                    "repetice": [
+                        {"od_taktu": 0, "do_taktu": 1, "krat": 2},
+                        {"od_taktu": 2, "do_taktu": 3, "krat": 3},
+                    ],
+                }
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_prilis_mnoho_radku_odmitnuto(self):
+        data = self.zaklad(
+            radky=[{"sekce": "", "bunky": ["A", "", "", ""], "repetice": []}] * 201
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_prilis_dlouha_bunka_odmitnuta(self):
+        data = self.zaklad(
+            radky=[
+                {"sekce": "X", "bunky": ["A" * 17, "", "", ""], "repetice": []}
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_prazdne_radky_povoleny(self):
+        serializer = AkordovyZapisSerializer(data=self.zaklad(radky=[]))
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+
+class VerzeAkordyVytvoreniTests(TestCase):
+    """POST /api/pisne/<id>/verze-akordy/ — nová akordová verze."""
+
+    def setUp(self):
+        self.pisen = Pisen.objects.create(nazev="Chord song", interpret="Kapela")
+        self.clen = User.objects.create_user("clen-akordy", password="heslo123")
+        self.client = APIClient()
+
+    def test_prazdne_telo_vyrobi_prazdny_zapis_a_pdf(self):
+        self.client.force_authenticate(self.clen)
+        response = self.client.post(f"/api/pisne/{self.pisen.id}/verze-akordy/")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        verze = VerzePisne.objects.get(id=response.data["id"])
+        self.assertEqual(verze.zdroj, VerzePisne.ZDROJ_AKORDY)
+        self.assertEqual(verze.stav, VerzePisne.STAV_PERSONAL)
+        self.assertEqual(verze.vlastnik_id, self.clen.id)
+        self.assertTrue(verze.soubor)
+        with verze.soubor.open("rb") as f:
+            self.assertEqual(f.read(5), b"%PDF-")
+
+    def test_telo_s_akordy_se_ulozi(self):
+        self.client.force_authenticate(self.clen)
+        telo = {
+            "akordy": {
+                "schema": 1,
+                "takt": {"dob": 4, "hodnota": 4},
+                "radky": [{"sekce": "Refren", "bunky": ["D", "A", "Bm", "G"], "repetice": []}],
+            }
+        }
+        response = self.client.post(
+            f"/api/pisne/{self.pisen.id}/verze-akordy/", telo, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        verze = VerzePisne.objects.get(id=response.data["id"])
+        self.assertEqual(verze.akordy["radky"][0]["sekce"], "Refren")
+
+    def test_neplatny_akordovy_zapis_odmitnut(self):
+        self.client.force_authenticate(self.clen)
+        telo = {"akordy": {"schema": 1, "takt": {"dob": 4, "hodnota": 4}, "radky": [{"bunky": ["A", "B"]}]}}
+        response = self.client.post(
+            f"/api/pisne/{self.pisen.id}/verze-akordy/", telo, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_nepriblasenemu_uzivateli_se_odmita(self):
+        response = self.client.post(f"/api/pisne/{self.pisen.id}/verze-akordy/")
+        self.assertIn(
+            response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+        )
+
+
+class AkordyApiTests(TestCase):
+    """GET/PUT /api/verze-pisni/<id>/akordy/ — roundtrip, práva, regenerace PDF."""
+
+    def setUp(self):
+        self.pisen = Pisen.objects.create(nazev="Písnička s akordy")
+        self.alice = User.objects.create_user("alice-akordy", password="heslo123")
+        self.bob = User.objects.create_user("bob-akordy", password="heslo123")
+        self.admin = User.objects.create_user(
+            "admin-akordy", password="heslo123", is_staff=True
+        )
+        self.zapis = {
+            "schema": 1,
+            "takt": {"dob": 4, "hodnota": 4},
+            "radky": [{"sekce": "Sloka", "bunky": ["C", "", "", ""], "repetice": []}],
+        }
+        self.verze_akordy = VerzePisne.objects.create(
+            pisen=self.pisen,
+            zdroj=VerzePisne.ZDROJ_AKORDY,
+            stav=VerzePisne.STAV_PERSONAL,
+            vlastnik=self.alice,
+            akordy=self.zapis,
+        )
+        self.verze_pdf = VerzePisne.objects.create(
+            pisen=self.pisen, zdroj=VerzePisne.ZDROJ_PDF, stav=VerzePisne.STAV_CONFIRMED
+        )
+        self.client = APIClient()
+
+    def test_vlastnik_precte_svuj_zapis(self):
+        self.client.force_authenticate(self.alice)
+        response = self.client.get(f"/api/verze-pisni/{self.verze_akordy.id}/akordy/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["radky"][0]["sekce"], "Sloka")
+
+    def test_cizi_personal_verze_da_404(self):
+        self.client.force_authenticate(self.bob)
+        response = self.client.get(f"/api/verze-pisni/{self.verze_akordy.id}/akordy/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_admin_vidi_cizi_personal_zapis(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.get(f"/api/verze-pisni/{self.verze_akordy.id}/akordy/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_akordy_na_pdf_verzi_da_404(self):
+        self.client.force_authenticate(self.alice)
+        response = self.client.get(f"/api/verze-pisni/{self.verze_pdf.id}/akordy/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_put_prepise_zapis_a_regeneruje_pdf(self):
+        self.client.force_authenticate(self.alice)
+        puvodni_nazev_souboru = self.verze_akordy.soubor.name if self.verze_akordy.soubor else None
+        novy_zapis = {
+            "schema": 1,
+            "takt": {"dob": 3, "hodnota": 4},
+            "tempo": 120,
+            "radky": [{"sekce": "Bridge", "bunky": ["Em", "G", "D"], "repetice": []}],
+        }
+        response = self.client.put(
+            f"/api/verze-pisni/{self.verze_akordy.id}/akordy/", novy_zapis, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.data)
+        self.assertIn("pocet_anotaci_ktere_mohly_ujet", response.data)
+
+        self.verze_akordy.refresh_from_db()
+        self.assertEqual(self.verze_akordy.akordy["radky"][0]["sekce"], "Bridge")
+        self.assertEqual(self.verze_akordy.akordy["takt"]["dob"], 3)
+        self.assertTrue(self.verze_akordy.soubor)
+        self.assertNotEqual(self.verze_akordy.soubor.name, puvodni_nazev_souboru)
+        with self.verze_akordy.soubor.open("rb") as f:
+            self.assertEqual(f.read(5), b"%PDF-")
+
+    def test_put_vraci_pocet_anotaci_ktere_mohly_ujet(self):
+        Anotace.objects.create(
+            verze_pisne=self.verze_akordy,
+            vlastnik=self.alice,
+            data=[
+                {"id": "a", "strana": 1, "x": 0.1, "y": 0.1, "sirka": 0.2, "text": "raz"},
+                {"id": "b", "strana": 1, "x": 0.3, "y": 0.3, "sirka": 0.2, "text": "dva"},
+            ],
+        )
+        self.client.force_authenticate(self.alice)
+        response = self.client.put(
+            f"/api/verze-pisni/{self.verze_akordy.id}/akordy/", self.zapis, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["pocet_anotaci_ktere_mohly_ujet"], 2)
+
+    def test_clen_nemuze_prepsat_cizi_potvrzeny_zapis(self):
+        cizi = VerzePisne.objects.create(
+            pisen=self.pisen,
+            zdroj=VerzePisne.ZDROJ_AKORDY,
+            stav=VerzePisne.STAV_CONFIRMED,
+            akordy=self.zapis,
+        )
+        self.client.force_authenticate(self.bob)
+        response = self.client.put(
+            f"/api/verze-pisni/{cizi.id}/akordy/", self.zapis, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_put_s_neplatnym_zapisem_neulozi_nic(self):
+        self.client.force_authenticate(self.alice)
+        response = self.client.put(
+            f"/api/verze-pisni/{self.verze_akordy.id}/akordy/",
+            {"schema": 1, "takt": {"dob": 4, "hodnota": 4}, "radky": [{"bunky": ["A", "B", "C"]}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.verze_akordy.refresh_from_db()
+        self.assertEqual(self.verze_akordy.akordy, self.zapis)
+
+
+class PridatPisenDoZpevnikuTests(TestCase):
+    """GET dalsi-kod, POST pridat-pisen na ZpevnikViewSet."""
+
+    def setUp(self):
+        self.zpevnik = Zpevnik.objects.create(nazev="Zkušebna")
+        self.pisen = Pisen.objects.create(nazev="Nová píseň")
+        self.clen = User.objects.create_user("clen-pridani", password="heslo123")
+        self.client = APIClient()
+
+    def test_navrh_kodu_pro_prazdny_zpevnik_je_101(self):
+        self.client.force_authenticate(self.clen)
+        response = self.client.get(f"/api/zpevniky/{self.zpevnik.id}/dalsi-kod/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["kod"], 101)
+
+    def test_navrh_kodu_pokracuje_za_nejvyssim(self):
+        jina_pisen = Pisen.objects.create(nazev="Jiná")
+        PolozkaZpevniku.objects.create(zpevnik=self.zpevnik, pisen=jina_pisen, kod=205)
+        self.client.force_authenticate(self.clen)
+        response = self.client.get(f"/api/zpevniky/{self.zpevnik.id}/dalsi-kod/")
+        self.assertEqual(response.data["kod"], 206)
+
+    def test_clen_muze_pridat_pisen(self):
+        self.client.force_authenticate(self.clen)
+        response = self.client.post(
+            f"/api/zpevniky/{self.zpevnik.id}/pridat-pisen/",
+            {"pisen": self.pisen.id, "kod": 101},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(
+            PolozkaZpevniku.objects.filter(
+                zpevnik=self.zpevnik, pisen=self.pisen, kod=101
+            ).exists()
+        )
+
+    def test_kolize_kodu_odmitnuta(self):
+        jina_pisen = Pisen.objects.create(nazev="Jiná")
+        PolozkaZpevniku.objects.create(zpevnik=self.zpevnik, pisen=jina_pisen, kod=101)
+        self.client.force_authenticate(self.clen)
+        response = self.client.post(
+            f"/api/zpevniky/{self.zpevnik.id}/pridat-pisen/",
+            {"pisen": self.pisen.id, "kod": 101},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("kod", response.data)
+
+    def test_pisen_jde_pridat_jen_jednou(self):
+        PolozkaZpevniku.objects.create(zpevnik=self.zpevnik, pisen=self.pisen, kod=101)
+        self.client.force_authenticate(self.clen)
+        response = self.client.post(
+            f"/api/zpevniky/{self.zpevnik.id}/pridat-pisen/",
+            {"pisen": self.pisen.id, "kod": 102},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("pisen", response.data)
+
+    def test_nepriblasenemu_uzivateli_se_odmita(self):
+        response = self.client.post(
+            f"/api/zpevniky/{self.zpevnik.id}/pridat-pisen/",
+            {"pisen": self.pisen.id, "kod": 101},
+            format="json",
+        )
+        self.assertIn(
+            response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+        )
 
 
 class SpaIndexCacheTests(TestCase):
