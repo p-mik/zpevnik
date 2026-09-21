@@ -51,7 +51,13 @@ def _zaregistruj_fonty():
 SIRKA_STRANKY, VYSKA_STRANKY = A4
 OKRAJ = 30
 SIRKA_GUTTERU = 70  # levý sloupec se sekcí
-SIRKA_DOBY = 34  # šířka jedné doby (beat) v taktu — VLASTNÍ hodnota (viz níž)
+# Cíl hustoty řádku: 4 takty 4/4 na řádek A4 při 17.5pt (viz zadání) — takt
+# má v 4/4 čtyři doby, takže "4 takty" = 16 dob. Řádek se ROZPOČÍTÁ na tenhle
+# počet dob bez ohledu na takt (viz taktu_na_radek níž): 3/4 se vejde víc
+# taktů na řádek (16 // 3 = 5), 6/8 míň (16 // 6 = 2) — šířka taktu/doby se
+# pak dopočítá tak, aby PŘESNĚ vyplnila dostupnou šířku, ne aby nechávala
+# místo navíc.
+DOBY_NA_RADEK = 16
 VYSKA_RADKU = 28  # výška jedné VIZUÁLNÍ linky s akordy (po zalomení)
 MEZERA_ZALOMENI = 4  # mezi zalomenými pokračováními TÉHOŽ logického řádku
 MEZERA_RADKU = 11  # mezi dvěma RŮZNÝMI logickými řádky (víc než při zalomení)
@@ -74,22 +80,34 @@ TLOUSTKA_PRAVITKA = 1.2  # čára pod hlavičkou
 BARVA_SEDA = (0.3, 0.3, 0.3)  # sekce, interpret, tempo — z reference (~76–89/255)
 BARVA_CERNA = (0, 0, 0)
 
-# Šířka doby je VLASTNÍ volba (reference má buňku = takt s dynamickou šířkou
-# podle obsahu — to výslovně nepřebíráme). Zvolená hodnota pohodlně pojme
-# běžné 1–3znakové akordy (A, G#m, F#m, C#m — 9 až 32 bodů při 17.5pt Carlito
-# Bold) v plné velikosti; delší (C#m7, G#m7b5) se zmenší jen ty — to je
-# vědomý důsledek modelu "buňka = doba": hustota na řádek je nižší než v
-# referenci (tam se prázdné doby vůbec nerezervují), řádky se tak lámou
-# častěji. Viz report.
+REZERVA_MEZI_AKORDY = 5  # mezera před dalším obsazeným akordem / koncem taktu
 
 
-def _velikost_pro_bunku(text):
-    """Jednotná velikost pro celý dokument, POKUD se text vejde do šířky
-    jedné doby (s rezervou na mezery mezi sousedními akordy) — jinak se
-    zmenšuje, dokud se nevejde. Jen tahle buňka, ne celý dokument (viz
-    zadání: "buňky s dlouhým obsahem smí mít menší písmo, ale jen ty")."""
+def _pozice_v_taktu(bunky_taktu, sirka_doby, sirka_taktu):
+    """Pro každou OBSAZENOU dobu v taktu vrátí (text, x_offset, dostupna_sirka).
+
+    Dostupná šířka sahá až k DALŠÍ obsazené době v tomtéž taktu, nebo (není-li
+    žádná) ke konci taktu — mezi jednotlivými dobami se nekreslí žádná čára
+    (ta je jen mezi takty), takže akord smí vizuálně přetéct do prázdných dob
+    za sebou. Zmenšuje se teprve, když by nezůstal ani v tomhle prostoru
+    (viz zadání)."""
+    obsazene = [i for i, text in enumerate(bunky_taktu) if text]
+    vysledek = []
+    for poradi, i in enumerate(obsazene):
+        x_offset = i * sirka_doby
+        pristi = obsazene[poradi + 1] * sirka_doby if poradi + 1 < len(obsazene) else sirka_taktu
+        vysledek.append((bunky_taktu[i], x_offset, pristi - x_offset))
+    return vysledek
+
+
+def _velikost_pro_bunku(text, dostupna_sirka):
+    """Jednotná velikost pro celý dokument, POKUD se text vejde do dostupné
+    šířky (až k další obsazené době nebo konci taktu, viz _pozice_v_taktu,
+    s rezervou na mezeru) — jinak se zmenšuje, dokud se nevejde. Jen tahle
+    buňka, ne celý dokument (viz zadání: "buňky s dlouhým obsahem smí mít
+    menší písmo, ale jen ty")."""
     velikost = VELIKOST_AKORDU
-    limit = SIRKA_DOBY - 6
+    limit = dostupna_sirka - REZERVA_MEZI_AKORDY
     while velikost > MIN_VELIKOST_AKORDU and pdfmetrics.stringWidth(
         text, FONT_AKORD, velikost
     ) > limit:
@@ -131,7 +149,13 @@ def vygeneruj_pdf(pisen, akordy):
     radky = akordy["radky"]
 
     sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
-    taktu_na_radek = max(1, int(sirka_obsahu // (dob * SIRKA_DOBY)))
+    # Cíl: `DOBY_NA_RADEK` dob na řádek bez ohledu na takt (16 // 4 = přesně
+    # 4 takty 4/4). Šířka taktu/doby se PAK dopočítá tak, aby těch
+    # `taktu_na_radek` taktů přesně vyplnilo dostupnou šířku (viz zadání:
+    # "šířka taktu = dostupná šířka / 4 pro 4/4") — ne naopak.
+    taktu_na_radek = max(1, DOBY_NA_RADEK // dob)
+    sirka_taktu = sirka_obsahu / taktu_na_radek
+    sirka_doby = sirka_taktu / dob
     x0 = OKRAJ + SIRKA_GUTTERU
     dolni_limit = OKRAJ + VYSKA_RADKU
 
@@ -197,16 +221,13 @@ def vygeneruj_pdf(pisen, akordy):
             x = x0
             c.line(x, y_radku - VYSKA_RADKU, x, y_radku)  # levý okraj prvního taktu
             for i_takt in range(od, do):
-                for doba in range(dob):
-                    text = radek["bunky"][i_takt * dob + doba]
-                    if text:
-                        velikost = _velikost_pro_bunku(text)
-                        c.setFont(FONT_AKORD, velikost)
-                        c.setFillColorRGB(*BARVA_CERNA)
-                        c.drawString(
-                            x + doba * SIRKA_DOBY + 3, y_radku - CHORD_BASELINE_OFFSET, text
-                        )
-                x += dob * SIRKA_DOBY
+                bunky_taktu = radek["bunky"][i_takt * dob : i_takt * dob + dob]
+                for text, x_offset, dostupna_sirka in _pozice_v_taktu(bunky_taktu, sirka_doby, sirka_taktu):
+                    velikost = _velikost_pro_bunku(text, dostupna_sirka)
+                    c.setFont(FONT_AKORD, velikost)
+                    c.setFillColorRGB(*BARVA_CERNA)
+                    c.drawString(x + x_offset + 3, y_radku - CHORD_BASELINE_OFFSET, text)
+                x += sirka_taktu
                 c.line(x, y_radku - VYSKA_RADKU, x, y_radku)
 
             for rep in radek.get("repetice", []):
@@ -218,7 +239,7 @@ def vygeneruj_pdf(pisen, akordy):
                     c,
                     x0=x0,
                     y_radku=y_radku,
-                    dob=dob,
+                    sirka_taktu=sirka_taktu,
                     od_v_useku=seg_od - od,
                     do_v_useku=seg_do - od,
                     kresli_zacatek=rep["od_taktu"] >= od,
@@ -236,13 +257,14 @@ def vygeneruj_pdf(pisen, akordy):
     return buffer.getvalue()
 
 
-def _kresli_repetici(c, x0, y_radku, dob, od_v_useku, do_v_useku, kresli_zacatek, kresli_konec, krat):
+def _kresli_repetici(
+    c, x0, y_radku, sirka_taktu, od_v_useku, do_v_useku, kresli_zacatek, kresli_konec, krat
+):
     """Tlustá čára + dvě tečky na začátku a konci rozsahu, ×N vpravo od
     konce — tloušťka i teček podle reference. Rozsah předaný sem je už
     OŘÍZNUTÝ na aktuální vizuální řádek (viz volající) — u repetice
     přesahující přes zalomení se značka začátku/konce nakreslí jen na tom
     úseku, kam skutečně patří."""
-    sirka_taktu = dob * SIRKA_DOBY
     x_zacatek = x0 + od_v_useku * sirka_taktu
     x_konec = x0 + (do_v_useku + 1) * sirka_taktu
     y_tecka_horni = y_radku - VYSKA_RADKU * 0.35

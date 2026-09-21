@@ -1242,6 +1242,44 @@ class AkordovyZapisSerializerTests(TestCase):
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
 
+class AkordyPdfMrizkaTests(TestCase):
+    """Mřížka akordového PDF (zpevnik/akordy_pdf.py): šířka taktu se
+    dopočítá tak, aby 4/4 dalo přesně 4 takty na řádek A4 (viz
+    PC_zpevnik_akordovy_zapis.md), a akord smí vizuálně přetéct do
+    prázdných dob za sebou, dokud nenarazí na obsazenou dobu nebo konec
+    taktu — zmenšuje se, jen když by se tam nevešel."""
+
+    def test_ctyri_ctvrtove_takty_se_vejdou_na_radek(self):
+        from zpevnik.akordy_pdf import DOBY_NA_RADEK
+
+        self.assertEqual(DOBY_NA_RADEK // 4, 4)
+
+    def test_akord_smi_pretect_az_ke_konci_taktu(self):
+        from zpevnik.akordy_pdf import _pozice_v_taktu
+
+        vysledek = _pozice_v_taktu(["C", "", "", ""], sirka_doby=10, sirka_taktu=40)
+        self.assertEqual(vysledek, [("C", 0, 40)])
+
+    def test_dalsi_obsazena_doba_omezi_pretecni_predchozi(self):
+        from zpevnik.akordy_pdf import _pozice_v_taktu
+
+        vysledek = _pozice_v_taktu(["C", "", "G", ""], sirka_doby=10, sirka_taktu=40)
+        self.assertEqual(vysledek, [("C", 0, 20), ("G", 20, 20)])
+
+    def test_vsechny_ctyri_doby_obsazene_kazda_dostane_sirku_jedne_doby(self):
+        from zpevnik.akordy_pdf import _pozice_v_taktu
+
+        vysledek = _pozice_v_taktu(["C", "D", "E", "F"], sirka_doby=10, sirka_taktu=40)
+        self.assertEqual(
+            vysledek, [("C", 0, 10), ("D", 10, 10), ("E", 20, 10), ("F", 30, 10)]
+        )
+
+    def test_prazdny_takt_nevrati_nic(self):
+        from zpevnik.akordy_pdf import _pozice_v_taktu
+
+        self.assertEqual(_pozice_v_taktu(["", "", "", ""], sirka_doby=10, sirka_taktu=40), [])
+
+
 class VerzeAkordyVytvoreniTests(TestCase):
     """POST /api/pisne/<id>/verze-akordy/ — nová akordová verze."""
 
