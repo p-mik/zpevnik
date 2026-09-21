@@ -43,18 +43,44 @@ def _zaregistruj_fonty():
 
 
 # --- rozměry (body, A4 = 595 x 842) ---
+# Kalibrováno na referenční africa_chord_chart.pdf (jen VZHLED — hlavička,
+# tloušťky čar, velikosti písma a rozestupy řádků; MŘÍŽKU si necháváme
+# vlastní, buňka = doba, ne takt — viz zadání). Přesné hodnoty (font-size,
+# pozice čar, výška řádku) zjištěné rozborem té PDF přes PyMuPDF
+# (get_text/get_drawings), ne odhadem od oka.
 SIRKA_STRANKY, VYSKA_STRANKY = A4
-OKRAJ = 40
-SIRKA_GUTTERU = 72  # levý sloupec se sekcí
-SIRKA_DOBY = 27  # šířka jedné doby (beat) v taktu
-VYSKA_RADKU = 26  # výška jedné VIZUÁLNÍ linky s akordy (po zalomení)
+OKRAJ = 30
+SIRKA_GUTTERU = 70  # levý sloupec se sekcí
+SIRKA_DOBY = 34  # šířka jedné doby (beat) v taktu — VLASTNÍ hodnota (viz níž)
+VYSKA_RADKU = 28  # výška jedné VIZUÁLNÍ linky s akordy (po zalomení)
 MEZERA_ZALOMENI = 4  # mezi zalomenými pokračováními TÉHOŽ logického řádku
-MEZERA_RADKU = 14  # mezi dvěma RŮZNÝMI logickými řádky (víc než při zalomení)
+MEZERA_RADKU = 11  # mezi dvěma RŮZNÝMI logickými řádky (víc než při zalomení)
+# Baseline uvnitř řádkového pásu VYSKA_RADKU — akordy i ×N na stejné výšce
+# jako v referenci, sekce jen nepatrně výš (menší font, opticky vyrovnané).
+CHORD_BASELINE_OFFSET = 19
+SEKCE_BASELINE_OFFSET = 18
 
-VELIKOST_AKORDU = 11
-MIN_VELIKOST_AKORDU = 7
-BARVA_SEDA = (0.45, 0.45, 0.45)
+VELIKOST_TITULKU = 26
+VELIKOST_INTERPRETA = 13
+VELIKOST_SEKCE = 11
+VELIKOST_AKORDU = 17.5  # z reference — NE odhad
+MIN_VELIKOST_AKORDU = 10
+VELIKOST_REPETICE_N = 16
+
+TLOUSTKA_CARY = 0.8  # obyčejná dělicí čára taktu — z reference ČERNÁ, ne šedá
+TLOUSTKA_REPETICE = 2.2
+TLOUSTKA_PRAVITKA = 1.2  # čára pod hlavičkou
+
+BARVA_SEDA = (0.3, 0.3, 0.3)  # sekce, interpret, tempo — z reference (~76–89/255)
 BARVA_CERNA = (0, 0, 0)
+
+# Šířka doby je VLASTNÍ volba (reference má buňku = takt s dynamickou šířkou
+# podle obsahu — to výslovně nepřebíráme). Zvolená hodnota pohodlně pojme
+# běžné 1–3znakové akordy (A, G#m, F#m, C#m — 9 až 32 bodů při 17.5pt Carlito
+# Bold) v plné velikosti; delší (C#m7, G#m7b5) se zmenší jen ty — to je
+# vědomý důsledek modelu "buňka = doba": hustota na řádek je nižší než v
+# referenci (tam se prázdné doby vůbec nerezervují), řádky se tak lámou
+# častěji. Viz report.
 
 
 def _velikost_pro_bunku(text):
@@ -63,7 +89,7 @@ def _velikost_pro_bunku(text):
     zmenšuje, dokud se nevejde. Jen tahle buňka, ne celý dokument (viz
     zadání: "buňky s dlouhým obsahem smí mít menší písmo, ale jen ty")."""
     velikost = VELIKOST_AKORDU
-    limit = SIRKA_DOBY - 4
+    limit = SIRKA_DOBY - 6
     while velikost > MIN_VELIKOST_AKORDU and pdfmetrics.stringWidth(
         text, FONT_AKORD, velikost
     ) > limit:
@@ -110,20 +136,33 @@ def vygeneruj_pdf(pisen, akordy):
     dolni_limit = OKRAJ + VYSKA_RADKU
 
     def kresli_hlavicku():
-        c.setFont(FONT_POPISEK_TUCNE, 20)
+        # Titulek a interpret sdílejí JEDNU baseline (interpret hned za
+        # titulkem, ne pod ním) — stejně jako tempo/takt vpravo, viz reference.
+        y_baseline = VYSKA_STRANKY - OKRAJ - 28
+        c.setFont(FONT_POPISEK_TUCNE, VELIKOST_TITULKU)
         c.setFillColorRGB(*BARVA_CERNA)
-        c.drawString(OKRAJ, VYSKA_STRANKY - OKRAJ, pisen.nazev)
+        c.drawString(OKRAJ, y_baseline, pisen.nazev.upper())
         if pisen.interpret:
-            c.setFont(FONT_POPISEK, 12)
+            x_interpret = OKRAJ + pdfmetrics.stringWidth(
+                pisen.nazev.upper(), FONT_POPISEK_TUCNE, VELIKOST_TITULKU
+            )
+            c.setFont(FONT_POPISEK, VELIKOST_INTERPRETA)
             c.setFillColorRGB(*BARVA_SEDA)
-            c.drawString(OKRAJ, VYSKA_STRANKY - OKRAJ - 18, pisen.interpret)
-        c.setFont(FONT_POPISEK, 11)
-        c.setFillColorRGB(*BARVA_CERNA)
+            c.drawString(x_interpret + 10, y_baseline, pisen.interpret)
+
+        c.setFont(FONT_POPISEK, VELIKOST_INTERPRETA)
+        c.setFillColorRGB(*BARVA_SEDA)
         text_taktu = f"{dob}/{hodnota}"
         if tempo:
-            text_taktu = f"♩ = {tempo} · {text_taktu}"
-        c.drawRightString(SIRKA_STRANKY - OKRAJ, VYSKA_STRANKY - OKRAJ, text_taktu)
-        return VYSKA_STRANKY - OKRAJ - 44
+            text_taktu = f"♩ = {tempo}   ·   {text_taktu}"
+        c.drawRightString(SIRKA_STRANKY - OKRAJ, y_baseline, text_taktu)
+
+        y_pravitko = y_baseline - 12
+        c.setStrokeColorRGB(*BARVA_CERNA)
+        c.setLineWidth(TLOUSTKA_PRAVITKA)
+        c.line(OKRAJ, y_pravitko, SIRKA_STRANKY - OKRAJ, y_pravitko)
+
+        return VYSKA_STRANKY - OKRAJ - 95
 
     def nova_stranka():
         c.showPage()
@@ -149,14 +188,14 @@ def vygeneruj_pdf(pisen, akordy):
             y_radku = y
 
             if idx_vizualni == 0 and radek.get("sekce"):
-                c.setFont(FONT_POPISEK_TUCNE, 9)
+                c.setFont(FONT_POPISEK_TUCNE, VELIKOST_SEKCE)
                 c.setFillColorRGB(*BARVA_SEDA)
-                c.drawString(OKRAJ, y_radku - 9, radek["sekce"].upper())
+                c.drawString(OKRAJ, y_radku - SEKCE_BASELINE_OFFSET, radek["sekce"].upper())
 
-            c.setStrokeColorRGB(*BARVA_SEDA)
-            c.setLineWidth(0.6)
+            c.setStrokeColorRGB(*BARVA_CERNA)
+            c.setLineWidth(TLOUSTKA_CARY)
             x = x0
-            c.line(x, y_radku - 20, x, y_radku)  # levý okraj prvního taktu na řádku
+            c.line(x, y_radku - VYSKA_RADKU, x, y_radku)  # levý okraj prvního taktu
             for i_takt in range(od, do):
                 for doba in range(dob):
                     text = radek["bunky"][i_takt * dob + doba]
@@ -164,9 +203,11 @@ def vygeneruj_pdf(pisen, akordy):
                         velikost = _velikost_pro_bunku(text)
                         c.setFont(FONT_AKORD, velikost)
                         c.setFillColorRGB(*BARVA_CERNA)
-                        c.drawString(x + doba * SIRKA_DOBY + 2, y_radku - 14, text)
+                        c.drawString(
+                            x + doba * SIRKA_DOBY + 3, y_radku - CHORD_BASELINE_OFFSET, text
+                        )
                 x += dob * SIRKA_DOBY
-                c.line(x, y_radku - 20, x, y_radku)
+                c.line(x, y_radku - VYSKA_RADKU, x, y_radku)
 
             for rep in radek.get("repetice", []):
                 seg_od = max(rep["od_taktu"], od)
@@ -197,25 +238,28 @@ def vygeneruj_pdf(pisen, akordy):
 
 def _kresli_repetici(c, x0, y_radku, dob, od_v_useku, do_v_useku, kresli_zacatek, kresli_konec, krat):
     """Tlustá čára + dvě tečky na začátku a konci rozsahu, ×N vpravo od
-    konce. Rozsah předaný sem je už OŘÍZNUTÝ na aktuální vizuální řádek
-    (viz volající) — u repetice přesahující přes zalomení se značka
-    začátku/konce nakreslí jen na tom úseku, kam skutečně patří."""
+    konce — tloušťka i teček podle reference. Rozsah předaný sem je už
+    OŘÍZNUTÝ na aktuální vizuální řádek (viz volající) — u repetice
+    přesahující přes zalomení se značka začátku/konce nakreslí jen na tom
+    úseku, kam skutečně patří."""
     sirka_taktu = dob * SIRKA_DOBY
     x_zacatek = x0 + od_v_useku * sirka_taktu
     x_konec = x0 + (do_v_useku + 1) * sirka_taktu
+    y_tecka_horni = y_radku - VYSKA_RADKU * 0.35
+    y_tecka_dolni = y_radku - VYSKA_RADKU * 0.65
 
     c.setStrokeColorRGB(*BARVA_CERNA)
-    c.setLineWidth(2)
+    c.setLineWidth(TLOUSTKA_REPETICE)
     c.setFillColorRGB(*BARVA_CERNA)
 
     if kresli_zacatek:
-        c.line(x_zacatek, y_radku - 20, x_zacatek, y_radku)
-        c.circle(x_zacatek + 4, y_radku - 7, 1.3, stroke=0, fill=1)
-        c.circle(x_zacatek + 4, y_radku - 13, 1.3, stroke=0, fill=1)
+        c.line(x_zacatek, y_radku - VYSKA_RADKU, x_zacatek, y_radku)
+        c.circle(x_zacatek + 4.5, y_tecka_horni, 1.6, stroke=0, fill=1)
+        c.circle(x_zacatek + 4.5, y_tecka_dolni, 1.6, stroke=0, fill=1)
 
     if kresli_konec:
-        c.line(x_konec, y_radku - 20, x_konec, y_radku)
-        c.circle(x_konec - 4, y_radku - 7, 1.3, stroke=0, fill=1)
-        c.circle(x_konec - 4, y_radku - 13, 1.3, stroke=0, fill=1)
-        c.setFont(FONT_POPISEK, 9)
-        c.drawString(x_konec + 4, y_radku - 14, f"×{krat}")
+        c.line(x_konec, y_radku - VYSKA_RADKU, x_konec, y_radku)
+        c.circle(x_konec - 4.5, y_tecka_horni, 1.6, stroke=0, fill=1)
+        c.circle(x_konec - 4.5, y_tecka_dolni, 1.6, stroke=0, fill=1)
+        c.setFont(FONT_POPISEK_TUCNE, VELIKOST_REPETICE_N)
+        c.drawString(x_konec + 8, y_radku - CHORD_BASELINE_OFFSET, f"×{krat}")
