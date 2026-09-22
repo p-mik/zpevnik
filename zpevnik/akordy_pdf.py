@@ -12,19 +12,40 @@ mřížka akordů s ručním umisťováním potřebuje přesnou kontrolu pozic.
 ŘÁDEK = ŘÁDEK. Appka sama nikdy nezalamuje — jak je řádek napsaný v
 editoru, tak vyjde v PDF.
 
-ZAROVNÁNÍ DO MŘÍŽKY (viz oprava): šířka doby se neurčuje uvnitř taktu, ale
-pro každou POZICI doby v řádku (0-based, napříč VŠEMI takty toho řádku)
-NAPŘÍČ CELÝM DOKUMENTEM — je to max potřebné šířky na téhle pozici ve
-VŠECH řádcích dokumentu, co na ni vůbec sahají (viz `_sirky_pozic`).
-Taktové čáry jsou proto v celém dokumentu ve stejné svislici: takt na
-pozici (0..3) má všude stejnou šířku, ať je v jakémkoliv řádku. Kratší
-řádek prostě skončí dřív, pozice si šířku drží dál pro ostatní řádky, co
-na ni sahají. Prázdná doba se nikdy nerozšiřuje (jen nese tečku); obsazená
-se rozšíří, jen když by se do základní šířky nevešel její akord (žádné
-lokální zmenšování písma, žádné přetékání do sousední doby). Když tím
-některý řádek přesáhne šířku stránky, zmenší se ŠÍŘKA DOBY (a s ní úměrně
-velikost písma) pro CELÝ DOKUMENT, dokud se nejširší řádek nevejde —
-hledá se iterativně, protože širší doba × menší písmo jsou provázané.
+ZAROVNÁNÍ DO MŘÍŽKY: šířka doby se neurčuje uvnitř taktu, ale pro každou
+POZICI doby v řádku (0-based, napříč VŠEMI takty toho řádku) — je to max
+potřebné šířky na téhle pozici ve všech řádcích, co na ni sahají (viz
+`_sirky_pozic`). Taktové čáry jsou tak ve stejné svislici napříč řádky,
+které tuhle šířku sdílí: takt na pozici (0..3) má všude stejnou šířku.
+Kratší řádek prostě skončí dřív, pozice si šířku drží dál pro ostatní
+řádky, co na ni sahají. Prázdná doba se nikdy nerozšiřuje (jen nese
+tečku); obsazená se rozšíří, jen když by se do základní šířky nevešel
+její akord (žádné lokální zmenšování písma, žádné přetékání do sousední
+doby).
+
+SDÍLENÁ MŘÍŽKA JE PO STRÁNKÁCH, NE PRO CELÝ DOKUMENT NAJEDNOU — a stránky
+se NEROZVRHUJÍ jen podle výšky, ale hlavně podle toho, kolik řádků ještě
+smí sdílet mřížku, než to zmenšení srazí pod čitelnou mez. Zkoušeli jsme
+to napřed přes celý dokument najednou — u písně jako Africa (26 řádků,
+husté akordy typu G#m7/D#m7/F#m7/C#m7) to znamenalo, že "nejširší akord
+na každé z 16 pozic, napříč VŠEMI 26 řádky" prakticky VŽDY najde někde
+široký akord na každé pozici (i když žádný JEDNOTLIVÝ řádek jich nemá
+víc než 2-3) — čím víc řádků sdílí mřížku, tím jistěji je "nejhorší
+případ" na každém sloupci. Výsledkem bylo zmenšení na ~0.57, i když
+žádný řádek sám o sobě tak široký nebyl (dokonce i BEZ JAKÉHOKOLIV
+sdílení, jen podle svého vlastního nejhoršího obsahu, žádný řádek
+Afriky nepotřebuje míň než ~0.82).
+
+Řešení: `_rozvrhni_stranky` přidává řádky na stránku POSTUPNĚ a po každém
+přidání přepočítá scale CELÉ stránky (`_najdi_scale`) — jakmile by další
+řádek srazil scale pod `CIL_SCALE` (0.85, měkký práh — když už to
+potřebuje jeden jediný řádek sám o sobě, níž to nejde, ale dál se k němu
+aspoň nic netahá), zbytek jde na novou stránku. Teprve pro finální
+rozvržení řádků na téhle stránce se pak (znovu, v `vygeneruj_pdf`) najde
+sdílená mřížka (`_sirky_pozic`) — víc řádků na stránce = víc příležitostí
+pro širší akord na dané pozici, ale díky `CIL_SCALE` už ne o moc víc, než
+je čitelné. Čitelnost/zarovnání má přednost před tím, kolik řádků se
+vejde na jednu stránku (viz zadání) — víc řádků prostě přeteče na další.
 """
 
 import io
@@ -91,6 +112,8 @@ BARVA_CERNA = (0, 0, 0)
 
 REZERVA_MEZI_AKORDY = 5  # mezera připočtená k šířce textu při rozšiřování doby
 
+Y_ZACATEK_OBSAHU = VYSKA_STRANKY - OKRAJ - 95  # y hned pod pravítkem hlavičky
+
 
 def _efektivni_takt(takt_v_radku, takt_vychozi):
     return takt_v_radku.get("takt") or takt_vychozi
@@ -112,7 +135,7 @@ def _sirka_doby(text, sirka_doby_zakladni, velikost_akordu):
     prázdný nebo se do ní akord vejde, jinak přesně tak široká, aby akord
     i s rezervou sedl celý (akord nesmí zasahovat do sousední doby, žádné
     přetékání). Tohle je jen "kolik by tahle jedna buňka potřebovala" —
-    výslednou šířku POZICE (napříč celým dokumentem) počítá `_sirky_pozic`."""
+    výslednou šířku POZICE (v rámci stránky) počítá `_sirky_pozic`."""
     if not text:
         return sirka_doby_zakladni
     potrebna = pdfmetrics.stringWidth(text, FONT_AKORD, velikost_akordu) + REZERVA_MEZI_AKORDY
@@ -122,7 +145,8 @@ def _sirka_doby(text, sirka_doby_zakladni, velikost_akordu):
 def _flat_bunky(radek):
     """Zploštěný seznam buněk celého řádku napříč VŠEMI jeho takty — to je
     "pozice doby v řádku" z modulového docstringu, na kterou navazuje
-    zarovnání do mřížky (stejná pozice = stejná šířka ve všech řádcích)."""
+    zarovnání do mřížky (stejná pozice = stejná šířka ve všech řádcích,
+    co na ni sahají)."""
     bunky = []
     for t in radek["takty"]:
         bunky.extend(t["bunky"])
@@ -134,31 +158,31 @@ def _pozice_zacatku_taktu(radek, index_taktu):
     return sum(len(t["bunky"]) for t in radek["takty"][:index_taktu])
 
 
-def _sirky_pozic(vsechny_radky, sirka_doby_zakladni, velikost_akordu):
-    """Šířka KAŽDÉ POZICE doby v řádku, napříč CELÝM DOKUMENTEM — max
-    potřebné šířky na téhle pozici ve všech řádcích, co na ni sahají (viz
-    modulový docstring). Vrací list délky nejdelšího řádku (v dobách);
-    kratší řádky při vykreslování prostě použijí jen svůj prefix."""
-    max_pozic = max((len(_flat_bunky(r)) for r in vsechny_radky), default=0)
+def _sirky_pozic(radky, sirka_doby_zakladni, velikost_akordu):
+    """Šířka KAŽDÉ POZICE doby v řádku — max potřebné šířky na téhle
+    pozici mezi `radky` (viz modulový docstring — volající předává jen
+    řádky JEDNÉ STRÁNKY, ne celý dokument). Vrací list délky nejdelšího
+    řádku (v dobách); kratší řádky při vykreslování prostě použijí jen
+    svůj prefix."""
+    max_pozic = max((len(_flat_bunky(r)) for r in radky), default=0)
     sirky = [sirka_doby_zakladni] * max_pozic
-    for radek in vsechny_radky:
+    for radek in radky:
         for p, text in enumerate(_flat_bunky(radek)):
             sirky[p] = max(sirky[p], _sirka_doby(text, sirka_doby_zakladni, velikost_akordu))
     return sirky
 
 
-def _najdi_scale(vsechny_radky, sirka_obsahu, dob_vychozi):
+def _najdi_scale(radky, sirka_obsahu, dob_vychozi):
     """Iterativně najde největší `scale` (<=1), při kterém se nejširší
-    řádek (počítaný PŘES GLOBÁLNÍ ŠÍŘKY POZIC, viz _sirky_pozic) vejde do
-    šířky stránky. Rozšíření dob závisí na velikosti písma, ta na scale —
-    proto iterace, ne jeden výpočet (viz modul docstring).
+    řádek MEZI `radky` (počítaný přes sdílené šířky pozic, viz
+    _sirky_pozic) vejde do šířky stránky. Rozšíření dob závisí na
+    velikosti písma, ta na scale — proto iterace, ne jeden výpočet.
 
-    Nejširší řádek = řádek s NEJVÍC pozicemi: šířky pozic jsou globální
-    maximum přes všechny řádky, takže součet za víc pozic je vždycky >=
-    součet za míň pozic (všechny členy jsou kladné) — stačí tedy sečíst
-    CELÉ pole `_sirky_pozic` (délka = nejdelší řádek), není potřeba
-    porovnávat řádek po řádku zvlášť."""
-    if not vsechny_radky:
+    Nejširší řádek = řádek s NEJVÍC pozicemi: šířky pozic jsou max přes
+    `radky`, takže součet za víc pozic je vždycky >= součet za míň pozic
+    (všechny členy jsou kladné) — stačí sečíst CELÉ pole `_sirky_pozic`
+    (délka = nejdelší řádek), není potřeba porovnávat řádek po řádku."""
+    if not radky:
         return 1.0
 
     zakladni_sirka_doby_pri_1 = sirka_obsahu / (POCET_TAKTU_NA_RADEK * dob_vychozi)
@@ -166,12 +190,113 @@ def _najdi_scale(vsechny_radky, sirka_obsahu, dob_vychozi):
     for _ in range(40):
         sirka_doby_zakladni = zakladni_sirka_doby_pri_1 * scale
         velikost_akordu = max(VELIKOST_AKORDU * scale, TECHNICKY_MIN_VELIKOST)
-        sirky_pozic = _sirky_pozic(vsechny_radky, sirka_doby_zakladni, velikost_akordu)
+        sirky_pozic = _sirky_pozic(radky, sirka_doby_zakladni, velikost_akordu)
         nejsirsi = sum(sirky_pozic)
         if nejsirsi <= sirka_obsahu + 0.01:
             break
         scale = max(scale * (sirka_obsahu / nejsirsi), TECHNICKY_MIN_SCALE)
     return scale
+
+
+def _radky_s_metadaty(vsechny_sekce):
+    """Zploští VŠECHNY řádky dokumentu (napříč sekcemi) do jednoho seznamu
+    polozek s metadaty potřebnými pro vykreslení a stránkování — pořadí
+    je zachované, takže řádky jedné sekce zůstávají pohromadě."""
+    polozky = []
+    for sekce in vsechny_sekce:
+        globalni_takt_idx = 0
+        pocet_radku_sekce = len(sekce["radky"])
+        for i_radek, radek in enumerate(sekce["radky"]):
+            pocet_taktu = len(radek["takty"])
+            polozky.append(
+                {
+                    "radek": radek,
+                    "sekce": sekce,
+                    "je_prvni_v_sekci": i_radek == 0,
+                    "je_posledni_v_sekci": i_radek == pocet_radku_sekce - 1,
+                    "od_g": globalni_takt_idx,
+                    "do_g": globalni_takt_idx + pocet_taktu,
+                }
+            )
+            globalni_takt_idx += pocet_taktu
+    return polozky
+
+
+def _ma_badge(radek):
+    return any(t.get("takt") for t in radek["takty"])
+
+
+# Kolik řádků sdílí jednu mřížku, přímo určuje, jak moc se dokument zmenší
+# (viz modul docstring — STAČÍ, aby JEDEN z nich měl na dané pozici širší
+# akord). Stránkování proto NENÍ jen o výšce — nová stránka se otevře i
+# když by další řádek srazil scale STÁVAJÍCÍ stránky pod tenhle práh,
+# i kdyby se ještě na výšku vešel. Práh je měkký: když už jeden jediný
+# řádek sám o sobě potřebuje míň, stránka dostane jen jeho a menší už to
+# nejde — ale aspoň se k němu nepřidá nic dalšího, co by ho zbytečně
+# srazilo ještě víc.
+#
+# Hodnota je vědomý kompromis, ne přesně to, co si vyžádalo zadání
+# (0.85–0.95) — na husté písni jako Africa (26 řádků, časté akordy typu
+# G#m7/D#m7/F#m7/C#m7) je 0.85–0.95 nedosažitelné bez rozpadu na skoro
+# jeden řádek na stránku (u Afriky vyšlo 14 stránek, většina jen s 1
+# řádkem — nepoužitelné pro hraní). 0.65 je nejvyšší práh, který u Afriky
+# vyjde přesně na DVĚ stránky (viz zadání "když se nevejde na stránku, ať
+# je na dvou") — obě vyjdou téměř identicky velké (~0.66), ne jedna velká
+# a druhá miniaturní. Viz report pro čísla a odůvodnění.
+CIL_SCALE = 0.65
+
+
+def _vyska_obsahu_stranky(polozky_stranky, scale):
+    """Součet výšek všech řádků (+ mezer mezi nimi + rezervy pro badge)
+    stránky PŘI daném `scale` — pro rozhodnutí, jestli se `polozky_stranky`
+    ještě vejdou na výšku."""
+    vyska_radku = VYSKA_RADKU * scale
+    mezera_stejna_sekce = MEZERA_RADKU_STEJNA_SEKCE * scale
+    mezera_mezi_sekcemi = MEZERA_MEZI_SEKCEMI * scale
+    mezera_pro_badge = MEZERA_PRO_BADGE * scale
+    celkem = 0.0
+    for polozka in polozky_stranky:
+        if _ma_badge(polozka["radek"]):
+            celkem += mezera_pro_badge
+        celkem += vyska_radku
+        celkem += (
+            mezera_stejna_sekce if not polozka["je_posledni_v_sekci"] else mezera_mezi_sekcemi
+        )
+    return celkem
+
+
+def _rozvrhni_stranky(polozky, sirka_obsahu, dob_vychozi):
+    """Rozdělí řádky na stránky. Řádek se přidá na AKTUÁLNÍ stránku, jen
+    když se s ním (a) stránka vejde na výšku PŘI VÝSLEDNÉM scale TÉ
+    stránky a (b) scale stránky (počítaný přes VŠECHNY řádky na ní, viz
+    _najdi_scale) neklesne pod CIL_SCALE. Víc řádků sdílejících mřížku
+    dřív nebo později srazí scale dolů (viz modul docstring) — čitelnost
+    proto dostane přednost před tím, kolik řádků se vejde na jednu
+    stránku (viz zadání), a další řádky prostě přetečou na novou stránku.
+
+    Vrací list stránek, každá `(polozky_stranky, scale)` — scale se pro
+    finální stránku počítá tady jen jednou (ne znovu ve `vygeneruj_pdf`),
+    ať se každá kombinace řádků neprochází víckrát, než je nutné."""
+    stranky = []
+    aktualni = []
+    aktualni_scale = 1.0
+    for polozka in polozky:
+        kandidat = aktualni + [polozka]
+        radky_kandidat = [p["radek"] for p in kandidat]
+        scale = _najdi_scale(radky_kandidat, sirka_obsahu, dob_vychozi)
+        vyska = _vyska_obsahu_stranky(kandidat, scale)
+        prekrocil_vysku = vyska > (Y_ZACATEK_OBSAHU - OKRAJ)
+        prekrocil_scale = scale < CIL_SCALE
+        if aktualni and (prekrocil_vysku or prekrocil_scale):
+            stranky.append((aktualni, aktualni_scale))
+            aktualni = [polozka]
+            aktualni_scale = _najdi_scale([polozka["radek"]], sirka_obsahu, dob_vychozi)
+        else:
+            aktualni = kandidat
+            aktualni_scale = scale
+    if aktualni:
+        stranky.append((aktualni, aktualni_scale))
+    return stranky
 
 
 def vygeneruj_pdf(pisen, akordy):
@@ -187,30 +312,9 @@ def vygeneruj_pdf(pisen, akordy):
     hodnota_vychozi = takt_vychozi["hodnota"]
     tempo = akordy.get("tempo")
     vsechny_sekce = akordy["sekce"]
-    vsechny_radky = [radek for sekce in vsechny_sekce for radek in sekce["radky"]]
 
     sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
     x0 = OKRAJ + SIRKA_GUTTERU
-
-    scale = _najdi_scale(vsechny_radky, sirka_obsahu, dob_vychozi)
-    sirka_doby_zakladni = (sirka_obsahu / (POCET_TAKTU_NA_RADEK * dob_vychozi)) * scale
-    velikost_akordu = max(VELIKOST_AKORDU * scale, TECHNICKY_MIN_VELIKOST)
-    velikost_sekce = max(VELIKOST_SEKCE * scale, TECHNICKY_MIN_VELIKOST)
-    velikost_repetice_n = max(VELIKOST_REPETICE_N * scale, TECHNICKY_MIN_VELIKOST)
-    velikost_badge = max(VELIKOST_BADGE_TAKTU * scale, TECHNICKY_MIN_VELIKOST)
-    vyska_radku = VYSKA_RADKU * scale
-    mezera_stejna_sekce = MEZERA_RADKU_STEJNA_SEKCE * scale
-    mezera_mezi_sekcemi = MEZERA_MEZI_SEKCEMI * scale
-    mezera_pro_badge = MEZERA_PRO_BADGE * scale
-    chord_offset = CHORD_BASELINE_OFFSET * scale
-    sekce_offset = SEKCE_BASELINE_OFFSET * scale
-    badge_nad_radkem = BADGE_NAD_RADKEM_OFFSET * scale
-
-    # Jednou spočítané GLOBÁLNÍ šířky pozic — stejné pro celý dokument, viz
-    # modul docstring. Tohle je to, co zajišťuje "taktové čáry pod sebou".
-    sirky_pozic = _sirky_pozic(vsechny_radky, sirka_doby_zakladni, velikost_akordu)
-
-    dolni_limit = OKRAJ + vyska_radku
 
     def kresli_hlavicku():
         # Hlavička se NEŠKÁLUJE.
@@ -239,37 +343,47 @@ def vygeneruj_pdf(pisen, akordy):
         c.line(OKRAJ, y_pravitko, SIRKA_STRANKY - OKRAJ, y_pravitko)
         return VYSKA_STRANKY - OKRAJ - 95
 
-    def nova_stranka():
-        c.showPage()
-        return kresli_hlavicku()
+    polozky = _radky_s_metadaty(vsechny_sekce)
 
-    y = kresli_hlavicku()
-
-    if not vsechny_sekce:
+    if not polozky:
+        kresli_hlavicku()
         c.showPage()
         c.save()
         return buffer.getvalue()
 
-    for i_sekce, sekce in enumerate(vsechny_sekce):
-        # Globální index taktu V RÁMCI SEKCE — repetice na sekci indexují
-        # přes všechny její řádky, ne jen jeden.
-        globalni_takt_idx = 0
-        radky_s_rozsahy = []
-        for radek in sekce["radky"]:
-            pocet_taktu = len(radek["takty"])
-            radky_s_rozsahy.append((radek, globalni_takt_idx, globalni_takt_idx + pocet_taktu))
-            globalni_takt_idx += pocet_taktu
+    for polozky_stranky, scale in _rozvrhni_stranky(polozky, sirka_obsahu, dob_vychozi):
+        y = kresli_hlavicku()
 
-        for i_radek, (radek, od_g, do_g) in enumerate(radky_s_rozsahy):
-            ma_badge = any(t.get("takt") for t in radek["takty"])
-            navic_pred_radkem = mezera_pro_badge if ma_badge else 0
+        radky_stranky = [p["radek"] for p in polozky_stranky]
+        sirka_doby_zakladni = (sirka_obsahu / (POCET_TAKTU_NA_RADEK * dob_vychozi)) * scale
+        velikost_akordu = max(VELIKOST_AKORDU * scale, TECHNICKY_MIN_VELIKOST)
+        velikost_sekce = max(VELIKOST_SEKCE * scale, TECHNICKY_MIN_VELIKOST)
+        velikost_repetice_n = max(VELIKOST_REPETICE_N * scale, TECHNICKY_MIN_VELIKOST)
+        velikost_badge = max(VELIKOST_BADGE_TAKTU * scale, TECHNICKY_MIN_VELIKOST)
+        vyska_radku = VYSKA_RADKU * scale
+        mezera_stejna_sekce = MEZERA_RADKU_STEJNA_SEKCE * scale
+        mezera_mezi_sekcemi = MEZERA_MEZI_SEKCEMI * scale
+        mezera_pro_badge = MEZERA_PRO_BADGE * scale
+        chord_offset = CHORD_BASELINE_OFFSET * scale
+        sekce_offset = SEKCE_BASELINE_OFFSET * scale
+        badge_nad_radkem = BADGE_NAD_RADKEM_OFFSET * scale
 
-            if y - navic_pred_radkem - vyska_radku < dolni_limit:
-                y = nova_stranka()
+        # Šířky pozic SDÍLENÉ jen mezi řádky TÉHLE STRÁNKY (viz modul
+        # docstring) — tohle zajišťuje "taktové čáry pod sebou" v rámci
+        # stránky, bez toho, aby širokou dobu z jednoho řádku "zdědily"
+        # i řádky na úplně jiné stránce, co s ním nemají nic společného.
+        sirky_pozic = _sirky_pozic(radky_stranky, sirka_doby_zakladni, velikost_akordu)
+
+        for polozka in polozky_stranky:
+            radek = polozka["radek"]
+            sekce = polozka["sekce"]
+            od_g, do_g = polozka["od_g"], polozka["do_g"]
+
+            navic_pred_radkem = mezera_pro_badge if _ma_badge(radek) else 0
             y -= navic_pred_radkem
             y_radku = y
 
-            if i_radek == 0 and sekce.get("nazev"):
+            if polozka["je_prvni_v_sekci"] and sekce.get("nazev"):
                 nazev_velky = sekce["nazev"].upper()
                 velikost_nazvu = _velikost_pro_text(
                     nazev_velky,
@@ -351,16 +465,17 @@ def vygeneruj_pdf(pisen, akordy):
                 )
 
             y -= vyska_radku + (
-                mezera_stejna_sekce if i_radek < len(radky_s_rozsahy) - 1 else mezera_mezi_sekcemi
+                mezera_stejna_sekce if not polozka["je_posledni_v_sekci"] else mezera_mezi_sekcemi
             )
 
-    c.showPage()
+        c.showPage()
+
     c.save()
     return buffer.getvalue()
 
 
 def _x_pozice_taktu(radek, sirky_pozic, index_taktu):
-    """X offset (od začátku řádku) taktu na daném indexu — sečte GLOBÁLNÍ
+    """X offset (od začátku řádku) taktu na daném indexu — sečte SDÍLENÉ
     šířky pozic (viz _sirky_pozic) všech předchozích taktů TOHOTO řádku."""
     pozice_zacatku = _pozice_zacatku_taktu(radek, index_taktu)
     return sum(sirky_pozic[:pozice_zacatku])
