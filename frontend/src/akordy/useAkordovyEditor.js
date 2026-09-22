@@ -10,6 +10,8 @@ import {
   novyTakt,
   odeberTaktZeSekce,
   pridejTaktDoRadku,
+  rozdelSekciOdRadku,
+  spojSeSPredchozi,
 } from './akordovyModel'
 
 const CHYBA_NACTENI = 'Akordový zápis se nepodařilo načíst.'
@@ -86,6 +88,31 @@ export function useAkordovyEditor(verzeId) {
       ...prev,
       sekce: prev.sekce.map((s, i) => (i === sekceIdx ? { ...s, nazev: text } : s)),
     }))
+  }, [])
+
+  // Validaci (repetice přes hranici dělení) dělá volající PŘED zavoláním
+  // téhle akce — stejný vzor jako potvrzení u "Změnit takt" (viz
+  // AkordovyMrizka.potvrdZmenuTaktu). Když by přesto přišel neplatný
+  // požadavek, `rozdelSekciOdRadku` vrátí `{ok:false}` a tady se prostě
+  // nic nezmění (žádný pád, jen tichý no-op).
+  const rozdelSekci = useCallback((sekceIdx, radekIdx) => {
+    setZapis((prev) => {
+      const vysledek = rozdelSekciOdRadku(prev.sekce[sekceIdx], radekIdx)
+      if (!vysledek.ok) return prev
+      const noveSekce = [...prev.sekce]
+      noveSekce.splice(sekceIdx, 1, vysledek.puvodni, vysledek.nova)
+      return { ...prev, sekce: noveSekce }
+    })
+  }, [])
+
+  const spojSePredchozi = useCallback((sekceIdx) => {
+    setZapis((prev) => {
+      if (sekceIdx <= 0 || sekceIdx >= prev.sekce.length) return prev
+      const spojena = spojSeSPredchozi(prev.sekce[sekceIdx - 1], prev.sekce[sekceIdx])
+      const noveSekce = [...prev.sekce]
+      noveSekce.splice(sekceIdx - 1, 2, spojena)
+      return { ...prev, sekce: noveSekce }
+    })
   }, [])
 
   // --- řádky ---
@@ -208,6 +235,8 @@ export function useAkordovyEditor(verzeId) {
     pridejSekci,
     smazSekci,
     nastavNazevSekce,
+    rozdelSekci,
+    spojSePredchozi,
     vlozRadekPo,
     pridejTakt,
     smazTakt,

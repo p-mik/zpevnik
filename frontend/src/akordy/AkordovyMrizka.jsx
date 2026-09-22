@@ -7,6 +7,7 @@ import {
   poziceVRadku,
   prepniVeVyberu,
   radekCelkemBunek,
+  rozdelSekciOdRadku,
   rozsahMeziPozicemi,
   vyberObsahuje,
   zkontrolujVyberProRepetici,
@@ -17,11 +18,20 @@ import ZmenitTaktPopover from './ZmenitTaktPopover'
 import './AkordovyMrizka.css'
 
 const MIN_SIRKA_BUNKY = 36
+// Cíl šířky buňky NENÍ "přesně 4 takty na šířku" — je to vědomá rezerva
+// (viz zadání): 4 takty výchozího taktu musí mít po pravé straně ještě
+// viditelné místo, ne sedět na hraně. Počítáno tak, aby se teoreticky
+// vešlo 4,5 taktu — ta rezerva pak vstřebá jak zaokrouhlení/scrollbar, tak
+// akordy, které si (přes `max(základ, šířka textu)`, viz .akordy-bunka)
+// vynutí širší buňku, než je základ (např. "Eadd9").
+const CIL_TAKTU_PRO_SIRKU = 4.5
 
 // Mřížka akordového zápisu — sekce jsou bloky (jméno jednou nahoře, pod
 // ním řádky taktů), viz PC_zpevnik_akordovy_zapis_upravy.md bod 1. ŘÁDEK
 // SE NIKDY SÁM NEZALAMUJE (bod 4) — delší řádek prostě odscrolluje
-// vodorovně, PDF ho zmenší jako celek (viz info hláška dole).
+// vodorovně, PDF ho zmenší jako celek (viz info hláška dole). Scroll je
+// SDÍLENÝ pro celou sekci (viz .akordy-sekce-scroll) — všechny řádky
+// jedné sekce se posouvají spolu, ne každý zvlášť.
 //
 // Klávesy:
 //  Tab        další buňka; na konci řádku přidá nový takt a skočí do něj
@@ -38,6 +48,8 @@ export default function AkordovyMrizka({
   onVlozRadekPo,
   onSmazSekci,
   onPridejSekci,
+  onRozdelSekci,
+  onSpojSePredchozi,
   onPridejRepetici,
   onSmazRepetici,
   onZmenTaktVyberu,
@@ -51,35 +63,34 @@ export default function AkordovyMrizka({
   const [repeticeChyba, setRepeticeChyba] = useState(null)
   const [repeticePopoverOtevreny, setRepeticePopoverOtevreny] = useState(false)
   const [taktPopoverOtevreny, setTaktPopoverOtevreny] = useState(false)
+  const [chybaRozdeleni, setChybaRozdeleni] = useState(null)
   const [sirkaBunky, setSirkaBunky] = useState(64)
   const sondaRef = useRef(null)
 
-  // Šířka buňky: 4 takty výchozího taktu se musí vejít na šířku řádku bez
-  // scrollu (viz zadání bod 1). Hrubý odhad (šířka sloupce / počet dob)
-  // nepočítá s mezerami mezi buňkami, oddělovači taktů (border-left) a
-  // paddingem taktů — proto se koriguje přeměřením: rozdíl mezi skutečně
-  // vykresleným scrollWidth a odhadem*počet_dob je ta "režie" (mezery +
-  // oddělovače + padding), která NEZÁVISÍ na šířce buňky, takže jedna
-  // korekce z reálně vykreslené šířky buňky stačí. Pod MIN_SIRKA_BUNKY je
-  // scroll povolený (viz CSS).
-  //
-  // Měří se ze skryté SONDY (viz JSX níž), NE z prvního skutečného řádku —
-  // ten často NEMÁ 4 takty (nová píseň má 1, po smazání taktů může mít
-  // taky 1, viz bod 2), takže by "celkemDob = 4 * dob" nesedělo s tím, co
-  // je doopravdy vykreslené, a přepočet by vyšel řádově mimo (to byl
-  // skutečný důvod produkčního bugu, ne rozjezd webfontů — viz report).
-  // Sonda má vždycky přesně 4 takty výchozího taktu, takže platí vždycky.
+  // Šířka buňky: 4 takty výchozího taktu musí mít po pravé straně viditelnou
+  // rezervu (viz CIL_TAKTU_PRO_SIRKU výš), ne sedět přesně na hraně
+  // kontejneru. Hrubý odhad (šířka sloupce / počet dob) nepočítá s
+  // mezerami mezi buňkami, oddělovači taktů (border-left), paddingem
+  // taktů, ani s tlačítkem "Nová sekce od tohoto řádku" (to u řádků > 0
+  // ubírá další místo) — proto se koriguje přeměřením: rozdíl mezi
+  // skutečně vykresleným scrollWidth sondy a odhadem*počet_dob je ta
+  // "režie", která NEZÁVISÍ na šířce buňky, takže jedna korekce z reálně
+  // vykreslené šířky buňky stačí. Sonda proto nese i (skryté) tlačítko
+  // rozdělení — nejhorší případ, ať se z něj nevypočítá málo místa pro
+  // řádky, které ho skutečně mají. Pod MIN_SIRKA_BUNKY je scroll povolený.
   useEffect(() => {
     const el = sondaRef.current
     if (!el) return undefined
     function prepocitej() {
-      const celkemDob = 4 * dob
+      const celkemDob = CIL_TAKTU_PRO_SIRKU * dob
       if (celkemDob <= 0) return
       const prvniBunka = el.querySelector('.akordy-bunka')
       const aktualniSirkaBunky = prvniBunka
         ? prvniBunka.getBoundingClientRect().width
-        : el.clientWidth / celkemDob
-      const rezie = el.scrollWidth - celkemDob * aktualniSirkaBunky
+        : el.clientWidth / (4 * dob)
+      // Sonda sama vykresluje jen 4 (ne 4,5) taktu — to, co se skutečně
+      // renderuje, i co určuje overhead (mezery, oddělovače, tlačítko).
+      const rezie = el.scrollWidth - 4 * dob * aktualniSirkaBunky
       const presna = Math.max(MIN_SIRKA_BUNKY, (el.clientWidth - rezie) / celkemDob)
       setSirkaBunky(presna)
     }
@@ -87,8 +98,8 @@ export default function AkordovyMrizka({
     const ro = new ResizeObserver(prepocitej)
     ro.observe(el)
     // Pojistka pro případ, že by CSS/fonty dorazily až po prvním layoutu
-    // (viz zadání) — i bez vlastního webfontu se může první měření strefit
-    // do okna, kdy prohlížeč ještě nemá layout/fonty definitivně ustálené.
+    // — i bez vlastního webfontu se může první měření strefit do okna, kdy
+    // prohlížeč ještě nemá layout/fonty definitivně ustálené.
     let zruseno = false
     document.fonts?.ready?.then(() => {
       if (!zruseno) prepocitej()
@@ -264,6 +275,26 @@ export default function AkordovyMrizka({
     zaostrNazevSekce(novyIndex)
   }
 
+  // Rozdělení se validuje TADY (čistá funkce nad aktuálním zápisem, stejný
+  // vzor jako potvrzení "Změnit takt") — akce v useAkordovyEditor pak jen
+  // aplikuje, beze změny se stará jen o no-op, kdyby se sem přesto dostal
+  // neplatný požadavek.
+  function rozdelit(sekceIdx, radekIdx) {
+    const vysledek = rozdelSekciOdRadku(zapis.sekce[sekceIdx], radekIdx)
+    if (!vysledek.ok) {
+      setChybaRozdeleni({ sekceIdx, hlaska: vysledek.hlaska })
+      return
+    }
+    setChybaRozdeleni(null)
+    onRozdelSekci(sekceIdx, radekIdx)
+    zaostrNazevSekce(sekceIdx + 1)
+  }
+
+  function spojit(sekceIdx) {
+    setChybaRozdeleni(null)
+    onSpojSePredchozi(sekceIdx)
+  }
+
   const nejdelsi = nejdelsiRadekVDobach(zapis.sekce, zapis.takt)
   const cilDob = 4 * dob
   const infoRadek =
@@ -274,179 +305,213 @@ export default function AkordovyMrizka({
   return (
     <>
       {/* Skrytá sonda jen pro měření šířky buňky (viz efekt výš) — VŽDY
-          přesně 4 takty výchozího taktu, nezávisle na skutečném obsahu
-          zápisu (ten první takt/řádek klidně nemá). Neinteraktivní,
+          přesně 4 takty výchozího taktu (+ tlačítko rozdělení, nejhorší
+          případ), nezávisle na skutečném obsahu zápisu. Neinteraktivní,
           mimo tab-pořadí, nulová výška — nezabírá místo, nevidí ji nikdo. */}
       <div className="akordy-mereni-sondy" aria-hidden="true">
         <div className="akordy-sekce-blok">
-          <div className="akordy-radek">
-            <div className="akordy-takty" ref={sondaRef}>
-              {Array.from({ length: 4 }).map((_, taktIdx) => (
-                <div key={taktIdx} className="akordy-takt">
-                  <div className="akordy-takt-bunky">
-                    {Array.from({ length: dob }).map((_, dobaIdx) => (
-                      <input
-                        key={dobaIdx}
-                        type="text"
-                        tabIndex={-1}
-                        readOnly
-                        value=""
-                        className="akordy-bunka"
-                        style={{ width: `${sirkaBunky}px` }}
-                      />
-                    ))}
-                  </div>
+          <div className="akordy-sekce-scroll">
+            <ul className="akordy-radky">
+              <li className="akordy-radek" ref={sondaRef}>
+                <div className="akordy-takty">
+                  {Array.from({ length: 4 }).map((_, taktIdx) => (
+                    <div key={taktIdx} className="akordy-takt">
+                      <div className="akordy-takt-bunky">
+                        {Array.from({ length: dob }).map((_, dobaIdx) => (
+                          <input
+                            key={dobaIdx}
+                            type="text"
+                            tabIndex={-1}
+                            readOnly
+                            value=""
+                            className="akordy-bunka"
+                            style={{ width: `${sirkaBunky}px` }}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+                <button type="button" className="akordy-radek-rozdelit" tabIndex={-1}>
+                  ✂ Nová sekce od tohoto řádku
+                </button>
+              </li>
+            </ul>
           </div>
         </div>
       </div>
 
       <div className="akordy-mrizka">
-      {zapis.sekce.length === 0 && (
-        <p className="akordy-prazdno">Zápis je zatím prázdný — přidej první sekci.</p>
-      )}
+        {zapis.sekce.length === 0 && (
+          <p className="akordy-prazdno">Zápis je zatím prázdný — přidej první sekci.</p>
+        )}
 
-      {zapis.sekce.map((sekce, sekceIdx) => (
-        <div key={sekceIdx} className="akordy-sekce-blok">
-          <div className="akordy-sekce-hlavicka">
-            <input
-              ref={(el) => {
-                if (el) nazvySekciRef.current.set(sekceIdx, el)
-                else nazvySekciRef.current.delete(sekceIdx)
-              }}
-              list="akordy-sekce-navrhy"
-              className="field-input akordy-sekce-input"
-              value={sekce.nazev}
-              placeholder="Název sekce"
-              onChange={(e) => onNastavNazevSekce(sekceIdx, e.target.value)}
-              aria-label={`Název sekce ${sekceIdx + 1}`}
-            />
-            <button type="button" className="btn akordy-sekce-smazat" onClick={() => smazatSekci(sekceIdx)}>
-              Smazat sekci
-            </button>
+        {zapis.sekce.map((sekce, sekceIdx) => (
+          <div key={sekceIdx} className="akordy-sekce-blok">
+            <div className="akordy-sekce-hlavicka">
+              <input
+                ref={(el) => {
+                  if (el) nazvySekciRef.current.set(sekceIdx, el)
+                  else nazvySekciRef.current.delete(sekceIdx)
+                }}
+                list="akordy-sekce-navrhy"
+                className="field-input akordy-sekce-input"
+                value={sekce.nazev}
+                placeholder="Název sekce"
+                onChange={(e) => onNastavNazevSekce(sekceIdx, e.target.value)}
+                aria-label={`Název sekce ${sekceIdx + 1}`}
+              />
+              {sekceIdx > 0 && (
+                <button
+                  type="button"
+                  className="btn akordy-sekce-spojit"
+                  onClick={() => spojit(sekceIdx)}
+                  title="Spojí tuhle sekci s předchozí — název téhle se zahodí."
+                >
+                  Spojit s předchozí
+                </button>
+              )}
+              <button type="button" className="btn akordy-sekce-smazat" onClick={() => smazatSekci(sekceIdx)}>
+                Smazat sekci
+              </button>
+            </div>
+
+            <div className="akordy-sekce-scroll">
+              <ul className="akordy-radky">
+                {sekce.radky.map((radek, radekIdx) => (
+                  <li key={radekIdx} className="akordy-radek">
+                    <div className="akordy-takty">
+                      {radek.takty.map((takt, taktIdx) => {
+                        const efektivni = efektivniTakt(takt, zapis.takt)
+                        return (
+                          <div key={taktIdx} className="akordy-takt">
+                            <div className="akordy-takt-hlavicka">
+                              {takt.takt && (
+                                <span className="akordy-takt-badge">
+                                  {efektivni.dob}/{efektivni.hodnota}
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                className="akordy-takt-smazat"
+                                onClick={() => onSmazTakt(sekceIdx, radekIdx, taktIdx)}
+                                aria-label={`Smazat takt ${taktIdx + 1}`}
+                                title="Smazat takt"
+                              >
+                                ×
+                              </button>
+                            </div>
+                            <div className="akordy-takt-bunky">
+                              {takt.bunky.map((text, dobaIdx) => (
+                                <input
+                                  key={dobaIdx}
+                                  ref={refProBunku({ sekceIdx, radekIdx, taktIdx, dobaIdx })}
+                                  type="text"
+                                  style={{
+                                    width: `max(${sirkaBunky}px, calc(${Math.max(text.length, 1) + 1}ch + var(--space-3)))`,
+                                  }}
+                                  className={`akordy-bunka${
+                                    vyberObsahuje(vyber, {
+                                      sekceIdx,
+                                      radekIdx,
+                                      bunkaIdxVRadku: flatIndexZPozice(radek, taktIdx, dobaIdx),
+                                    })
+                                      ? ' akordy-bunka-vybrana'
+                                      : ''
+                                  }`}
+                                  value={text}
+                                  autoCorrect="off"
+                                  autoCapitalize="off"
+                                  spellCheck={false}
+                                  onChange={(e) => onUpravBunku(sekceIdx, radekIdx, taktIdx, dobaIdx, e.target.value)}
+                                  onKeyDown={(e) => naKlavesu(e, sekceIdx, radekIdx, taktIdx, dobaIdx)}
+                                  onClick={(e) => naKlikBunky(e, sekceIdx, radekIdx, taktIdx, dobaIdx)}
+                                  aria-label={`Doba ${dobaIdx + 1}, takt ${taktIdx + 1}, řádek ${radekIdx + 1}, sekce ${sekceIdx + 1}`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {radekIdx > 0 && (
+                      <button
+                        type="button"
+                        className="akordy-radek-rozdelit"
+                        onClick={() => rozdelit(sekceIdx, radekIdx)}
+                      >
+                        ✂ Nová sekce od tohoto řádku
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {chybaRozdeleni && chybaRozdeleni.sekceIdx === sekceIdx && (
+              <p className="akordy-repetice-chyba" role="alert">
+                {chybaRozdeleni.hlaska}
+              </p>
+            )}
+
+            {sekce.repetice.length > 0 && (
+              <ul className="akordy-repetice-seznam" aria-label={`Repetice sekce ${sekceIdx + 1}`}>
+                {sekce.repetice.map((rep, repIdx) => (
+                  <li key={repIdx}>
+                    <button
+                      type="button"
+                      className="akordy-repetice-chip"
+                      onClick={() => onSmazRepetici(sekceIdx, repIdx)}
+                      title="Klikem odebrat"
+                    >
+                      takt {rep.od_taktu + 1}–{rep.do_taktu + 1} ×{rep.krat} ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+        ))}
 
-          <ul className="akordy-radky">
-            {sekce.radky.map((radek, radekIdx) => (
-              <li key={radekIdx} className="akordy-radek">
-                <div className="akordy-takty">
-                  {radek.takty.map((takt, taktIdx) => {
-                    const efektivni = efektivniTakt(takt, zapis.takt)
-                    return (
-                      <div key={taktIdx} className="akordy-takt">
-                        <div className="akordy-takt-hlavicka">
-                          {takt.takt && (
-                            <span className="akordy-takt-badge">
-                              {efektivni.dob}/{efektivni.hodnota}
-                            </span>
-                          )}
-                          <button
-                            type="button"
-                            className="akordy-takt-smazat"
-                            onClick={() => onSmazTakt(sekceIdx, radekIdx, taktIdx)}
-                            aria-label={`Smazat takt ${taktIdx + 1}`}
-                            title="Smazat takt"
-                          >
-                            ×
-                          </button>
-                        </div>
-                        <div className="akordy-takt-bunky">
-                          {takt.bunky.map((text, dobaIdx) => (
-                            <input
-                              key={dobaIdx}
-                              ref={refProBunku({ sekceIdx, radekIdx, taktIdx, dobaIdx })}
-                              type="text"
-                              style={{
-                                width: `max(${sirkaBunky}px, calc(${Math.max(text.length, 1) + 1}ch + var(--space-3)))`,
-                              }}
-                              className={`akordy-bunka${
-                                vyberObsahuje(vyber, {
-                                  sekceIdx,
-                                  radekIdx,
-                                  bunkaIdxVRadku: flatIndexZPozice(radek, taktIdx, dobaIdx),
-                                })
-                                  ? ' akordy-bunka-vybrana'
-                                  : ''
-                              }`}
-                              value={text}
-                              autoCorrect="off"
-                              autoCapitalize="off"
-                              spellCheck={false}
-                              onChange={(e) => onUpravBunku(sekceIdx, radekIdx, taktIdx, dobaIdx, e.target.value)}
-                              onKeyDown={(e) => naKlavesu(e, sekceIdx, radekIdx, taktIdx, dobaIdx)}
-                              onClick={(e) => naKlikBunky(e, sekceIdx, radekIdx, taktIdx, dobaIdx)}
-                              aria-label={`Doba ${dobaIdx + 1}, takt ${taktIdx + 1}, řádek ${radekIdx + 1}, sekce ${sekceIdx + 1}`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </li>
-            ))}
-          </ul>
+        <datalist id="akordy-sekce-navrhy">
+          {SEKCE_NAVRHY.map((s) => (
+            <option key={s} value={s} />
+          ))}
+        </datalist>
 
-          {sekce.repetice.length > 0 && (
-            <ul className="akordy-repetice-seznam" aria-label={`Repetice sekce ${sekceIdx + 1}`}>
-              {sekce.repetice.map((rep, repIdx) => (
-                <li key={repIdx}>
-                  <button
-                    type="button"
-                    className="akordy-repetice-chip"
-                    onClick={() => onSmazRepetici(sekceIdx, repIdx)}
-                    title="Klikem odebrat"
-                  >
-                    takt {rep.od_taktu + 1}–{rep.do_taktu + 1} ×{rep.krat} ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
+        <div className="akordy-mrizka-akce">
+          <button type="button" className="btn btn-secondary" onClick={pridatSekci}>
+            + Přidat sekci
+          </button>
+          {vyber.length > 0 && (
+            <div className="akordy-vyber-akce">
+              <span className="akordy-vyber-info">{vyber.length} vybraných buněk</span>
+              <button type="button" className="btn btn-secondary" onClick={otevriRepetici}>
+                Repetice
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => setTaktPopoverOtevreny(true)}>
+                Změnit takt
+              </button>
+              <button type="button" className="btn akordy-vyber-zrusit" onClick={() => setVyber([])}>
+                Zrušit výběr
+              </button>
+            </div>
           )}
         </div>
-      ))}
 
-      <datalist id="akordy-sekce-navrhy">
-        {SEKCE_NAVRHY.map((s) => (
-          <option key={s} value={s} />
-        ))}
-      </datalist>
-
-      <div className="akordy-mrizka-akce">
-        <button type="button" className="btn btn-secondary" onClick={pridatSekci}>
-          + Přidat sekci
-        </button>
-        {vyber.length > 0 && (
-          <div className="akordy-vyber-akce">
-            <span className="akordy-vyber-info">{vyber.length} vybraných buněk</span>
-            <button type="button" className="btn btn-secondary" onClick={otevriRepetici}>
-              Repetice
-            </button>
-            <button type="button" className="btn btn-secondary" onClick={() => setTaktPopoverOtevreny(true)}>
-              Změnit takt
-            </button>
-            <button type="button" className="btn akordy-vyber-zrusit" onClick={() => setVyber([])}>
-              Zrušit výběr
-            </button>
-          </div>
+        {repeticeChyba && (
+          <p className="akordy-repetice-chyba" role="alert">
+            {repeticeChyba}
+          </p>
         )}
-      </div>
+        {infoRadek && <p className="akordy-info-radek">{infoRadek}</p>}
 
-      {repeticeChyba && (
-        <p className="akordy-repetice-chyba" role="alert">
-          {repeticeChyba}
-        </p>
-      )}
-      {infoRadek && <p className="akordy-info-radek">{infoRadek}</p>}
-
-      {repeticePopoverOtevreny && (
-        <RepeticePopover onPotvrdit={potvrdRepetici} onZrusit={() => setRepeticePopoverOtevreny(false)} />
-      )}
-      {taktPopoverOtevreny && (
-        <ZmenitTaktPopover onPotvrdit={potvrdZmenuTaktu} onZrusit={() => setTaktPopoverOtevreny(false)} />
-      )}
+        {repeticePopoverOtevreny && (
+          <RepeticePopover onPotvrdit={potvrdRepetici} onZrusit={() => setRepeticePopoverOtevreny(false)} />
+        )}
+        {taktPopoverOtevreny && (
+          <ZmenitTaktPopover onPotvrdit={potvrdZmenuTaktu} onZrusit={() => setTaktPopoverOtevreny(false)} />
+        )}
       </div>
     </>
   )

@@ -16,4 +16,10 @@ export default defineConfig(({ mode }) => ({
       '/api': 'http://localhost:8007',
     },
   },
+  test: {
+    // Čistá logika (akordovyModel.js apod.) — žádné DOM, 'node' prostředí
+    // stačí a je rychlejší než jsdom.
+    environment: 'node',
+    include: ['src/**/*.test.js'],
+  },
 }))

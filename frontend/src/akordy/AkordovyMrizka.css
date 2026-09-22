@@ -51,6 +51,21 @@
   min-height: auto;
 }
 
+.akordy-sekce-spojit {
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-3);
+  min-height: auto;
+}
+
+/* Scroll je SDÍLENÝ pro celou sekci (zadání bod 2), ne po řádcích — jeden
+   kontejner tady, `.akordy-takty` uvnitř už vlastní overflow nemá. Scrollbar
+   se objeví, jen když aspoň jeden řádek (i s tlačítkem rozdělení, viz
+   `.akordy-radek`) přetéká — to je defaultní chování overflow-x:auto, nic
+   navíc se tu nemusí hlídat ručně. */
+.akordy-sekce-scroll {
+  overflow-x: auto;
+}
+
 .akordy-radky {
   list-style: none;
   margin: 0;
@@ -62,7 +77,6 @@
 
 .akordy-radek {
   display: flex;
-  flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--space-3);
 }
@@ -70,13 +84,29 @@
 .akordy-takty {
   display: flex;
   gap: 0;
-  overflow-x: auto;
-  flex: 1 1 auto;
-  min-width: 0;
+  flex-shrink: 0;
   /* Řádek se nikdy sám nezalamuje (viz zpevnik/akordy_pdf.py) — delší než
-     4 takty výchozího taktu prostě odscroluje. Šířka buňky se dopočítává
-     v JS (viz AkordovyMrizka), aby přesně 4 takty vyšly na šířku beze
-     scrollu od cca 1024px okna výš. */
+     4 takty výchozího taktu prostě odscroluje (spolu s celou sekcí, viz
+     .akordy-sekce-scroll). Šířka buňky se dopočítává v JS (viz
+     AkordovyMrizka), aby 4 takty vyšly na šířku s rezervou. */
+}
+
+/* Nenápadná akce (zadání bod 3) — jen u řádků, které NEJSOU první v sekci
+   (ten první dělit nejde, nebylo by co dát do horní části). */
+.akordy-radek-rozdelit {
+  flex-shrink: 0;
+  align-self: center;
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  color: var(--app-ink-45);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  padding: var(--space-1) var(--space-2);
+}
+.akordy-radek-rozdelit:hover {
+  color: var(--app-secondary);
 }
 
 .akordy-takt {

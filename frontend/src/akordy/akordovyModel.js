@@ -276,6 +276,61 @@ export function zpusobiZtratuZmenaVyberu(zapis, vyber, novyDob) {
   })
 }
 
+// --- rozdělení / spojení sekcí (viz zadání bod 3) ---
+
+// Rozdělí sekci na dvě OD `radekIdx` (musí být >0 — první řádek sekce se
+// dělit nedá, tam by vznikla prázdná horní část). Horní si nechá řádky
+// [0..radekIdx-1] a repetice, které leží CELÉ v ní; dolní dostane řádky
+// [radekIdx..] a repetice, které leží CELÉ v ní, s indexy posunutými o
+// počet taktů horní části (repetice indexují takty relativně k VLASTNÍ
+// sekci, viz modul docstring). Repetice PŘES hranici dělení (začíná
+// nahoře, končí dole) rozdělení jako celek odmítne — vrátí `{ok:false}`
+// místo aby ji tiše osekala nebo přesunula.
+export function rozdelSekciOdRadku(sekce, radekIdx) {
+  const hraniceTaktu = sekce.radky
+    .slice(0, radekIdx)
+    .reduce((sum, r) => sum + r.takty.length, 0)
+
+  const pretina = sekce.repetice.some(
+    (r) => r.od_taktu < hraniceTaktu && r.do_taktu >= hraniceTaktu,
+  )
+  if (pretina) {
+    return { ok: false, hlaska: 'Tady je repetice přes více řádků, nejdřív ji zruš.' }
+  }
+
+  const horniRepetice = sekce.repetice.filter((r) => r.do_taktu < hraniceTaktu)
+  const dolniRepetice = sekce.repetice
+    .filter((r) => r.od_taktu >= hraniceTaktu)
+    .map((r) => ({
+      ...r,
+      od_taktu: r.od_taktu - hraniceTaktu,
+      do_taktu: r.do_taktu - hraniceTaktu,
+    }))
+
+  const puvodni = { ...sekce, radky: sekce.radky.slice(0, radekIdx), repetice: horniRepetice }
+  const nova = { nazev: '', radky: sekce.radky.slice(radekIdx), repetice: dolniRepetice }
+  return { ok: true, puvodni, nova }
+}
+
+// Spojí `aktualni` sekci S PŘEDCHOZÍ (`predchozi`) do jedné — opak
+// `rozdelSekciOdRadku`. Název: vyhrává `predchozi` (název `aktualni` se
+// zahodí, viz zadání). Repetice `aktualni` se přeindexují o počet taktů
+// `predchozi` (v součtu jsou teď až ZA nimi), repetice `predchozi`
+// zůstávají beze změny (jsou pořád na začátku).
+export function spojSeSPredchozi(predchozi, aktualni) {
+  const posun = pocetTaktuVSekci(predchozi)
+  const posunutaRepetice = aktualni.repetice.map((r) => ({
+    ...r,
+    od_taktu: r.od_taktu + posun,
+    do_taktu: r.do_taktu + posun,
+  }))
+  return {
+    nazev: predchozi.nazev,
+    radky: [...predchozi.radky, ...aktualni.radky],
+    repetice: [...predchozi.repetice, ...posunutaRepetice],
+  }
+}
+
 // `novyTakt` je {dob, hodnota}, nebo null pro "výchozí" (zruší přepis).
 export function aplikujZmenuTaktuNaVyber(zapis, vyber, novyTakt) {
   const cile = new Set(
