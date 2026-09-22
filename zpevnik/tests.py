@@ -1362,8 +1362,10 @@ class AkordyPdfMrizkaTests(TestCase):
     dokument, ne jen ten řádek. Prázdná doba má VŽDY tečku (nikdy se
     nepotlačuje, viz oprava bodu 4) a akord nesmí zasahovat do sousední
     doby — místo lokálního zmenšování písma se rozšíří jen POSTIŽENÁ doba
-    na šířku textu (viz oprava bodu 5), nerozšířené doby mají v celém
-    dokumentu jednotnou šířku (bod 8)."""
+    na šířku textu (viz oprava bodu 5). Šířka doby se počítá PER POZICE
+    NAPŘÍČ CELÝM DOKUMENTEM (viz oprava "zarovnání do mřížky"), ne uvnitř
+    jednotlivého taktu — takže taktové čáry jsou ve všech řádcích ve
+    stejné svislici, i když se řádky liší obsahem."""
 
     def test_prazdna_doba_ma_zakladni_sirku(self):
         from zpevnik.akordy_pdf import _sirka_doby
@@ -1387,19 +1389,79 @@ class AkordyPdfMrizkaTests(TestCase):
         self.assertGreater(sirka, 20)
         self.assertAlmostEqual(sirka, ocekavana)
 
-    def test_sirka_taktu_je_soucet_sirek_dob(self):
-        from zpevnik.akordy_pdf import _sirka_taktu
+    def test_sirky_pozic_pro_kratke_akordy_je_zakladni_na_kazde_pozici(self):
+        from zpevnik.akordy_pdf import _sirky_pozic
 
-        takt = {"bunky": ["C", "", "", ""]}
-        self.assertEqual(_sirka_taktu(takt, 40, 17.5), 160)
+        radky = [{"takty": [{"bunky": ["C", "", "", ""]}]}]
+        self.assertEqual(_sirky_pozic(radky, 40, 17.5), [40, 40, 40, 40])
 
     def test_takt_s_prepisem_na_2_doby_ma_presne_2x_zakladni_sirku_kdyz_prazdny(self):
-        # Regrese k opravenému bodu 9: badge "2/4" nesmí mít za sebou
-        # žádné navíc místo, pokud jsou obě doby prázdné/krátké.
-        from zpevnik.akordy_pdf import _sirka_taktu
+        # Regrese k opravenému bodu 9: badge "2/4" nesmí mít za sebou žádné
+        # navíc místo, pokud jsou obě doby prázdné/krátké a nic jinde v
+        # dokumentu na těch pozicích nerozšiřuje.
+        from zpevnik.akordy_pdf import _sirky_pozic
 
-        takt = {"bunky": ["G", "C"], "takt": {"dob": 2, "hodnota": 4}}
-        self.assertEqual(_sirka_taktu(takt, 40, 17.5), 80)
+        radky = [{"takty": [{"bunky": ["G", "C"], "takt": {"dob": 2, "hodnota": 4}}]}]
+        self.assertEqual(_sirky_pozic(radky, 40, 17.5), [40, 40])
+
+    def test_sirky_pozic_je_globalni_max_pres_vsechny_radky_na_stejne_pozici(self):
+        # Přímo srdce opravy "zarovnání do mřížky": dlouhý akord v JEDNOM
+        # řádku na pozici 2 rozšíří POZICI 2 pro VŠECHNY řádky dokumentu,
+        # ne jen svůj vlastní takt — jinak by taktové čáry nebyly pod
+        # sebou (přesně bug, co se opravoval).
+        from zpevnik.akordy_pdf import _sirky_pozic
+
+        radky = [
+            {"takty": [{"bunky": ["A", "", "Gmaj7", ""]}]},
+            {"takty": [{"bunky": ["C", "", "", ""]}]},
+        ]
+        sirky = _sirky_pozic(radky, 40, 17.5)
+        self.assertGreater(sirky[2], 40)
+        self.assertEqual(sirky[0], 40)
+        self.assertEqual(sirky[1], 40)
+        self.assertEqual(sirky[3], 40)
+
+    def test_kratsi_radek_neomezuje_sirku_pozic_za_svym_koncem(self):
+        from zpevnik.akordy_pdf import _sirky_pozic
+
+        radky = [
+            {"takty": [{"bunky": ["C"]}]},
+            {"takty": [{"bunky": ["D", "", "Gmaj7", ""]}]},
+        ]
+        sirky = _sirky_pozic(radky, 40, 17.5)
+        self.assertEqual(len(sirky), 4)
+        self.assertGreater(sirky[2], 40)
+
+    def test_pozice_zacatku_taktu_scita_delky_predchozich_taktu(self):
+        from zpevnik.akordy_pdf import _pozice_zacatku_taktu
+
+        radek = {
+            "takty": [
+                {"bunky": ["A", "", "", ""]},
+                {"bunky": ["G", "C"]},
+                {"bunky": ["E"]},
+            ]
+        }
+        self.assertEqual(_pozice_zacatku_taktu(radek, 0), 0)
+        self.assertEqual(_pozice_zacatku_taktu(radek, 1), 4)
+        self.assertEqual(_pozice_zacatku_taktu(radek, 2), 6)
+
+    def test_taktove_cary_ve_dvou_ruznych_radcich_jsou_ve_stejne_pozici(self):
+        # End-to-end ověření celé opravy: dva řádky, jeden s dlouhým
+        # akordem, druhý bez — hranice mezi 1. a 2. taktem musí vyjít
+        # STEJNĚ pro oba, i když jsou jinak obsahem různě "těžké".
+        from zpevnik.akordy_pdf import _sirky_pozic, _x_pozice_taktu
+
+        radek_s_dlouhym = {
+            "takty": [{"bunky": ["A", "", "Gmaj7", ""]}, {"bunky": ["D", "", "", ""]}]
+        }
+        radek_kratky = {"takty": [{"bunky": ["C", "", "", ""]}, {"bunky": ["E", "", "", ""]}]}
+        sirky = _sirky_pozic([radek_s_dlouhym, radek_kratky], 40, 17.5)
+
+        hranice_dlouhy = _x_pozice_taktu(radek_s_dlouhym, sirky, 1)
+        hranice_kratky = _x_pozice_taktu(radek_kratky, sirky, 1)
+        self.assertEqual(hranice_dlouhy, hranice_kratky)
+        self.assertGreater(hranice_dlouhy, 4 * 40)
 
     def _zapis(self, sekce, dob=4, hodnota=4):
         return {"schema": 2, "takt": {"dob": dob, "hodnota": hodnota}, "tempo": None, "sekce": sekce}

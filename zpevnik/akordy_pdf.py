@@ -12,13 +12,19 @@ mřížka akordů s ručním umisťováním potřebuje přesnou kontrolu pozic.
 ŘÁDEK = ŘÁDEK. Appka sama nikdy nezalamuje — jak je řádek napsaný v
 editoru, tak vyjde v PDF.
 
-Šířka doby je jednotná PRO NEROZŠÍŘENÉ doby v celém dokumentu (takty bez
-dlouhých akordů jsou tak pod sebou zarovnané) — ale KAŽDÁ doba se
-individuálně rozšíří, pokud se do základní šířky nevejde její akord
-(žádné lokální zmenšování písma, žádné přetékání do sousední doby). Když
-tím některý řádek přesáhne šířku stránky, zmenší se ŠÍŘKA DOBY (a s ní
-úměrně velikost písma) pro CELÝ DOKUMENT, dokud se nejširší řádek nevejde
-— hledá se iterativně, protože širší doba × menší písmo jsou provázané.
+ZAROVNÁNÍ DO MŘÍŽKY (viz oprava): šířka doby se neurčuje uvnitř taktu, ale
+pro každou POZICI doby v řádku (0-based, napříč VŠEMI takty toho řádku)
+NAPŘÍČ CELÝM DOKUMENTEM — je to max potřebné šířky na téhle pozici ve
+VŠECH řádcích dokumentu, co na ni vůbec sahají (viz `_sirky_pozic`).
+Taktové čáry jsou proto v celém dokumentu ve stejné svislici: takt na
+pozici (0..3) má všude stejnou šířku, ať je v jakémkoliv řádku. Kratší
+řádek prostě skončí dřív, pozice si šířku drží dál pro ostatní řádky, co
+na ni sahají. Prázdná doba se nikdy nerozšiřuje (jen nese tečku); obsazená
+se rozšíří, jen když by se do základní šířky nevešel její akord (žádné
+lokální zmenšování písma, žádné přetékání do sousední doby). Když tím
+některý řádek přesáhne šířku stránky, zmenší se ŠÍŘKA DOBY (a s ní úměrně
+velikost písma) pro CELÝ DOKUMENT, dokud se nejširší řádek nevejde —
+hledá se iterativně, protože širší doba × menší písmo jsou provázané.
 """
 
 import io
@@ -102,35 +108,57 @@ def _velikost_pro_text(text, font, dostupna_sirka, zakladni_velikost, min_veliko
 
 
 def _sirka_doby(text, sirka_doby_zakladni, velikost_akordu):
-    """Šířka JEDNÉ doby — základní, POKUD se do ní vejde akord (prázdná
-    doba se nikdy nerozšiřuje, jen nese tečku). Jinak přesně tak široká,
-    aby akord i s rezervou sedl celý (viz zadání bod 5: akord nesmí
-    zasahovat do sousední doby, žádné přetékání)."""
+    """Šířka JEDNÉ doby POTŘEBNÁ pro tenhle text — základní, pokud je
+    prázdný nebo se do ní akord vejde, jinak přesně tak široká, aby akord
+    i s rezervou sedl celý (akord nesmí zasahovat do sousední doby, žádné
+    přetékání). Tohle je jen "kolik by tahle jedna buňka potřebovala" —
+    výslednou šířku POZICE (napříč celým dokumentem) počítá `_sirky_pozic`."""
     if not text:
         return sirka_doby_zakladni
     potrebna = pdfmetrics.stringWidth(text, FONT_AKORD, velikost_akordu) + REZERVA_MEZI_AKORDY
     return max(sirka_doby_zakladni, potrebna)
 
 
-def _sirky_dob_v_taktu(bunky, sirka_doby_zakladni, velikost_akordu):
-    return [_sirka_doby(b, sirka_doby_zakladni, velikost_akordu) for b in bunky]
+def _flat_bunky(radek):
+    """Zploštěný seznam buněk celého řádku napříč VŠEMI jeho takty — to je
+    "pozice doby v řádku" z modulového docstringu, na kterou navazuje
+    zarovnání do mřížky (stejná pozice = stejná šířka ve všech řádcích)."""
+    bunky = []
+    for t in radek["takty"]:
+        bunky.extend(t["bunky"])
+    return bunky
 
 
-def _sirka_taktu(takt_v_radku, sirka_doby_zakladni, velikost_akordu):
-    return sum(_sirky_dob_v_taktu(takt_v_radku["bunky"], sirka_doby_zakladni, velikost_akordu))
+def _pozice_zacatku_taktu(radek, index_taktu):
+    """Flat pozice (index do _flat_bunky) první doby daného taktu v řádku."""
+    return sum(len(t["bunky"]) for t in radek["takty"][:index_taktu])
 
 
-def _sirka_radku(radek, sirka_doby_zakladni, velikost_akordu):
-    return sum(_sirka_taktu(t, sirka_doby_zakladni, velikost_akordu) for t in radek["takty"])
+def _sirky_pozic(vsechny_radky, sirka_doby_zakladni, velikost_akordu):
+    """Šířka KAŽDÉ POZICE doby v řádku, napříč CELÝM DOKUMENTEM — max
+    potřebné šířky na téhle pozici ve všech řádcích, co na ni sahají (viz
+    modulový docstring). Vrací list délky nejdelšího řádku (v dobách);
+    kratší řádky při vykreslování prostě použijí jen svůj prefix."""
+    max_pozic = max((len(_flat_bunky(r)) for r in vsechny_radky), default=0)
+    sirky = [sirka_doby_zakladni] * max_pozic
+    for radek in vsechny_radky:
+        for p, text in enumerate(_flat_bunky(radek)):
+            sirky[p] = max(sirky[p], _sirka_doby(text, sirka_doby_zakladni, velikost_akordu))
+    return sirky
 
 
-def _najdi_scale(vsechny_sekce, sirka_obsahu, dob_vychozi):
+def _najdi_scale(vsechny_radky, sirka_obsahu, dob_vychozi):
     """Iterativně najde největší `scale` (<=1), při kterém se nejširší
-    řádek (počítaný SE VŠEMI rozšířeními dob, viz _sirka_radku) vejde do
+    řádek (počítaný PŘES GLOBÁLNÍ ŠÍŘKY POZIC, viz _sirky_pozic) vejde do
     šířky stránky. Rozšíření dob závisí na velikosti písma, ta na scale —
-    proto iterace, ne jeden výpočet (viz modul docstring)."""
-    radky = [radek for sekce in vsechny_sekce for radek in sekce["radky"]]
-    if not radky:
+    proto iterace, ne jeden výpočet (viz modul docstring).
+
+    Nejširší řádek = řádek s NEJVÍC pozicemi: šířky pozic jsou globální
+    maximum přes všechny řádky, takže součet za víc pozic je vždycky >=
+    součet za míň pozic (všechny členy jsou kladné) — stačí tedy sečíst
+    CELÉ pole `_sirky_pozic` (délka = nejdelší řádek), není potřeba
+    porovnávat řádek po řádku zvlášť."""
+    if not vsechny_radky:
         return 1.0
 
     zakladni_sirka_doby_pri_1 = sirka_obsahu / (POCET_TAKTU_NA_RADEK * dob_vychozi)
@@ -138,7 +166,8 @@ def _najdi_scale(vsechny_sekce, sirka_obsahu, dob_vychozi):
     for _ in range(40):
         sirka_doby_zakladni = zakladni_sirka_doby_pri_1 * scale
         velikost_akordu = max(VELIKOST_AKORDU * scale, TECHNICKY_MIN_VELIKOST)
-        nejsirsi = max(_sirka_radku(r, sirka_doby_zakladni, velikost_akordu) for r in radky)
+        sirky_pozic = _sirky_pozic(vsechny_radky, sirka_doby_zakladni, velikost_akordu)
+        nejsirsi = sum(sirky_pozic)
         if nejsirsi <= sirka_obsahu + 0.01:
             break
         scale = max(scale * (sirka_obsahu / nejsirsi), TECHNICKY_MIN_SCALE)
@@ -158,11 +187,12 @@ def vygeneruj_pdf(pisen, akordy):
     hodnota_vychozi = takt_vychozi["hodnota"]
     tempo = akordy.get("tempo")
     vsechny_sekce = akordy["sekce"]
+    vsechny_radky = [radek for sekce in vsechny_sekce for radek in sekce["radky"]]
 
     sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
     x0 = OKRAJ + SIRKA_GUTTERU
 
-    scale = _najdi_scale(vsechny_sekce, sirka_obsahu, dob_vychozi)
+    scale = _najdi_scale(vsechny_radky, sirka_obsahu, dob_vychozi)
     sirka_doby_zakladni = (sirka_obsahu / (POCET_TAKTU_NA_RADEK * dob_vychozi)) * scale
     velikost_akordu = max(VELIKOST_AKORDU * scale, TECHNICKY_MIN_VELIKOST)
     velikost_sekce = max(VELIKOST_SEKCE * scale, TECHNICKY_MIN_VELIKOST)
@@ -175,6 +205,10 @@ def vygeneruj_pdf(pisen, akordy):
     chord_offset = CHORD_BASELINE_OFFSET * scale
     sekce_offset = SEKCE_BASELINE_OFFSET * scale
     badge_nad_radkem = BADGE_NAD_RADKEM_OFFSET * scale
+
+    # Jednou spočítané GLOBÁLNÍ šířky pozic — stejné pro celý dokument, viz
+    # modul docstring. Tohle je to, co zajišťuje "taktové čáry pod sebou".
+    sirky_pozic = _sirky_pozic(vsechny_radky, sirka_doby_zakladni, velikost_akordu)
 
     dolni_limit = OKRAJ + vyska_radku
 
@@ -253,10 +287,11 @@ def vygeneruj_pdf(pisen, akordy):
             c.setLineWidth(TLOUSTKA_CARY)
             x = x0
             c.line(x, y_radku - vyska_radku, x, y_radku)
+            pozice = 0
             for takt_v_radku in radek["takty"]:
                 efektivni = _efektivni_takt(takt_v_radku, takt_vychozi)
                 bunky = takt_v_radku["bunky"]
-                sirky_dob = _sirky_dob_v_taktu(bunky, sirka_doby_zakladni, velikost_akordu)
+                sirky_dob = sirky_pozic[pozice : pozice + len(bunky)]
                 sirka_taktu = sum(sirky_dob)
 
                 if takt_v_radku.get("takt"):
@@ -290,6 +325,7 @@ def vygeneruj_pdf(pisen, akordy):
                     x_doba += sirka_teto_doby
 
                 x += sirka_taktu
+                pozice += len(bunky)
                 c.line(x, y_radku - vyska_radku, x, y_radku)
 
             # --- repetice sekce, které zasahují do TOHOTO řádku ---
@@ -303,8 +339,7 @@ def vygeneruj_pdf(pisen, akordy):
                     x0=x0,
                     y_radku=y_radku,
                     vyska_radku=vyska_radku,
-                    sirka_doby_zakladni=sirka_doby_zakladni,
-                    velikost_akordu=velikost_akordu,
+                    sirky_pozic=sirky_pozic,
                     radek=radek,
                     od_v_radku=seg_od - od_g,
                     do_v_radku=seg_do - od_g,
@@ -324,13 +359,11 @@ def vygeneruj_pdf(pisen, akordy):
     return buffer.getvalue()
 
 
-def _x_pozice_taktu(radek, sirka_doby_zakladni, velikost_akordu, index_taktu):
-    """X offset (od začátku řádku) taktu na daném indexu — sečte SKUTEČNÉ
-    (případně rozšířené) šířky všech předchozích taktů."""
-    x = 0
-    for t in radek["takty"][:index_taktu]:
-        x += _sirka_taktu(t, sirka_doby_zakladni, velikost_akordu)
-    return x
+def _x_pozice_taktu(radek, sirky_pozic, index_taktu):
+    """X offset (od začátku řádku) taktu na daném indexu — sečte GLOBÁLNÍ
+    šířky pozic (viz _sirky_pozic) všech předchozích taktů TOHOTO řádku."""
+    pozice_zacatku = _pozice_zacatku_taktu(radek, index_taktu)
+    return sum(sirky_pozic[:pozice_zacatku])
 
 
 def _kresli_repetici(
@@ -338,8 +371,7 @@ def _kresli_repetici(
     x0,
     y_radku,
     vyska_radku,
-    sirka_doby_zakladni,
-    velikost_akordu,
+    sirky_pozic,
     radek,
     od_v_radku,
     do_v_radku,
@@ -351,8 +383,8 @@ def _kresli_repetici(
 ):
     """Tlustá čára + dvě tečky na začátku a konci rozsahu, ×N vpravo od
     konce. Rozsah je už OŘÍZNUTÝ na tenhle řádek (viz volající)."""
-    x_zacatek = x0 + _x_pozice_taktu(radek, sirka_doby_zakladni, velikost_akordu, od_v_radku)
-    x_konec = x0 + _x_pozice_taktu(radek, sirka_doby_zakladni, velikost_akordu, do_v_radku + 1)
+    x_zacatek = x0 + _x_pozice_taktu(radek, sirky_pozic, od_v_radku)
+    x_konec = x0 + _x_pozice_taktu(radek, sirky_pozic, do_v_radku + 1)
     y_tecka_horni = y_radku - vyska_radku * 0.35
     y_tecka_dolni = y_radku - vyska_radku * 0.65
 
