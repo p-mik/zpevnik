@@ -1,5 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { useApiResource } from '../hooks/useApiResource'
+import { useAuth } from '../auth/AuthContext'
 import SongRow, { SongList } from '../components/SongRow'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
@@ -9,6 +10,7 @@ import './SongbookPage.css'
 
 export default function SongbookPage() {
   const { id } = useParams()
+  const { user } = useAuth()
   const { data: zpevnik, loading, error, reload } = useApiResource(`/api/zpevniky/${id}/`)
 
   if (loading) return <LoadingState label="Načítám zpěvník…" />
@@ -29,9 +31,16 @@ export default function SongbookPage() {
 
       <div className="songbook-head">
         <h1 className="section-heading">{zpevnik.nazev}</h1>
-        <Link to={`/zpevniky/${id}/nova-pisen-akordy`} className="btn btn-secondary">
-          + Nová píseň z akordů
-        </Link>
+        <div className="songbook-head-akce">
+          <Link to={`/zpevniky/${id}/nova-pisen-akordy`} className="btn btn-secondary">
+            + Nová píseň z akordů
+          </Link>
+          {user?.role === 'admin' && (
+            <Link to={`/import?zpevnik=${id}`} className="btn btn-secondary">
+              Import PDF
+            </Link>
+          )}
+        </div>
       </div>
 
       {zpevnik.pisne.length === 0 ? (

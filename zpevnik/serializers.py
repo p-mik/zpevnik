@@ -514,18 +514,33 @@ class ImportKategoriePlanSerializer(serializers.Serializer):
 
 
 class ImportCelyZpevnikPlanSerializer(serializers.Serializer):
-    """Jeden Zpevnik se všemi importovanými písněmi — "ta kniha jako celek",
-    nezávisle na Slozka/Zpevnik rozpadu po kategoriích (viz import_pisni.py).
-    """
+    """Cíl importu (PC_zpevnik_sprava.md bod 4) — JEDEN Zpevnik, do kterého
+    se zařadí VŠECHNY importované písně, nezávisle na Slozka/Zpevnik
+    rozpadu po kategoriích níž (viz import_pisni.py). Buď existující
+    (`existujici_id`), nebo nový (`nazev`) — právě jedno z obojího."""
 
-    nazev = serializers.CharField(max_length=255)
-    vytvorit = serializers.BooleanField(default=True)
+    existujici_id = serializers.PrimaryKeyRelatedField(
+        queryset=Zpevnik.objects.all(), required=False, allow_null=True, default=None
+    )
+    nazev = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+
+    def validate(self, attrs):
+        if attrs.get("existujici_id") and attrs.get("nazev"):
+            raise serializers.ValidationError(
+                "Zadej buď existující zpěvník, nebo název nového — ne obojí."
+            )
+        if not attrs.get("existujici_id") and not attrs.get("nazev"):
+            raise serializers.ValidationError("Vyber cílový zpěvník, nebo zadej název nového.")
+        return attrs
 
 
 class ImportPlanSerializer(serializers.Serializer):
     pisne = ImportPisenPlanSerializer(many=True)
     kategorie = ImportKategoriePlanSerializer(many=True, required=False, default=list)
-    cely_zpevnik = ImportCelyZpevnikPlanSerializer(required=False, allow_null=True, default=None)
+    # Povinné — import je vždycky DO KONKRÉTNÍHO zpěvníku (viz
+    # PC_zpevnik_sprava.md bod 4), `kategorie` je jen volitelné rozdělení
+    # navíc pro procházení podle první číslice kódu.
+    cely_zpevnik = ImportCelyZpevnikPlanSerializer()
 
     def validate_pisne(self, value):
         if not value:

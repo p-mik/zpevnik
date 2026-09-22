@@ -1,6 +1,7 @@
 import { useRef } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import { useApiResource } from '../hooks/useApiResource'
 import { useImportWizard } from '../import/useImportWizard'
 import ImportReviewTable from '../import/ImportReviewTable'
 import ImportKategorieStep from '../import/ImportKategorieStep'
@@ -20,13 +21,20 @@ export default function ImportPage() {
   return <ImportWizard />
 }
 
+// ?zpevnik=<id> — import spuštěný z konkrétního zpěvníku (viz SongbookPage
+// "+ Import PDF") předvyplní cíl, ať ho uživatel nemusí hledat ve výběru.
 function ImportWizard() {
-  const wizard = useImportWizard()
+  const [searchParams] = useSearchParams()
+  const presetZpevnikId = searchParams.get('zpevnik')
+  const { data: presetZpevnik } = useApiResource(
+    presetZpevnikId ? `/api/zpevniky/${presetZpevnikId}/` : null,
+  )
+  const wizard = useImportWizard(presetZpevnikId)
   const fileInputRef = useRef(null)
 
   return (
     <div className="import-page">
-      <h1>Hromadný import zpěvníku</h1>
+      <h1>Hromadný import zpěvníku{presetZpevnik ? ` — ${presetZpevnik.nazev}` : ''}</h1>
       <p className="import-intro">
         Nahraj jedno PDF s celým zpěvníkem — parser navrhne rozdělení na jednotlivé písně,
         ty pak potvrdíš (nebo opravíš) v tabulce. Nic se nezaloží, dokud to na konci
@@ -88,27 +96,66 @@ function ImportWizard() {
 
       {wizard.step === 'kategorie' && (
         <>
-          <h2 className="section-heading">Celý zpěvník</h2>
+          <h2 className="section-heading">Cíl importu</h2>
           <p className="import-intro">
-            Jeden zpěvník se všemi {wizard.songs.length} písněmi — na tenhle má smysl navázat
-            setlist nebo mu později v adminu vygenerovat jeden veřejný QR odkaz. Nezávisí na
-            kategoriích níž, píseň může být v obou zároveň.
+            Zpěvník, do kterého se zařadí všech {wizard.songs.length} písní — existující, nebo
+            nový. Kód z tabulky se použije, pokud je v cílovém zpěvníku volný; při kolizi píseň
+            dostane další volný kód (uvidíš v souhrnu po dokončení). Nezávisí na kategoriích níž,
+            píseň může být v obou zároveň.
           </p>
           <div className="import-cely-zpevnik panel">
-            <label className="import-kategorie-checkbox">
+            <div className="import-cily-volba">
+              <label>
+                <input
+                  type="radio"
+                  name="cily-zpevnik-mod"
+                  checked={wizard.celyZpevnik.mod === 'novy'}
+                  onChange={() => wizard.updateCelyZpevnik({ mod: 'novy' })}
+                />
+                Nový zpěvník
+              </label>
+              <label>
+                <input
+                  type="radio"
+                  name="cily-zpevnik-mod"
+                  checked={wizard.celyZpevnik.mod === 'existujici'}
+                  onChange={() => wizard.updateCelyZpevnik({ mod: 'existujici' })}
+                />
+                Existující zpěvník
+              </label>
+            </div>
+
+            {wizard.celyZpevnik.mod === 'novy' ? (
               <input
-                type="checkbox"
-                checked={wizard.celyZpevnik.vytvorit}
-                onChange={(e) => wizard.updateCelyZpevnik({ vytvorit: e.target.checked })}
+                type="text"
+                className="field-input import-cely-zpevnik-nazev"
+                placeholder="Název nového zpěvníku"
+                value={wizard.celyZpevnik.nazev}
+                onChange={(e) => wizard.updateCelyZpevnik({ nazev: e.target.value })}
+                required
               />
-            </label>
-            <input
-              type="text"
-              className="field-input import-cely-zpevnik-nazev"
-              value={wizard.celyZpevnik.nazev}
-              disabled={!wizard.celyZpevnik.vytvorit}
-              onChange={(e) => wizard.updateCelyZpevnik({ nazev: e.target.value })}
-            />
+            ) : (
+              <select
+                className="field-input import-cely-zpevnik-nazev"
+                value={wizard.celyZpevnik.existujiciId}
+                onChange={(e) => wizard.updateCelyZpevnik({ existujiciId: e.target.value })}
+                required
+              >
+                <option value="" disabled>
+                  Vyber zpěvník…
+                </option>
+                {wizard.vsechnyZpevniky.map((z) => (
+                  <option key={z.id} value={z.id}>
+                    {z.nazev}
+                  </option>
+                ))}
+              </select>
+            )}
+            {!wizard.celyZpevnikValidni && (
+              <p className="import-cily-chyba">
+                {wizard.celyZpevnik.mod === 'novy' ? 'Zadej název nového zpěvníku.' : 'Vyber cílový zpěvník.'}
+              </p>
+            )}
           </div>
 
           <h2 className="section-heading">Kategorie ze složek</h2>
@@ -126,7 +173,12 @@ function ImportWizard() {
             <button type="button" className="btn" onClick={wizard.goToReview}>
               Zpět na tabulku
             </button>
-            <button type="button" className="btn btn-primary" onClick={wizard.submit}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={wizard.submit}
+              disabled={!wizard.celyZpevnikValidni}
+            >
               Provést import ({wizard.songs.length} písní)
             </button>
           </div>
@@ -191,6 +243,25 @@ function ImportResult({ data, onZnovu }) {
         )}
         .
       </p>
+      {data.prejmenovani_kodu?.length > 0 && (
+        <div className="import-prejmenovani">
+          <p>
+            {data.prejmenovani_kodu.length}{' '}
+            {data.prejmenovani_kodu.length === 1 ? 'píseň dostala' : 'písní dostalo'} v cílovém
+            zpěvníku jiný kód, protože ten z PDF tam už byl obsazený:
+          </p>
+          <ul className="import-result-list">
+            {data.prejmenovani_kodu.map((p) => (
+              <li key={`${p.puvodni}-${p.novy}-${p.nazev}`}>
+                <span className="code-chip">
+                  {String(p.puvodni).padStart(3, '0')} → {String(p.novy).padStart(3, '0')}
+                </span>
+                <span>{p.nazev}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <ul className="import-result-list">
         {data.pisne.map((p) => (
           <li key={p.id}>

@@ -10,3 +10,9 @@
 .songbook-head .section-heading {
   margin-bottom: 0;
 }
+
+.songbook-head-akce {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}

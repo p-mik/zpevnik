@@ -439,6 +439,9 @@ class ImportView(APIView):
                 ],
                 "slozky": [s.nazev for s in vysledek["slozky"]],
                 "zpevniky": [z.nazev for z in vysledek["zpevniky"]],
+                # Kódy přeřazené kvůli kolizi v CÍLOVÉM zpěvníku (bod 4) — UI
+                # z toho vypíše "312 → 745: Teenage Dirtbag".
+                "prejmenovani_kodu": vysledek["prejmenovani_kodu"],
             },
             status=status.HTTP_201_CREATED,
         )

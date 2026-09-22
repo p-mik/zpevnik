@@ -12,13 +12,26 @@ ne písně — dvě různé knihy si tak nepřekáží ve vlastním číslován�
 zpěvník bez vlastních čísel může vždycky čistě začít od 100/101, ať v
 databázi existuje cokoliv jiného.
 
-Idempotence: kolize se kontroluje jen proti zpěvníkům, které import osloví
-JMÉNEM a které DB už obsahuje (nový zpěvník je prázdný, tam kolidovat není
-s čím). Pokud tam kterýkoliv z plánovaných kódů už je, celý import se
-odmítne (nic se nezaloží) se seznamem kolidujících kódů a zpěvníku, kde jsou.
-Druhé spuštění se stejným (nebo překrývajícím se) plánem do TÉHOŽ zpěvníku
-tak nikdy nevyrobí duplicitní čísla — buď se nic nestane (a je jasné proč),
-nebo uživatel kódy v tabulce oprav a doimportuje jen nové písně.
+CÍLOVÝ zpěvník (`cely_zpevnik` v plánu, viz PC_zpevnik_sprava.md bod 4) —
+existující, nebo nový: kolize kódu se tam NEODMÍTÁ, ale řeší automaticky —
+kód z PDF se použije, pokud je v cílovém zpěvníku volný, jinak píseň dostane
+další volný kód (`_priradit_kod_v_cili`) a přeřazení se vrátí v
+`prejmenovani_kodu` (pro souhrn importu, "312 → 745: …").
+
+Kategorie (rozdělení podle první číslice kódu, `kategorie` v plánu) jsou
+oproti tomu pořád přísné: kolize se tam ODMÍTÁ (celý import se zastaví, nic
+se nezaloží) — jsou to vedlejší, sdílené zpěvníky napříč více importy, kde
+tiché přečíslování by matlo případné jiné odkazy na tenhle kód. Druhé
+spuštění stejného plánu do STEJNÉ kategorie tak nikdy nevyrobí duplicitní
+čísla, jen se zastaví s jasnou chybou.
+
+POZOR — idempotence písní samotných (ne kódů): tahle funkce NEDETEKUJE, že
+konkrétní píseň už byla naimportovaná dřív (žádné srovnání podle názvu ani
+obsahu) — `Pisen.objects.create` se volá pro každou položku plánu vždycky.
+Import stejného PDF do stejného CÍLOVÉHO zpěvníku podruhé proto založí
+DUPLICITNÍ písně (pod novými kódy, díky remapu výš) — na rozdíl od
+kategorií tenhle target už žádnou pojistku nemá. Viz report k
+PC_zpevnik_sprava.md bodu 4 pro návrh řešení (nezavedeno v týhle úpravě).
 """
 
 import io
@@ -39,18 +52,19 @@ def proved_import(soubor_pdf, plan):
         {
           "pisne": [{"kod": int, "nazev": str, "interpret": str, "stranky": [int, ...]}, ...],
           "kategorie": [{"digit": "1".."5", "nazev": str, "vytvorit": bool}, ...],
-          "cely_zpevnik": {"nazev": str, "vytvorit": bool} | None,
+          "cely_zpevnik": {"existujici_id": Zpevnik | None, "nazev": str},
         }
 
     `kategorie` vyrábí PRO PROHLÍŽENÍ podle první číslice kódu — vlastní
     Slozka + Zpevnik na kategorii, protože Slozka sama o sobě písně držet
-    neumí (jen Zpevnik). `cely_zpevnik` navíc založí (nebo doplní, pokud už
-    existuje) JEDEN Zpevnik se všemi importovanými písněmi — ten je "ta
-    kniha jako celek", na kterou má smysl navázat setlist nebo vygenerovat
-    jeden veřejný QR odkaz. Píseň může být v obou zároveň (M2M), takže se
-    tím nic neztrácí.
+    neumí (jen Zpevnik). `cely_zpevnik` je POVINNÝ cíl importu (bod 4) —
+    existující zpěvník (`existujici_id`, po projití serializerem už je to
+    rovnou Zpevnik instance), nebo nový (`nazev`). Píseň může být v obou
+    (kategorii i cíli) zároveň (M2M), takže se tím nic neztrácí.
 
-    Vrací dict {"pisne": [Pisen, ...], "slozky": [Slozka, ...], "zpevniky": [Zpevnik, ...]}.
+    Vrací dict {"pisne": [Pisen, ...], "slozky": [Slozka, ...], "zpevniky":
+    [Zpevnik, ...], "kod_podle_pisne": {pisen_id: kod_v_cili},
+    "prejmenovani_kodu": [{"puvodni", "novy", "nazev"}, ...]}.
     Při jakékoliv chybě vyhodí `ValidationError` a NEZALOŽÍ nic — buď projde
     celý import, nebo žádná jeho část.
     """
@@ -136,32 +150,71 @@ def proved_import(soubor_pdf, plan):
             vytvorene_slozky.append(slozka)
             vytvorene_zpevniky.append(zpevnik)
 
-        if cely_zpevnik_plan and cely_zpevnik_plan.get("vytvorit", True):
-            # Bez slozka v lookupu schválně — "celá kniha" je vědomě
-            # top-level, žádná kategorie ji nemá obalovat. get_or_create podle
-            # názvu (ne id) je to, co dělá opakovaný import idempotentní i
-            # tady: doimportované písně přibydou do STEJNÉHO zpěvníku.
-            cely_zpevnik, _ = Zpevnik.objects.get_or_create(
-                nazev=cely_zpevnik_plan["nazev"]
-            )
-            for p in vytvorene_pisne:
-                PolozkaZpevniku.objects.create(
-                    zpevnik=cely_zpevnik, pisen=p, kod=kod_podle_pisne[p.id]
+        # --- CÍLOVÝ zpěvník (bod 4) — existující, nebo nový; kolize kódu se
+        # tady NEODMÍTÁ, ale řeší automaticky (viz modul docstring). ---
+        existujici = cely_zpevnik_plan.get("existujici_id")
+        cil_zpevnik = existujici or Zpevnik.objects.create(nazev=cely_zpevnik_plan["nazev"])
+
+        # Rezervovaná množina pro "další volný kód" musí od začátku obsahovat
+        # VŠECHNY kódy zadané v týhle dávce (ne jen ty, co se ukážou po
+        # kolizi) — jinak by náhradní kód pro jednu píseň mohl sebrat kód,
+        # který si legitimně (bez kolize) žádá jiná píseň dál v plánu.
+        obsazene_existujici = set(cil_zpevnik.polozky.values_list("kod", flat=True))
+        vsechny_zadane_kody = {kod_podle_pisne[p.id] for p in vytvorene_pisne}
+        rezervovane = obsazene_existujici | vsechny_zadane_kody
+
+        prejmenovani_kodu = []
+        kod_v_cili_podle_pisne = {}
+        for p in vytvorene_pisne:
+            puvodni_kod = kod_podle_pisne[p.id]
+            if puvodni_kod in obsazene_existujici:
+                novy_kod = _dalsi_volny_kod(rezervovane)
+                rezervovane.add(novy_kod)
+                prejmenovani_kodu.append(
+                    {"puvodni": puvodni_kod, "novy": novy_kod, "nazev": p.nazev}
                 )
-            vytvorene_zpevniky.append(cely_zpevnik)
+            else:
+                novy_kod = puvodni_kod
+            kod_v_cili_podle_pisne[p.id] = novy_kod
+            PolozkaZpevniku.objects.create(zpevnik=cil_zpevnik, pisen=p, kod=novy_kod)
+        vytvorene_zpevniky.append(cil_zpevnik)
 
     return {
         "pisne": vytvorene_pisne,
         "slozky": vytvorene_slozky,
         "zpevniky": vytvorene_zpevniky,
-        # Kód z plánu — pro odpověď API (Pisen sám o sobě kód nenese, viz výš).
-        "kod_podle_pisne": kod_podle_pisne,
+        # Skutečné kódy V CÍLOVÉM zpěvníku (po případném přeřazení) — pro
+        # odpověď API. Kategorie si nesou svoje původní kódy z `kod_podle_pisne`
+        # nezávisle (viz smyčka výš), tenhle dict je jen pro "pisne" v odpovědi.
+        "kod_podle_pisne": kod_v_cili_podle_pisne,
+        "prejmenovani_kodu": prejmenovani_kodu,
     }
+
+
+def _dalsi_volny_kod(obsazene):
+    """Stejná politika jako ZpevnikViewSet.dalsi_kod — max + 1 (ne první
+    volná mezera), 101 pro prázdný zpěvník."""
+    kandidat = (max(obsazene) + 1) if obsazene else 101
+    while kandidat in obsazene:
+        kandidat += 1
+    return kandidat
 
 
 def _zkontroluj_plan(pisne_plan, pocet_stran, kategorie_plan, cely_zpevnik_plan):
     if not pisne_plan:
         raise ValidationError({"pisne": ["Plán neobsahuje žádnou píseň."]})
+
+    if not cely_zpevnik_plan.get("existujici_id"):
+        nazev = cely_zpevnik_plan.get("nazev")
+        if nazev and Zpevnik.objects.filter(nazev=nazev).exists():
+            raise ValidationError(
+                {
+                    "cely_zpevnik": [
+                        f"Zpěvník „{nazev}“ už existuje — vyber ho jako existující cíl, "
+                        "ne nový."
+                    ]
+                }
+            )
 
     kody = [p["kod"] for p in pisne_plan]
     duplicitni_v_planu = sorted({k for k in kody if kody.count(k) > 1})
@@ -174,16 +227,14 @@ def _zkontroluj_plan(pisne_plan, pocet_stran, kategorie_plan, cely_zpevnik_plan)
             }
         )
 
-    # Kolize s DB: kód je teď vlastnost zařazení do KONKRÉTNÍHO zpěvníku, ne
-    # písně — kontroluje se proto jen proti zpěvníkům, které tenhle import
-    # osloví jménem A které DB už obsahuje. Nově založený zpěvník je prázdný,
-    # tam kolidovat není s čím (proto může nová kniha bez vlastních kódů
-    # vždycky čistě začít na 100/101, ať už v DB existuje cokoliv jiného).
+    # Kolize s DB — jen pro KATEGORIE (odmítnutí celého importu, viz modul
+    # docstring): kontroluje se proti zpěvníkům, které tenhle import osloví
+    # jménem A které DB už obsahuje. Nově založený zpěvník je prázdný, tam
+    # kolidovat není s čím. CÍLOVÝ zpěvník (`cely_zpevnik`) tu schválně NENÍ
+    # — jeho kolize se řeší přeřazením kódu v `proved_import`, ne odmítnutím.
     cilove_nazvy = {
         kat["nazev"] for kat in kategorie_plan if kat.get("vytvorit", True)
     }
-    if cely_zpevnik_plan and cely_zpevnik_plan.get("vytvorit", True):
-        cilove_nazvy.add(cely_zpevnik_plan["nazev"])
 
     for zpevnik in Zpevnik.objects.filter(nazev__in=cilove_nazvy):
         obsazene = set(zpevnik.polozky.values_list("kod", flat=True))

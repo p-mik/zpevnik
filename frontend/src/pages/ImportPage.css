@@ -65,16 +65,38 @@
 
 .import-cely-zpevnik {
   display: flex;
-  align-items: center;
-  gap: var(--space-4);
+  flex-direction: column;
+  gap: var(--space-3);
   padding: var(--space-4);
   margin-bottom: var(--space-6);
 }
 
+.import-cily-volba {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font-family: var(--font-body);
+}
+
+.import-cily-volba label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .import-cely-zpevnik-nazev {
-  flex: 1 1 auto;
   font-family: var(--font-display);
   font-weight: 600;
+}
+
+.import-cily-chyba {
+  color: var(--app-error);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+.import-prejmenovani {
+  margin-bottom: var(--space-4);
 }
 
 .import-actions {

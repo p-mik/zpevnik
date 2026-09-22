@@ -842,7 +842,10 @@ class MazaniSouboruTests(SouboroveTestyZaklad):
 
 
 class HromadnyImportTests(TestCase):
-    """Import (fáze 1e) — jen admin, atomicita, idempotence přes kód."""
+    """Import (fáze 1e, cíl podle PC_zpevnik_sprava.md bod 4) — jen admin,
+    atomicita. Idempotence kódu přes reject-on-collision platí jen pro
+    KATEGORIE; cílový zpěvník (`cely_zpevnik`) kolize řeší přeřazením kódu,
+    ne odmítnutím (viz test_kolize_kodu_v_cilovem_zpevniku_prerazuje…)."""
 
     def setUp(self):
         self.media = tempfile.mkdtemp(prefix="zpevnik-test-import-")
@@ -877,7 +880,10 @@ class HromadnyImportTests(TestCase):
                 {"kod": 101, "nazev": "První píseň", "interpret": "Kapela A", "stranky": [1]},
                 # dvoustránková píseň — druhá strana jako "pokračování"
                 {"kod": 102, "nazev": "Druhá píseň", "interpret": "", "stranky": [2, 3]},
-            ]
+            ],
+            # `cely_zpevnik` je od bodu 4 POVINNÝ cíl — testy, kterým na
+            # konkrétním cíli nezáleží, dostanou tenhle výchozí (nový).
+            "cely_zpevnik": {"nazev": "Testovací kniha"},
         }
 
     def test_clen_nesmi_importovat(self):
@@ -933,22 +939,34 @@ class HromadnyImportTests(TestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(Pisen.objects.count(), 0)
 
-    def test_kod_uz_ve_cilovem_zpevniku_odmitne_cely_import(self):
-        """Kód je od fáze 2b vlastnost zařazení do KONKRÉTNÍHO zpěvníku, ne
-        písně — kolize se proto řeší jen proti zpěvníku, který plán osloví
-        jménem (tady `cely_zpevnik`), ne globálně přes celou DB."""
+    def test_kolize_kodu_v_cilovem_zpevniku_prerazuje_misto_odmitnuti(self):
+        """Bod 4: kolize kódu v CÍLOVÉM zpěvníku se neodmítá jako dřív, ale
+        píseň dostane další volný kód — přeřazení se vrátí v
+        `prejmenovani_kodu` pro souhrn importu ("312 → 745: …")."""
         existujici = Pisen.objects.create(nazev="Existující píseň")
         cil = Zpevnik.objects.create(nazev="Moje kniha")
         PolozkaZpevniku.objects.create(zpevnik=cil, pisen=existujici, kod=101)
 
         self.client.force_authenticate(self.admin)
-        plan = self.zakladni_plan()
-        plan["cely_zpevnik"] = {"nazev": "Moje kniha", "vytvorit": True}
+        plan = self.zakladni_plan()  # kódy 101 (koliduje), 102 (volný)
+        plan["cely_zpevnik"] = {"existujici_id": cil.id}
         response = self.zavolej(self.kniha(3), plan)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        # Ani kod=102 (validní, nekolidující) se nesmí založit — buď vše, nebo nic.
-        self.assertEqual(Pisen.objects.count(), 1)
-        self.assertEqual(cil.polozky.count(), 1)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(Pisen.objects.count(), 3)
+        self.assertEqual(cil.polozky.count(), 3)
+
+        prejmenovani = response.data["prejmenovani_kodu"]
+        self.assertEqual(len(prejmenovani), 1)
+        self.assertEqual(prejmenovani[0]["puvodni"], 101)
+        self.assertEqual(prejmenovani[0]["novy"], 103)
+        self.assertEqual(prejmenovani[0]["nazev"], "První píseň")
+
+        # Kód 102 z plánu nekoliduje s ničím existujícím, takže se použije
+        # beze změny — náhradní kód pro "První píseň" ho proto nesmí sebrat
+        # (rezervovaná množina zahrnuje VŠECHNY kódy dávky od začátku, ne
+        # jen ty, co se ukážou postupně).
+        kody = sorted(cil.polozky.values_list("kod", flat=True))
+        self.assertEqual(kody, [101, 102, 103])
 
     def test_stejny_kod_v_jinem_zpevniku_nekoliduje(self):
         """Dvě různé kapely/repertoáry mohou mít stejné číslo zároveň — kód
@@ -959,25 +977,34 @@ class HromadnyImportTests(TestCase):
 
         self.client.force_authenticate(self.admin)
         plan = self.zakladni_plan()
-        plan["cely_zpevnik"] = {"nazev": "Moje nová kniha", "vytvorit": True}
+        plan["cely_zpevnik"] = {"nazev": "Moje nová kniha"}
         response = self.zavolej(self.kniha(3), plan)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         self.assertEqual(Pisen.objects.count(), 3)
 
-    def test_druhe_spusteni_stejneho_importu_do_stejne_knihy_nevyrobi_duplicity(self):
-        """Idempotence: druhý běh se stejným plánem do STEJNÉHO zpěvníku
-        (jménem) se odmítne dřív, než by cokoliv založil znovu."""
+    def test_druhe_spusteni_stejneho_importu_do_stejneho_cile_vyrobi_duplicity(self):
+        """POZNÁMKA (bod 4, viz report): idempotence písní se NEŘEŠÍ — druhý
+        běh stejného plánu do TÉHOŽ cílového zpěvníku už se neodmítne (na
+        rozdíl od dřívějška), kódy se prostě přeřadí a vzniknou DUPLICITNÍ
+        písně. Tenhle test tu záměrně dokumentuje současné (nedokonalé)
+        chování, ne že by šlo o žádoucí vlastnost."""
         self.client.force_authenticate(self.admin)
+        cil = Zpevnik.objects.create(nazev="Moje kniha")
         plan = self.zakladni_plan()
-        plan["cely_zpevnik"] = {"nazev": "Moje kniha", "vytvorit": True}
+        plan["cely_zpevnik"] = {"existujici_id": cil.id}
 
         prvni = self.zavolej(self.kniha(3), plan)
         self.assertEqual(prvni.status_code, status.HTTP_201_CREATED)
         self.assertEqual(Pisen.objects.count(), 2)
 
         druhy = self.zavolej(self.kniha(3), plan)
-        self.assertEqual(druhy.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertEqual(Pisen.objects.count(), 2)
+        self.assertEqual(druhy.status_code, status.HTTP_201_CREATED, druhy.data)
+        self.assertEqual(Pisen.objects.count(), 4)
+        self.assertEqual(cil.polozky.count(), 4)
+        # obě "První píseň" existují teď jako dva samostatné záznamy
+        self.assertEqual(Pisen.objects.filter(nazev="První píseň").count(), 2)
+        # druhé kolo dostalo přeřazené kódy pro OBĚ písně (101, 102 už zabrané)
+        self.assertEqual(len(druhy.data["prejmenovani_kodu"]), 2)
 
     def test_novy_zpevnik_zacina_cistym_kodem_bez_ohledu_na_db(self):
         """To hlavní, oč ve fázi 2b šlo: nový zpěvník bez vlastních čísel
@@ -994,7 +1021,7 @@ class HromadnyImportTests(TestCase):
 
         self.client.force_authenticate(self.admin)
         plan = self.zakladni_plan()  # kody 101, 102 - stejne jako "jina_kniha"
-        plan["cely_zpevnik"] = {"nazev": "Čerstvá kniha", "vytvorit": True}
+        plan["cely_zpevnik"] = {"nazev": "Čerstvá kniha"}
         response = self.zavolej(self.kniha(3), plan)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
 
@@ -1040,6 +1067,7 @@ class HromadnyImportTests(TestCase):
                 {"digit": "1", "nazev": "Ploužáky", "vytvorit": True},
                 {"digit": "2", "nazev": "Pomalejší", "vytvorit": True},
             ],
+            "cely_zpevnik": {"nazev": "Kniha pro kategorie"},
         }
         response = self.zavolej(self.kniha(2), plan)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
@@ -1056,6 +1084,7 @@ class HromadnyImportTests(TestCase):
         plan = {
             "pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}],
             "kategorie": [{"digit": "1", "nazev": "Ploužáky", "vytvorit": False}],
+            "cely_zpevnik": {"nazev": "Kniha bez kategorie"},
         }
         response = self.zavolej(self.kniha(1), plan)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -1063,11 +1092,16 @@ class HromadnyImportTests(TestCase):
 
     def test_opakovany_import_do_stejne_kategorie_nezdvoji_slozku(self):
         """Druhé kolo s NOVÝMI kódy do stejné kategorie musí přiřadit do
-        stejné složky/zpěvníku, ne vyrobit druhou 'Ploužáky'."""
+        stejné složky/zpěvníku, ne vyrobit druhou 'Ploužáky'. Cíl obou kol
+        je STEJNÝ existující zpěvník (přes `existujici_id`) — jméno pro
+        NOVÝ cíl je teď jednorázové (viz test_novy_cil_se_stejnym_nazvem…),
+        tak by druhé kolo se stejným `nazev` samo o sobě spadlo."""
         self.client.force_authenticate(self.admin)
+        cil = Zpevnik.objects.create(nazev="Sdílený cíl")
         plan1 = {
             "pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}],
             "kategorie": [{"digit": "1", "nazev": "Ploužáky", "vytvorit": True}],
+            "cely_zpevnik": {"existujici_id": cil.id},
         }
         self.assertEqual(
             self.zavolej(self.kniha(1), plan1).status_code, status.HTTP_201_CREATED
@@ -1076,6 +1110,7 @@ class HromadnyImportTests(TestCase):
         plan2 = {
             "pisne": [{"kod": 103, "nazev": "C", "stranky": [1]}],
             "kategorie": [{"digit": "1", "nazev": "Ploužáky", "vytvorit": True}],
+            "cely_zpevnik": {"existujici_id": cil.id},
         }
         self.assertEqual(
             self.zavolej(self.kniha(1), plan2).status_code, status.HTTP_201_CREATED
@@ -1102,7 +1137,7 @@ class HromadnyImportTests(TestCase):
                 {"kod": 205, "nazev": "B", "stranky": [2]},
             ],
             "kategorie": [{"digit": "1", "nazev": "Ploužáky", "vytvorit": True}],
-            "cely_zpevnik": {"nazev": "ŠUBAPS zpěvník 2026", "vytvorit": True},
+            "cely_zpevnik": {"nazev": "ŠUBAPS zpěvník 2026"},
         }
         response = self.zavolej(self.kniha(2), plan)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
@@ -1114,42 +1149,43 @@ class HromadnyImportTests(TestCase):
         plouzaky = Zpevnik.objects.get(nazev="Ploužáky")
         self.assertEqual(list(plouzaky.polozky.values_list("kod", flat=True)), [101])
 
-    def test_cely_zpevnik_neni_povinny(self):
+    def test_cely_zpevnik_je_povinny(self):
+        """Bod 4: import je vždycky DO KONKRÉTNÍHO zpěvníku — na rozdíl od
+        dřívějška (`vytvorit: False`/chybějící pole = přeskočit) teď bez
+        `cely_zpevnik` neprojde vůbec."""
         self.client.force_authenticate(self.admin)
+        response = self.zavolej(
+            self.kniha(1), {"pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}]}
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("cely_zpevnik", response.data)
+        self.assertEqual(Pisen.objects.count(), 0)
+
+    def test_cily_zpevnik_existujici_podle_id(self):
+        """`existujici_id` cílí přesně na jeden konkrétní zpěvník bez
+        spoléhání na shodu názvu (na rozdíl od dřívějšího get_or_create)."""
+        self.client.force_authenticate(self.admin)
+        cil = Zpevnik.objects.create(nazev="Repertoár kapely")
         plan = {
             "pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}],
-            "cely_zpevnik": {"nazev": "Cokoliv", "vytvorit": False},
+            "cely_zpevnik": {"existujici_id": cil.id},
         }
         response = self.zavolej(self.kniha(1), plan)
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertFalse(Zpevnik.objects.filter(nazev="Cokoliv").exists())
-
-    def test_cely_zpevnik_bez_pole_v_planu_nic_nezalozi(self):
-        """Starší/minimální plán bez cely_zpevnik vůbec nesmí spadnout."""
-        self.client.force_authenticate(self.admin)
-        response = self.zavolej(self.kniha(1), {"pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}]})
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(list(cil.polozky.values_list("kod", flat=True)), [101])
 
-    def test_opakovany_import_doplni_stejny_cely_zpevnik(self):
+    def test_novy_cil_se_stejnym_nazvem_jako_existujici_zpevnik_odmitnut(self):
+        """`nazev` je pro NOVÝ zpěvník — pokud už jméno existuje, appka to
+        neslije potichu (jako dřívější get_or_create), ale odmítne s jasnou
+        hláškou ať uživatel vybere „existující“."""
         self.client.force_authenticate(self.admin)
-        plan1 = {
-            "pisne": [{"kod": 101, "nazev": "A", "stranky": [1]}],
-            "cely_zpevnik": {"nazev": "Kniha", "vytvorit": True},
-        }
-        self.assertEqual(
-            self.zavolej(self.kniha(1), plan1).status_code, status.HTTP_201_CREATED
-        )
-        plan2 = {
-            "pisne": [{"kod": 102, "nazev": "B", "stranky": [1]}],
-            "cely_zpevnik": {"nazev": "Kniha", "vytvorit": True},
-        }
-        self.assertEqual(
-            self.zavolej(self.kniha(1), plan2).status_code, status.HTTP_201_CREATED
-        )
-
-        self.assertEqual(Zpevnik.objects.filter(nazev="Kniha").count(), 1)
-        kniha = Zpevnik.objects.get(nazev="Kniha")
-        self.assertEqual(sorted(kniha.polozky.values_list("kod", flat=True)), [101, 102])
+        Zpevnik.objects.create(nazev="Kniha")
+        plan = self.zakladni_plan()
+        plan["cely_zpevnik"] = {"nazev": "Kniha"}
+        response = self.zavolej(self.kniha(3), plan)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("cely_zpevnik", response.data)
+        self.assertEqual(Pisen.objects.count(), 0)
 
 
 class AkordovyZapisSerializerTests(TestCase):

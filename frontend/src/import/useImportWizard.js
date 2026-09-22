@@ -10,8 +10,16 @@ import { extractErrorMessage } from '../api/errors'
 
 const CHYBA_IMPORTU = 'Import se nepodařilo provést.'
 
+// `presetZpevnikId` — když se import spustí Z KONKRÉTNÍHO zpěvníku (viz
+// SongbookPage "+ Import PDF"), cíl je předvyplněný a napevno "existující",
+// ať uživatel nemusí zpěvník hledat znovu ve výběru.
+const prazdnyCil = (presetZpevnikId) =>
+  presetZpevnikId
+    ? { mod: 'existujici', nazev: '', existujiciId: String(presetZpevnikId) }
+    : { mod: 'novy', nazev: '', existujiciId: '' }
+
 // STEP: 'upload' -> 'parsing' -> 'review' -> 'kategorie' -> 'submitting' -> 'result'
-export function useImportWizard() {
+export function useImportWizard(presetZpevnikId) {
   const [step, setStep] = useState('upload')
   const [fileName, setFileName] = useState('')
   const [pages, setPages] = useState([])
@@ -19,10 +27,12 @@ export function useImportWizard() {
   // Textově, ne rovnou číslo — pole musí umět být prázdné (= dopočítej sám,
   // viz kodyAuto.js), a to "0" ani "" jako Number nejde rozlišit dobře.
   const [kodyOdText, setKodyOdText] = useState('')
-  // "Kniha jako celek" — nezávisle na kategoriích níž (viz zadání/diskuze:
-  // kategorie jsou pro procházení, ale zpěvník coby celek musí jít jedním
-  // odkazem/setlistem). Jméno se předvyplní z názvu souboru.
-  const [celyZpevnik, setCelyZpevnik] = useState({ nazev: '', vytvorit: true })
+  // Cíl importu (PC_zpevnik_sprava.md bod 4) — POVINNÝ, nezávislý na
+  // kategoriích níž (kategorie jsou jen pro procházení, cíl je "ta kniha
+  // jako celek", na kterou má smysl navázat setlist/QR odkaz). `mod: 'novy'`
+  // založí nový zpěvník podle `nazev` (předvyplněný z názvu souboru),
+  // `mod: 'existujici'` zařadí do zpěvníku vybraného podle `existujiciId`.
+  const [celyZpevnik, setCelyZpevnik] = useState(() => prazdnyCil(presetZpevnikId))
   const [parseProgress, setParseProgress] = useState({ done: 0, total: 0 })
   const [parseError, setParseError] = useState(null)
   const [submitError, setSubmitError] = useState(null)
@@ -42,17 +52,18 @@ export function useImportWizard() {
   //
   // Kód je od fáze 2b vlastnost zařazení do KONKRÉTNÍHO zpěvníku, ne písně
   // (viz PolozkaZpevniku) — kolidovat proto může jen s kódy VE ZPĚVNÍCÍCH,
-  // které tenhle import osloví JMÉNEM (kategorie + "celý zpěvník"), ne s
-  // celou databází. Nový/neexistující zpěvník tak nemá s čím kolidovat a
-  // může vždycky čistě začít na 100/101, ať DB obsahuje cokoliv jiného —
-  // to je celý smysl týhle změny.
+  // které tenhle import osloví. Tenhle předletový (klientský) warning je
+  // ale jen pro KATEGORIE — server tam kolizi odmítá (celý import se
+  // zastaví). Cílový zpěvník (`cely_zpevnik`, bod 4) kolizi naopak
+  // automaticky přeřadí (viz import_pisni.proved_import), takže by ho tenhle
+  // blokující warning jen zbytečně strašil — jeho případné přeřazení uvidí
+  // až v souhrnu po dokončení importu (`prejmenovani_kodu`).
   const { data: vsechnyZpevniky } = useAllPages('/api/zpevniky/')
   const cilovaJmenaZpevniku = useMemo(() => {
     const jmena = new Set()
     for (const k of kategorie) if (k.vytvorit) jmena.add(k.nazev)
-    if (celyZpevnik.vytvorit && celyZpevnik.nazev) jmena.add(celyZpevnik.nazev)
     return jmena
-  }, [kategorie, celyZpevnik])
+  }, [kategorie])
   const existingKody = useMemo(() => {
     const kody = new Set()
     for (const z of vsechnyZpevniky || []) {
@@ -66,7 +77,11 @@ export function useImportWizard() {
     if (!file) return
     fileRef.current = file
     setFileName(file.name)
-    setCelyZpevnik({ nazev: file.name.replace(/\.pdf$/i, ''), vytvorit: true })
+    // Preset (import z konkrétního zpěvníku) se nepřepisuje názvem souboru —
+    // jen výchozí "nový zpěvník" better-guess bez presetu.
+    setCelyZpevnik((prev) =>
+      presetZpevnikId ? prev : { mod: 'novy', nazev: file.name.replace(/\.pdf$/i, ''), existujiciId: '' },
+    )
     setParseError(null)
     setStep('parsing')
     setParseProgress({ done: 0, total: 0 })
@@ -97,7 +112,7 @@ export function useImportWizard() {
       setParseError(err?.message || 'PDF se nepodařilo zpracovat.')
       setStep('upload')
     }
-  }, [])
+  }, [presetZpevnikId])
 
   const updatePage = useCallback((pageNumber, patch) => {
     setPages((prev) => prev.map((p) => (p.page === pageNumber ? { ...p, ...patch } : p)))
@@ -145,6 +160,9 @@ export function useImportWizard() {
     setCelyZpevnik((prev) => ({ ...prev, ...patch }))
   }, [])
 
+  const celyZpevnikValidni =
+    celyZpevnik.mod === 'existujici' ? Boolean(celyZpevnik.existujiciId) : Boolean(celyZpevnik.nazev.trim())
+
   const goToReview = useCallback(() => setStep('review'), [])
   // Kategorie se staví TADY, ne při parsování — teprve teď jsou k dispozici
   // kódy dopočítané z "Kódy od" (viz resolvedSongs výš). Návrat na Kódy od
@@ -157,6 +175,7 @@ export function useImportWizard() {
   }, [resolvedSongs])
 
   const submit = useCallback(async () => {
+    if (!celyZpevnikValidni) return
     setSubmitError(null)
     setStep('submitting')
     try {
@@ -167,7 +186,7 @@ export function useImportWizard() {
       setSubmitError(extractErrorMessage(err, CHYBA_IMPORTU))
       setStep('kategorie')
     }
-  }, [resolvedSongs, kategorie, celyZpevnik])
+  }, [resolvedSongs, kategorie, celyZpevnik, celyZpevnikValidni])
 
   const zacitZnovu = useCallback(() => {
     fileRef.current = null
@@ -179,12 +198,12 @@ export function useImportWizard() {
     setPages([])
     setKategorie([])
     setKodyOdText('')
-    setCelyZpevnik({ nazev: '', vytvorit: true })
+    setCelyZpevnik(prazdnyCil(presetZpevnikId))
     setResult(null)
     setSubmitError(null)
     setParseError(null)
     setStep('upload')
-  }, [])
+  }, [presetZpevnikId])
 
   return {
     step,
@@ -204,6 +223,8 @@ export function useImportWizard() {
     updateKategorie,
     celyZpevnik,
     updateCelyZpevnik,
+    celyZpevnikValidni,
+    vsechnyZpevniky: vsechnyZpevniky || [],
     parseProgress,
     parseError,
     submitError,
