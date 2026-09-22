@@ -8,6 +8,7 @@ import {
   novaSekce,
   novyRadek,
   novyTakt,
+  odeberTaktZeSekce,
   pridejTaktDoRadku,
 } from './akordovyModel'
 
@@ -101,31 +102,6 @@ export function useAkordovyEditor(verzeId) {
     }))
   }, [])
 
-  const smazRadek = useCallback((sekceIdx, radekIdx) => {
-    setZapis((prev) => ({
-      ...prev,
-      sekce: prev.sekce.map((s, i) => {
-        if (i !== sekceIdx) return s
-        // Smazání řádku odebírá i jeho takty — repetice sekce (globální
-        // indexy přes všechny řádky) je potřeba posunout stejně jako u
-        // smazání jednoho taktu, jen najednou za všechny odebrané.
-        const pocetOdebranych = s.radky[radekIdx].takty.length
-        let globalniOd = 0
-        for (let r = 0; r < radekIdx; r++) globalniOd += s.radky[r].takty.length
-        const globalniDo = globalniOd + pocetOdebranych - 1
-        const radky = s.radky.filter((_, ri) => ri !== radekIdx)
-        const repetice = s.repetice
-          .filter((rep) => rep.do_taktu < globalniOd || rep.od_taktu > globalniDo)
-          .map((rep) =>
-            rep.od_taktu > globalniDo
-              ? { ...rep, od_taktu: rep.od_taktu - pocetOdebranych, do_taktu: rep.do_taktu - pocetOdebranych }
-              : rep,
-          )
-        return { ...s, radky, repetice }
-      }),
-    }))
-  }, [])
-
   // --- takty a buňky ---
 
   const pridejTakt = useCallback((sekceIdx, radekIdx) => {
@@ -142,26 +118,9 @@ export function useAkordovyEditor(verzeId) {
   const smazTakt = useCallback((sekceIdx, radekIdx, taktIdx) => {
     setZapis((prev) => ({
       ...prev,
-      sekce: prev.sekce.map((s, i) => {
-        if (i !== sekceIdx) return s
-        let globalni = 0
-        for (let r = 0; r < radekIdx; r++) globalni += s.radky[r].takty.length
-        globalni += taktIdx
-        const radky = s.radky.map((r, ri) => {
-          if (ri !== radekIdx) return r
-          const takty = [...r.takty]
-          takty.splice(taktIdx, 1)
-          return { ...r, takty }
-        })
-        const repetice = s.repetice
-          .filter((rep) => rep.do_taktu < globalni || rep.od_taktu > globalni)
-          .map((rep) =>
-            rep.od_taktu > globalni
-              ? { ...rep, od_taktu: rep.od_taktu - 1, do_taktu: rep.do_taktu - 1 }
-              : rep,
-          )
-        return { ...s, radky, repetice }
-      }),
+      sekce: prev.sekce.map((s, i) =>
+        i === sekceIdx ? odeberTaktZeSekce(s, radekIdx, taktIdx, prev.takt.dob) : s,
+      ),
     }))
   }, [])
 
@@ -250,7 +209,6 @@ export function useAkordovyEditor(verzeId) {
     smazSekci,
     nastavNazevSekce,
     vlozRadekPo,
-    smazRadek,
     pridejTakt,
     smazTakt,
     upravBunku,

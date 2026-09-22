@@ -70,7 +70,6 @@ export default function AkordovyEditorPage() {
         onNastavNazevSekce={editor.nastavNazevSekce}
         onPridejTakt={editor.pridejTakt}
         onSmazTakt={editor.smazTakt}
-        onSmazRadek={editor.smazRadek}
         onVlozRadekPo={editor.vlozRadekPo}
         onSmazSekci={editor.smazSekci}
         onPridejSekci={editor.pridejSekci}

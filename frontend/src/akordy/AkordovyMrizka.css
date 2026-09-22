@@ -114,30 +114,29 @@
   gap: var(--space-1);
 }
 
+/* Buňka doby NENÍ rámeček — jen spodní linka (viz zadání bod 3). Základní
+   šířka je dopočítaná v JS (AkordovyMrizka), ale buňka se roztáhne podle
+   délky psaného textu (calc s ch), ať se nikdy nezalomí/neořízne. */
 .akordy-bunka {
   min-height: var(--touch-min);
-  padding: var(--space-2);
+  flex-shrink: 0;
+  padding: var(--space-2) var(--space-1);
   font-family: var(--font-mono);
   font-size: var(--text-base);
   text-align: center;
-  border: var(--border-w) solid var(--app-ink);
-  background: var(--app-paper);
+  border: none;
+  border-bottom: var(--border-w) solid var(--app-ink-18);
+  background: transparent;
   color: var(--app-ink);
 }
 .akordy-bunka:focus-visible {
-  outline: 3px solid var(--app-accent);
-  outline-offset: -3px;
+  outline: none;
+  border-bottom-width: calc(var(--border-w) * 2);
+  border-bottom-color: var(--app-accent);
 }
 
 .akordy-bunka-vybrana {
-  background: var(--app-accent);
-}
-
-.akordy-radek-smazat {
-  flex-shrink: 0;
-  font-size: var(--text-xs);
-  padding: var(--space-2) var(--space-3);
-  min-height: auto;
+  background: var(--app-ink-18);
 }
 
 .akordy-repetice-seznam {

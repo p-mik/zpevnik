@@ -1313,36 +1313,48 @@ class AkordovyZapisSerializerTests(TestCase):
 
 class AkordyPdfMrizkaTests(TestCase):
     """Mřížka akordového PDF (zpevnik/akordy_pdf.py), schéma 2: ŘÁDEK SE
-    NIKDY NEZALAMUJE (viz PC_zpevnik_akordovy_zapis_upravy.md bod 4) — delší
-    než 4 takty výchozího taktu zmenší CELÝ dokument, ne jen ten řádek.
-    Akord smí vizuálně přetéct do prázdných dob za sebou, dokud nenarazí
-    na obsazenou dobu nebo konec taktu — zmenšuje se, jen když by se tam
-    nevešel."""
+    NIKDY NEZALAMUJE — delší než 4 takty výchozího taktu zmenší CELÝ
+    dokument, ne jen ten řádek. Prázdná doba má VŽDY tečku (nikdy se
+    nepotlačuje, viz oprava bodu 4) a akord nesmí zasahovat do sousední
+    doby — místo lokálního zmenšování písma se rozšíří jen POSTIŽENÁ doba
+    na šířku textu (viz oprava bodu 5), nerozšířené doby mají v celém
+    dokumentu jednotnou šířku (bod 8)."""
 
-    def test_akord_smi_pretect_az_ke_konci_taktu(self):
-        from zpevnik.akordy_pdf import _pozice_v_taktu
+    def test_prazdna_doba_ma_zakladni_sirku(self):
+        from zpevnik.akordy_pdf import _sirka_doby
 
-        vysledek = _pozice_v_taktu(["C", "", "", ""], sirka_doby=10, sirka_taktu=40)
-        self.assertEqual(vysledek, [("C", 0, 0, 40)])
+        self.assertEqual(_sirka_doby("", 40, 17.5), 40)
 
-    def test_dalsi_obsazena_doba_omezi_pretecni_predchozi(self):
-        from zpevnik.akordy_pdf import _pozice_v_taktu
+    def test_kratky_akord_se_vejde_do_zakladni_sirky(self):
+        from zpevnik.akordy_pdf import _sirka_doby
 
-        vysledek = _pozice_v_taktu(["C", "", "G", ""], sirka_doby=10, sirka_taktu=40)
-        self.assertEqual(vysledek, [("C", 0, 0, 20), ("G", 2, 20, 20)])
+        self.assertEqual(_sirka_doby("C", 40, 17.5), 40)
 
-    def test_vsechny_ctyri_doby_obsazene_kazda_dostane_sirku_jedne_doby(self):
-        from zpevnik.akordy_pdf import _pozice_v_taktu
+    def test_dlouhy_akord_rozsiri_dobu_na_sirku_textu_plus_rezervu(self):
+        from reportlab.pdfbase import pdfmetrics
 
-        vysledek = _pozice_v_taktu(["C", "D", "E", "F"], sirka_doby=10, sirka_taktu=40)
-        self.assertEqual(
-            vysledek, [("C", 0, 0, 10), ("D", 1, 10, 10), ("E", 2, 20, 10), ("F", 3, 30, 10)]
-        )
+        from zpevnik.akordy_pdf import FONT_AKORD, REZERVA_MEZI_AKORDY, _sirka_doby, _zaregistruj_fonty
 
-    def test_prazdny_takt_nevrati_nic(self):
-        from zpevnik.akordy_pdf import _pozice_v_taktu
+        _zaregistruj_fonty()
+        text = "Gmaj7/D"
+        sirka = _sirka_doby(text, 20, 17.5)
+        ocekavana = pdfmetrics.stringWidth(text, FONT_AKORD, 17.5) + REZERVA_MEZI_AKORDY
+        self.assertGreater(sirka, 20)
+        self.assertAlmostEqual(sirka, ocekavana)
 
-        self.assertEqual(_pozice_v_taktu(["", "", "", ""], sirka_doby=10, sirka_taktu=40), [])
+    def test_sirka_taktu_je_soucet_sirek_dob(self):
+        from zpevnik.akordy_pdf import _sirka_taktu
+
+        takt = {"bunky": ["C", "", "", ""]}
+        self.assertEqual(_sirka_taktu(takt, 40, 17.5), 160)
+
+    def test_takt_s_prepisem_na_2_doby_ma_presne_2x_zakladni_sirku_kdyz_prazdny(self):
+        # Regrese k opravenému bodu 9: badge "2/4" nesmí mít za sebou
+        # žádné navíc místo, pokud jsou obě doby prázdné/krátké.
+        from zpevnik.akordy_pdf import _sirka_taktu
+
+        takt = {"bunky": ["G", "C"], "takt": {"dob": 2, "hodnota": 4}}
+        self.assertEqual(_sirka_taktu(takt, 40, 17.5), 80)
 
     def _zapis(self, sekce, dob=4, hodnota=4):
         return {"schema": 2, "takt": {"dob": dob, "hodnota": hodnota}, "tempo": None, "sekce": sekce}

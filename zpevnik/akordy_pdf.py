@@ -1,5 +1,5 @@
 """Generuje PDF akordového zápisu, schéma 2 (viz
-PC_zpevnik_akordovy_zapis_upravy.md).
+PC_zpevnik_akordovy_zapis_upravy.md a navazující opravy).
 
 reportlab, NE weasyprint — ten by potřeboval systémové knihovny navíc v
 Docker image. Fonty jsou přibalené v repu (zpevnik/fonts/, viz LICENSE.md
@@ -10,9 +10,15 @@ Kreslí se přímo přes nízkoúrovňové Canvas API (ne platypus/flowables) �
 mřížka akordů s ručním umisťováním potřebuje přesnou kontrolu pozic.
 
 ŘÁDEK = ŘÁDEK. Appka sama nikdy nezalamuje — jak je řádek napsaný v
-editoru, tak vyjde v PDF (viz zadání). Když se nejdelší řádek nevejde do
-`POCET_TAKTU_NA_RADEK` (4) taktů výchozího taktu, zmenší se ŠÍŘKA DOBY
-(a s ní úměrně všechno ostatní) pro CELÝ dokument, ne jen ten řádek.
+editoru, tak vyjde v PDF.
+
+Šířka doby je jednotná PRO NEROZŠÍŘENÉ doby v celém dokumentu (takty bez
+dlouhých akordů jsou tak pod sebou zarovnané) — ale KAŽDÁ doba se
+individuálně rozšíří, pokud se do základní šířky nevejde její akord
+(žádné lokální zmenšování písma, žádné přetékání do sousední doby). Když
+tím některý řádek přesáhne šířku stránky, zmenší se ŠÍŘKA DOBY (a s ní
+úměrně velikost písma) pro CELÝ DOKUMENT, dokud se nejširší řádek nevejde
+— hledá se iterativně, protože širší doba × menší písmo jsou provázané.
 """
 
 import io
@@ -51,23 +57,24 @@ OKRAJ = 30
 SIRKA_GUTTERU = 70  # levý sloupec se sekcí
 POCET_TAKTU_NA_RADEK = 4  # cíl: 4 takty VÝCHOZÍHO taktu na řádek, vždy
 
-VYSKA_RADKU = 28  # výška řádku PŘI scale=1 (žádné zalomení, viz nahoře)
+VYSKA_RADKU = 28  # výška řádku PŘI scale=1
 MEZERA_RADKU_STEJNA_SEKCE = 4  # mezi dvěma řádky TÉŽE sekce
 MEZERA_MEZI_SEKCEMI = 11  # mezi poslední řádkou jedné sekce a první další
+MEZERA_PRO_BADGE = 11  # NAVÍC před řádkem, který má aspoň jeden takt s vlastním taktem
 CHORD_BASELINE_OFFSET = 19  # od horního okraje řádkového pásu
 SEKCE_BASELINE_OFFSET = 18
-BADGE_BASELINE_OFFSET = 7  # malé "2/4" u taktu s vlastním taktem — OD HORNÍHO okraje řádku dolů
+BADGE_NAD_RADKEM_OFFSET = 3  # badge sedí NAD y_radku (v mezeře navíc), ne v pásu samotném
 
-VELIKOST_TITULKU = 26  # hlavička SE NEŠKÁLUJE (viz zadání: jen dobyk/akordy/sekce/mezery)
+VELIKOST_TITULKU = 26  # hlavička SE NEŠKÁLUJE
 VELIKOST_INTERPRETA = 13
 VELIKOST_SEKCE = 11
 VELIKOST_AKORDU = 17.5
 VELIKOST_REPETICE_N = 16
 VELIKOST_BADGE_TAKTU = 7
-# "Žádná spodní hranice velikosti písma" (viz zadání) — tohle NENÍ čitelnostní
-# minimum, jen technická pojistka proti nulové/záporné velikosti při
-# patologicky dlouhém řádku.
+# "Žádná spodní hranice velikosti písma" — tohle NENÍ čitelnostní minimum,
+# jen technická pojistka proti nulové/záporné velikosti.
 TECHNICKY_MIN_VELIKOST = 1
+TECHNICKY_MIN_SCALE = 0.02
 
 TLOUSTKA_CARY = 0.8
 TLOUSTKA_REPETICE = 2.2
@@ -76,54 +83,66 @@ TLOUSTKA_PRAVITKA = 1.2
 BARVA_SEDA = (0.3, 0.3, 0.3)
 BARVA_CERNA = (0, 0, 0)
 
-REZERVA_MEZI_AKORDY = 5
+REZERVA_MEZI_AKORDY = 5  # mezera připočtená k šířce textu při rozšiřování doby
 
 
 def _efektivni_takt(takt_v_radku, takt_vychozi):
     return takt_v_radku.get("takt") or takt_vychozi
 
 
-def _delka_radku_v_dobach(radek, takt_vychozi):
-    return sum(_efektivni_takt(t, takt_vychozi)["dob"] for t in radek["takty"])
-
-
-def _pozice_v_taktu(bunky_taktu, sirka_doby, sirka_taktu):
-    """Pro každou OBSAZENOU dobu v taktu vrátí (text, x_offset, dostupna_sirka).
-
-    Dostupná šířka sahá až k DALŠÍ obsazené době, nebo ke konci taktu —
-    mezi dobami není žádná čára, akord smí vizuálně přetéct do prázdných
-    dob za sebou. Prázdné doby (pro tečku) se vrací zvlášť, viz volající."""
-    obsazene = [i for i, text in enumerate(bunky_taktu) if text]
-    vysledek = []
-    for poradi, i in enumerate(obsazene):
-        x_offset = i * sirka_doby
-        pristi = obsazene[poradi + 1] * sirka_doby if poradi + 1 < len(obsazene) else sirka_taktu
-        vysledek.append((bunky_taktu[i], i, x_offset, pristi - x_offset))
-    return vysledek
-
-
 def _velikost_pro_text(text, font, dostupna_sirka, zakladni_velikost, min_velikost):
-    """Obecná verze _velikost_pro_bunku — zmenšuje libovolný text (label
-    sekce, badge taktu), dokud se nevejde do dostupné šířky. Použito i pro
-    název sekce v gutteru: krátké (INTRO, SLOKA) se nezmenší vůbec, dlouhé
-    nebo volně psané ANO — gutter má pevnou šířku (SIRKA_GUTTERU)."""
+    """Zmenšuje TEXT LABELU (sekce, badge — ne akordy, viz zadání bod 5:
+    lokální zmenšování akordů je zrušené), dokud se nevejde do dostupné
+    šířky. Použito pro název sekce v gutteru: krátké (INTRO, SLOKA) se
+    nezmenší vůbec, dlouhé nebo volně psané ano — gutter má pevnou šířku."""
     velikost = zakladni_velikost
     while velikost > min_velikost and pdfmetrics.stringWidth(text, font, velikost) > dostupna_sirka:
         velikost -= 0.5
     return max(velikost, min_velikost)
 
 
-def _velikost_pro_bunku(text, dostupna_sirka, zakladni_velikost, min_velikost):
-    """Jednotná velikost PRO CELÝ DOKUMENT (`zakladni_velikost`, už
-    zahrnuje škálování na délku nejdelšího řádku), POKUD se text vejde do
-    dostupné šířky — jinak se zmenšuje, dokud se nevejde (jen tahle buňka).
-    `min_velikost` je čistě technická pojistka (viz TECHNICKY_MIN_VELIKOST),
-    ne čitelnostní hranice — ta podle zadání neexistuje."""
-    velikost = zakladni_velikost
-    limit = dostupna_sirka - REZERVA_MEZI_AKORDY * (zakladni_velikost / VELIKOST_AKORDU)
-    while velikost > min_velikost and pdfmetrics.stringWidth(text, FONT_AKORD, velikost) > limit:
-        velikost -= 0.5
-    return max(velikost, min_velikost)
+def _sirka_doby(text, sirka_doby_zakladni, velikost_akordu):
+    """Šířka JEDNÉ doby — základní, POKUD se do ní vejde akord (prázdná
+    doba se nikdy nerozšiřuje, jen nese tečku). Jinak přesně tak široká,
+    aby akord i s rezervou sedl celý (viz zadání bod 5: akord nesmí
+    zasahovat do sousední doby, žádné přetékání)."""
+    if not text:
+        return sirka_doby_zakladni
+    potrebna = pdfmetrics.stringWidth(text, FONT_AKORD, velikost_akordu) + REZERVA_MEZI_AKORDY
+    return max(sirka_doby_zakladni, potrebna)
+
+
+def _sirky_dob_v_taktu(bunky, sirka_doby_zakladni, velikost_akordu):
+    return [_sirka_doby(b, sirka_doby_zakladni, velikost_akordu) for b in bunky]
+
+
+def _sirka_taktu(takt_v_radku, sirka_doby_zakladni, velikost_akordu):
+    return sum(_sirky_dob_v_taktu(takt_v_radku["bunky"], sirka_doby_zakladni, velikost_akordu))
+
+
+def _sirka_radku(radek, sirka_doby_zakladni, velikost_akordu):
+    return sum(_sirka_taktu(t, sirka_doby_zakladni, velikost_akordu) for t in radek["takty"])
+
+
+def _najdi_scale(vsechny_sekce, sirka_obsahu, dob_vychozi):
+    """Iterativně najde největší `scale` (<=1), při kterém se nejširší
+    řádek (počítaný SE VŠEMI rozšířeními dob, viz _sirka_radku) vejde do
+    šířky stránky. Rozšíření dob závisí na velikosti písma, ta na scale —
+    proto iterace, ne jeden výpočet (viz modul docstring)."""
+    radky = [radek for sekce in vsechny_sekce for radek in sekce["radky"]]
+    if not radky:
+        return 1.0
+
+    zakladni_sirka_doby_pri_1 = sirka_obsahu / (POCET_TAKTU_NA_RADEK * dob_vychozi)
+    scale = 1.0
+    for _ in range(40):
+        sirka_doby_zakladni = zakladni_sirka_doby_pri_1 * scale
+        velikost_akordu = max(VELIKOST_AKORDU * scale, TECHNICKY_MIN_VELIKOST)
+        nejsirsi = max(_sirka_radku(r, sirka_doby_zakladni, velikost_akordu) for r in radky)
+        if nejsirsi <= sirka_obsahu + 0.01:
+            break
+        scale = max(scale * (sirka_obsahu / nejsirsi), TECHNICKY_MIN_SCALE)
+    return scale
 
 
 def vygeneruj_pdf(pisen, akordy):
@@ -143,17 +162,8 @@ def vygeneruj_pdf(pisen, akordy):
     sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
     x0 = OKRAJ + SIRKA_GUTTERU
 
-    # --- škálování dokumentu: nejdelší řádek určuje šířku doby pro VŠECHNY ---
-    nejdelsi_radek_v_dobach = 0
-    for sekce in vsechny_sekce:
-        for radek in sekce["radky"]:
-            nejdelsi_radek_v_dobach = max(
-                nejdelsi_radek_v_dobach, _delka_radku_v_dobach(radek, takt_vychozi)
-            )
-    cil_dob_na_radek = max(POCET_TAKTU_NA_RADEK * dob_vychozi, nejdelsi_radek_v_dobach)
-    sirka_doby = sirka_obsahu / cil_dob_na_radek
-    scale = (POCET_TAKTU_NA_RADEK * dob_vychozi) / cil_dob_na_radek  # <= 1
-
+    scale = _najdi_scale(vsechny_sekce, sirka_obsahu, dob_vychozi)
+    sirka_doby_zakladni = (sirka_obsahu / (POCET_TAKTU_NA_RADEK * dob_vychozi)) * scale
     velikost_akordu = max(VELIKOST_AKORDU * scale, TECHNICKY_MIN_VELIKOST)
     velikost_sekce = max(VELIKOST_SEKCE * scale, TECHNICKY_MIN_VELIKOST)
     velikost_repetice_n = max(VELIKOST_REPETICE_N * scale, TECHNICKY_MIN_VELIKOST)
@@ -161,14 +171,15 @@ def vygeneruj_pdf(pisen, akordy):
     vyska_radku = VYSKA_RADKU * scale
     mezera_stejna_sekce = MEZERA_RADKU_STEJNA_SEKCE * scale
     mezera_mezi_sekcemi = MEZERA_MEZI_SEKCEMI * scale
+    mezera_pro_badge = MEZERA_PRO_BADGE * scale
     chord_offset = CHORD_BASELINE_OFFSET * scale
     sekce_offset = SEKCE_BASELINE_OFFSET * scale
-    badge_offset = BADGE_BASELINE_OFFSET * scale
+    badge_nad_radkem = BADGE_NAD_RADKEM_OFFSET * scale
 
     dolni_limit = OKRAJ + vyska_radku
 
     def kresli_hlavicku():
-        # Hlavička se NEŠKÁLUJE (viz zadání: jen doby/akordy/sekce/mezery).
+        # Hlavička se NEŠKÁLUJE.
         y_baseline = VYSKA_STRANKY - OKRAJ - 28
         c.setFont(FONT_POPISEK_TUCNE, VELIKOST_TITULKU)
         c.setFillColorRGB(*BARVA_CERNA)
@@ -207,9 +218,8 @@ def vygeneruj_pdf(pisen, akordy):
 
     for i_sekce, sekce in enumerate(vsechny_sekce):
         # Globální index taktu V RÁMCI SEKCE — repetice na sekci indexují
-        # přes všechny její řádky (viz zadání), ne jen jeden.
+        # přes všechny její řádky, ne jen jeden.
         globalni_takt_idx = 0
-        # (radek_idx, od_taktu_globalne, do_taktu_globalne_vyloucene, x_pozice_taktu[])
         radky_s_rozsahy = []
         for radek in sekce["radky"]:
             pocet_taktu = len(radek["takty"])
@@ -217,16 +227,16 @@ def vygeneruj_pdf(pisen, akordy):
             globalni_takt_idx += pocet_taktu
 
         for i_radek, (radek, od_g, do_g) in enumerate(radky_s_rozsahy):
-            if y - vyska_radku < dolni_limit:
+            ma_badge = any(t.get("takt") for t in radek["takty"])
+            navic_pred_radkem = mezera_pro_badge if ma_badge else 0
+
+            if y - navic_pred_radkem - vyska_radku < dolni_limit:
                 y = nova_stranka()
+            y -= navic_pred_radkem
             y_radku = y
 
             if i_radek == 0 and sekce.get("nazev"):
                 nazev_velky = sekce["nazev"].upper()
-                # Gutter má pevnou šířku — dlouhý/volný název sekce (na
-                # rozdíl od krátkých INTRO/SLOKA) se zmenší, ať nezasahuje
-                # do prvního taktu (viz zadání: sekce je blok s vlastním
-                # rámečkem, ne že by přetékala do not).
                 velikost_nazvu = _velikost_pro_text(
                     nazev_velky,
                     FONT_POPISEK_TUCNE,
@@ -245,50 +255,39 @@ def vygeneruj_pdf(pisen, akordy):
             c.line(x, y_radku - vyska_radku, x, y_radku)
             for takt_v_radku in radek["takty"]:
                 efektivni = _efektivni_takt(takt_v_radku, takt_vychozi)
-                dob_taktu = efektivni["dob"]
-                sirka_taktu = dob_taktu * sirka_doby
                 bunky = takt_v_radku["bunky"]
+                sirky_dob = _sirky_dob_v_taktu(bunky, sirka_doby_zakladni, velikost_akordu)
+                sirka_taktu = sum(sirky_dob)
 
                 if takt_v_radku.get("takt"):
                     c.setFont(FONT_POPISEK, velikost_badge)
                     c.setFillColorRGB(*BARVA_SEDA)
                     c.drawString(
-                        x + 3, y_radku - badge_offset, f"{dob_taktu}/{efektivni['hodnota']}"
+                        x + 2,
+                        y_radku + badge_nad_radkem,
+                        f"{efektivni['dob']}/{efektivni['hodnota']}",
                     )
 
-                obsazene_pozice = _pozice_v_taktu(bunky, sirka_doby, sirka_taktu)
-                obsazene_indexy = {i for _, i, _, _ in obsazene_pozice}
-                # akordy (a jejich SKUTEČNÁ vykreslená šířka, pro tečky níž)
-                skutecne_konce = {}
-                for text, idx_doby, x_offset, dostupna in obsazene_pozice:
-                    velikost = _velikost_pro_bunku(
-                        text, dostupna, velikost_akordu, TECHNICKY_MIN_VELIKOST
-                    )
-                    c.setFont(FONT_AKORD, velikost)
-                    c.setFillColorRGB(*BARVA_CERNA)
-                    c.drawString(x + x_offset + 3, y_radku - chord_offset, text)
-                    skutecne_konce[idx_doby] = (
-                        x + x_offset + 3 + pdfmetrics.stringWidth(text, FONT_AKORD, velikost)
-                    )
-
-                # tečky v prázdných dobách — ne, když do nich zasahuje
-                # přetékající akord PŘEDCHOZÍ obsazené doby (viz zadání)
-                posledni_konec = None
-                for doba in range(dob_taktu):
-                    if doba in obsazene_indexy:
-                        posledni_konec = skutecne_konce[doba]
-                        continue
-                    x_stred = x + doba * sirka_doby + sirka_doby / 2
-                    if posledni_konec is not None and posledni_konec > x_stred:
-                        continue  # akord z předchozí doby sem zasahuje — má přednost
-                    c.setFillColorRGB(*BARVA_SEDA)
-                    c.circle(
-                        x_stred,
-                        y_radku - chord_offset + velikost_akordu * 0.32,
-                        max(1.6 * scale, 0.6),
-                        stroke=0,
-                        fill=1,
-                    )
+                x_doba = x
+                for text, sirka_teto_doby in zip(bunky, sirky_dob):
+                    x_stred = x_doba + sirka_teto_doby / 2
+                    if text:
+                        c.setFont(FONT_AKORD, velikost_akordu)
+                        c.setFillColorRGB(*BARVA_CERNA)
+                        c.drawCentredString(x_stred, y_radku - chord_offset, text)
+                    else:
+                        # Tečka VŽDY — žádné potlačování (viz zadání bod 4).
+                        # Díky rozšiřování dob (bod 5) do ní teď nemá jak
+                        # zasáhnout přetékající akord odjinud.
+                        c.setFillColorRGB(*BARVA_SEDA)
+                        c.circle(
+                            x_stred,
+                            y_radku - chord_offset + velikost_akordu * 0.32,
+                            max(1.6 * scale, 0.6),
+                            stroke=0,
+                            fill=1,
+                        )
+                    x_doba += sirka_teto_doby
 
                 x += sirka_taktu
                 c.line(x, y_radku - vyska_radku, x, y_radku)
@@ -304,9 +303,9 @@ def vygeneruj_pdf(pisen, akordy):
                     x0=x0,
                     y_radku=y_radku,
                     vyska_radku=vyska_radku,
-                    sirka_doby=sirka_doby,
+                    sirka_doby_zakladni=sirka_doby_zakladni,
+                    velikost_akordu=velikost_akordu,
                     radek=radek,
-                    takt_vychozi=takt_vychozi,
                     od_v_radku=seg_od - od_g,
                     do_v_radku=seg_do - od_g,
                     kresli_zacatek=rep["od_taktu"] >= od_g,
@@ -325,12 +324,12 @@ def vygeneruj_pdf(pisen, akordy):
     return buffer.getvalue()
 
 
-def _x_pozice_taktu(radek, takt_vychozi, sirka_doby, index_taktu):
-    """X offset (od začátku řádku) taktu na daném indexu — potřebuje sečíst
-    šířky VŠECH předchozích taktů (ty mohou mít různý dob, viz vlastní takt)."""
+def _x_pozice_taktu(radek, sirka_doby_zakladni, velikost_akordu, index_taktu):
+    """X offset (od začátku řádku) taktu na daném indexu — sečte SKUTEČNÉ
+    (případně rozšířené) šířky všech předchozích taktů."""
     x = 0
     for t in radek["takty"][:index_taktu]:
-        x += _efektivni_takt(t, takt_vychozi)["dob"] * sirka_doby
+        x += _sirka_taktu(t, sirka_doby_zakladni, velikost_akordu)
     return x
 
 
@@ -339,9 +338,9 @@ def _kresli_repetici(
     x0,
     y_radku,
     vyska_radku,
-    sirka_doby,
+    sirka_doby_zakladni,
+    velikost_akordu,
     radek,
-    takt_vychozi,
     od_v_radku,
     do_v_radku,
     kresli_zacatek,
@@ -351,10 +350,9 @@ def _kresli_repetici(
     chord_offset,
 ):
     """Tlustá čára + dvě tečky na začátku a konci rozsahu, ×N vpravo od
-    konce. Rozsah je už OŘÍZNUTÝ na tenhle řádek (viz volající) — repetice
-    přesahující přes víc řádků nakreslí začátek/konec jen tam, kam patří."""
-    x_zacatek = x0 + _x_pozice_taktu(radek, takt_vychozi, sirka_doby, od_v_radku)
-    x_konec = x0 + _x_pozice_taktu(radek, takt_vychozi, sirka_doby, do_v_radku + 1)
+    konce. Rozsah je už OŘÍZNUTÝ na tenhle řádek (viz volající)."""
+    x_zacatek = x0 + _x_pozice_taktu(radek, sirka_doby_zakladni, velikost_akordu, od_v_radku)
+    x_konec = x0 + _x_pozice_taktu(radek, sirka_doby_zakladni, velikost_akordu, do_v_radku + 1)
     y_tecka_horni = y_radku - vyska_radku * 0.35
     y_tecka_dolni = y_radku - vyska_radku * 0.65
 

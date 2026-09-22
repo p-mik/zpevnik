@@ -84,14 +84,31 @@ export function pridejTaktDoRadku(radek, dobVychozi) {
 // Smazání taktu je operace NA SEKCI (ne jen na řádku) — repetice indexují
 // takty přes celou sekci, takže po smazání se musí posunout i repetice
 // odkazující na takty PO tom smazaném, napříč VŠEMI řádky sekce.
-export function odeberTaktZeSekce(sekce, radekIdx, taktIdx) {
+//
+// Smazání POSLEDNÍHO taktu řádku smaže i řádek — žádné samostatné
+// "Smazat řádek" tlačítko není potřeba. Výjimka: jediný řádek sekce se
+// nesmí smazat (nebylo by kam se vrátit přes Enter), místo toho se
+// resetuje na jeden prázdný takt.
+export function odeberTaktZeSekce(sekce, radekIdx, taktIdx, dobVychozi) {
   const globalni = globalniIndexTaktu(sekce, radekIdx, taktIdx)
-  const noveRadky = sekce.radky.map((r, ri) => {
-    if (ri !== radekIdx) return r
-    const takty = [...r.takty]
-    takty.splice(taktIdx, 1)
-    return { ...r, takty }
-  })
+  const radek = sekce.radky[radekIdx]
+  const jePosledniTaktRadku = radek.takty.length === 1
+  const jeJedinyRadekSekce = sekce.radky.length === 1
+
+  let noveRadky
+  if (jePosledniTaktRadku && jeJedinyRadekSekce) {
+    noveRadky = [novyRadek(dobVychozi)]
+  } else if (jePosledniTaktRadku) {
+    noveRadky = sekce.radky.filter((_, ri) => ri !== radekIdx)
+  } else {
+    noveRadky = sekce.radky.map((r, ri) => {
+      if (ri !== radekIdx) return r
+      const takty = [...r.takty]
+      takty.splice(taktIdx, 1)
+      return { ...r, takty }
+    })
+  }
+
   const novaRepetice = sekce.repetice
     .filter((rep) => rep.do_taktu < globalni || rep.od_taktu > globalni)
     .map((rep) =>

@@ -35,7 +35,6 @@ export default function AkordovyMrizka({
   onNastavNazevSekce,
   onPridejTakt,
   onSmazTakt,
-  onSmazRadek,
   onVlozRadekPo,
   onSmazSekci,
   onPridejSekci,
@@ -56,14 +55,26 @@ export default function AkordovyMrizka({
   const prvniTaktyRef = useRef(null)
 
   // Šířka buňky: 4 takty výchozího taktu se musí vejít na šířku řádku bez
-  // scrollu (viz zadání) — dopočítá se z reálné šířky sloupce taktů, ne
-  // z odhadu. Pod MIN_SIRKA_BUNKY je scroll povolený (viz CSS).
+  // scrollu (viz zadání bod 1). Hrubý odhad (šířka sloupce / počet dob)
+  // nepočítá s mezerami mezi buňkami, oddělovači taktů (border-left) a
+  // paddingem taktů — proto se koriguje přeměřením: rozdíl mezi skutečně
+  // vykresleným scrollWidth a odhadem*počet_dob je ta "režie" (mezery +
+  // oddělovače + padding), která NEZÁVISÍ na šířce buňky, takže jedna
+  // korekce z reálně vykreslené šířky buňky stačí. Pod MIN_SIRKA_BUNKY je
+  // scroll povolený (viz CSS).
   useEffect(() => {
     const el = prvniTaktyRef.current
     if (!el) return undefined
     function prepocitej() {
-      const nova = Math.max(MIN_SIRKA_BUNKY, el.clientWidth / (4 * dob))
-      setSirkaBunky(nova)
+      const celkemDob = 4 * dob
+      if (celkemDob <= 0) return
+      const prvniBunka = el.querySelector('.akordy-bunka')
+      const aktualniSirkaBunky = prvniBunka
+        ? prvniBunka.getBoundingClientRect().width
+        : el.clientWidth / celkemDob
+      const rezie = el.scrollWidth - celkemDob * aktualniSirkaBunky
+      const presna = Math.max(MIN_SIRKA_BUNKY, (el.clientWidth - rezie) / celkemDob)
+      setSirkaBunky(presna)
     }
     prepocitej()
     const ro = new ResizeObserver(prepocitej)
@@ -302,7 +313,9 @@ export default function AkordovyMrizka({
                               key={dobaIdx}
                               ref={refProBunku({ sekceIdx, radekIdx, taktIdx, dobaIdx })}
                               type="text"
-                              style={{ width: `${sirkaBunky}px` }}
+                              style={{
+                                width: `max(${sirkaBunky}px, calc(${Math.max(text.length, 1) + 1}ch + var(--space-3)))`,
+                              }}
                               className={`akordy-bunka${
                                 vyberObsahuje(vyber, {
                                   sekceIdx,
@@ -327,15 +340,6 @@ export default function AkordovyMrizka({
                     )
                   })}
                 </div>
-                <button
-                  type="button"
-                  className="btn akordy-radek-smazat"
-                  onClick={() => onSmazRadek(sekceIdx, radekIdx)}
-                  disabled={sekce.radky.length === 1}
-                  title={sekce.radky.length === 1 ? 'Poslední řádek sekce se maže přes „Smazat sekci“' : undefined}
-                >
-                  Smazat řádek
-                </button>
               </li>
             ))}
           </ul>
