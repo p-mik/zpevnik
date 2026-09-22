@@ -7,6 +7,7 @@ import {
   poziceVRadku,
   prepniVeVyberu,
   radekCelkemBunek,
+  rozdelRadekOdTaktu,
   rozdelSekciOdRadku,
   rozsahMeziPozicemi,
   vyberObsahuje,
@@ -36,7 +37,12 @@ const CIL_TAKTU_PRO_SIRKU = 4.5
 // Klávesy:
 //  Tab        další buňka; na konci řádku přidá nový takt a skočí do něj
 //  Shift+Tab  předchozí buňka; přes hranici řádku (i sekce) do konce předchozího
-//  Enter      nový řádek POD aktuálním, UVNITŘ TÉŽE SEKCE
+//  Enter      zalomí řádek ZA taktem, kde stojí kurzor — takty za ním se
+//             přesunou na nový řádek pod ním, ve STEJNÉ sekci. Když je
+//             kurzor v POSLEDNÍM taktu řádku, jednoduše založí nový
+//             prázdný řádek pod ním (zalomení by nemělo co přesouvat).
+//             Repetice přes místo zalomení: odmítnuto se stejnou hláškou
+//             jako u dělení sekce.
 //  ↑ / ↓      stejná pozice v řádku nad/pod (napříč celým zápisem), jen
 //             když tam buňka existuje
 export default function AkordovyMrizka({
@@ -46,6 +52,7 @@ export default function AkordovyMrizka({
   onPridejTakt,
   onSmazTakt,
   onVlozRadekPo,
+  onRozdelRadek,
   onSmazSekci,
   onPridejSekci,
   onRozdelSekci,
@@ -188,8 +195,23 @@ export default function AkordovyMrizka({
 
     if (e.key === 'Enter') {
       e.preventDefault()
-      onVlozRadekPo(sekceIdx, radekIdx)
-      zaostrBunku(sekceIdx, radekIdx + 1, 0, 0)
+      const jePosledniTaktRadku = taktIdx === radek.takty.length - 1
+      if (jePosledniTaktRadku) {
+        onVlozRadekPo(sekceIdx, radekIdx)
+        zaostrBunku(sekceIdx, radekIdx + 1, 0, 0)
+        return
+      }
+      // Zalomení validujeme TADY (čistá funkce nad aktuálním zápisem,
+      // stejný vzor jako "Nová sekce od tohoto řádku") — akce v
+      // useAkordovyEditor pak jen aplikuje.
+      const vysledek = rozdelRadekOdTaktu(zapis.sekce[sekceIdx], radekIdx, taktIdx + 1)
+      if (!vysledek.ok) {
+        setChybaRozdeleni({ sekceIdx, hlaska: vysledek.hlaska })
+        return
+      }
+      setChybaRozdeleni(null)
+      onRozdelRadek(sekceIdx, radekIdx, taktIdx + 1)
+      zaostrBunku(sekceIdx, radekIdx, taktIdx, dobaIdx)
       return
     }
 

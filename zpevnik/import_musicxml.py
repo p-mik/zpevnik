@@ -123,10 +123,61 @@ def _tiku_na_dobu(divisions, beat_type):
     return divisions * 4 / beat_type
 
 
-def _zpracuj_takt(measure_el, stav):
+def _harmony_posun_tiku(harmony_el):
+    """<offset> u <harmony> — jemné doladění pozice v ticích (kladné i
+    záporné), MusicXML atribut, který Moises používá. Není součástí
+    hlavního "kolik tiků od začátku taktu" počítadla (to jede po <note>/
+    <backup>/<forward>), jen ho na místě harmonie posune."""
+    offset_text = harmony_el.findtext("offset")
+    if not offset_text:
+        return 0.0
+    try:
+        return float(offset_text)
+    except ValueError:
+        return 0.0
+
+
+def _tik_prvni_harmonie(measure_el):
+    """Pozice (v ticích od začátku taktu) první <harmony> v taktu, POKUD
+    jí předchází jen ticho (pomlky) — jinak `None` (buď žádná harmonie,
+    nebo jí předchází znějící nota, takže "před-taktí" heuristika
+    neplatí). Používá se jen pro odhalení předtaktí, viz `_zpracuj_takt`."""
+    tik = 0.0
+    for el in measure_el:
+        if el.tag == "harmony":
+            return tik
+        if el.tag == "note":
+            trvani = el.findtext("duration")
+            je_soucast_akordu = el.find("chord") is not None
+            if el.find("rest") is None:
+                return None
+            if trvani and not je_soucast_akordu:
+                tik += float(trvani)
+        elif el.tag == "backup":
+            trvani = el.findtext("duration")
+            if trvani:
+                tik -= float(trvani)
+        elif el.tag == "forward":
+            trvani = el.findtext("duration")
+            if trvani:
+                tik += float(trvani)
+    return None
+
+
+def _zpracuj_takt(measure_el, stav, je_prvni_takt_skladby):
     """`stav` (měnitelný dict) nese `divisions`/`dob`/`hodnota`, které mezi
     takty přežívají, dokud je nepřepíše další `<attributes>` — MusicXML je
-    nastavuje jen tam, kde se MĚNÍ, ne v každém taktu znovu."""
+    nastavuje jen tam, kde se MĚNÍ, ne v každém taktu znovu.
+
+    `je_prvni_takt_skladby` řeší předtaktí: Moises (na rozdíl od
+    `implicit="yes"`/kratšího taktu v běžném MusicXML) první takt
+    nezkracuje, jen před první akord dá tolik pomlk, kolik chybí do
+    plného taktu. Tohle "tiché" místo na začátku skladby do zápisu
+    nepatří — první takt zkrátíme na dobu, kde skutečně začíná první
+    akord. Platí to JEN pro úplně první takt skladby (předtaktí je z
+    definice jen na začátku) — u dalších taktů by stejná úvaha akordy
+    posouvala špatně (viz takt 5/9/11/15 v the_look_moises.musicxml, kde
+    už teď akordy sedí přesně na dobu, kde mají být)."""
     chyb = 0
 
     attrs_el = measure_el.find("attributes")
@@ -153,13 +204,23 @@ def _zpracuj_takt(measure_el, stav):
 
     dob = stav["dob"]
     tiku_na_dobu = _tiku_na_dobu(stav["divisions"], stav["hodnota"])
-    bunky = [""] * dob
+
+    predtakti_dob = 0
+    if je_prvni_takt_skladby and tiku_na_dobu:
+        tik_prvni = _tik_prvni_harmonie(measure_el)
+        if tik_prvni:
+            predtakti_dob = min(int(tik_prvni // tiku_na_dobu), dob - 1)
+
+    efektivni_dob = dob - predtakti_dob
+    bunky = [""] * efektivni_dob
     tik = 0.0
 
     for el in measure_el:
         if el.tag == "harmony":
-            doba_idx = int(tik // tiku_na_dobu) if tiku_na_dobu else 0
-            doba_idx = max(0, min(dob - 1, doba_idx))
+            posun = _harmony_posun_tiku(el)
+            doba_idx = int((tik + posun) // tiku_na_dobu) if tiku_na_dobu else 0
+            doba_idx -= predtakti_dob
+            doba_idx = max(0, min(efektivni_dob - 1, doba_idx))
             akord = _sestav_akord(el)
             if akord is None:
                 chyb += 1
@@ -180,8 +241,8 @@ def _zpracuj_takt(measure_el, stav):
                 tik += float(trvani)
 
     takt = {"bunky": bunky}
-    if (dob, stav["hodnota"]) != (stav["takt_vychozi"]["dob"], stav["takt_vychozi"]["hodnota"]):
-        takt["takt"] = {"dob": dob, "hodnota": stav["hodnota"]}
+    if (efektivni_dob, stav["hodnota"]) != (stav["takt_vychozi"]["dob"], stav["takt_vychozi"]["hodnota"]):
+        takt["takt"] = {"dob": efektivni_dob, "hodnota": stav["hodnota"]}
     return takt, chyb
 
 
@@ -252,8 +313,8 @@ def parsuj_musicxml(soubor):
 
     vsechny_takty = []
     harmony_chyb = 0
-    for measure_el in measures:
-        takt, chyb = _zpracuj_takt(measure_el, stav)
+    for i, measure_el in enumerate(measures):
+        takt, chyb = _zpracuj_takt(measure_el, stav, je_prvni_takt_skladby=(i == 0))
         vsechny_takty.append(takt)
         harmony_chyb += chyb
 

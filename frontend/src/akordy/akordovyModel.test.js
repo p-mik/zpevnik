@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { rozdelSekciOdRadku, spojSeSPredchozi } from './akordovyModel'
+import { rozdelRadekOdTaktu, rozdelSekciOdRadku, spojSeSPredchozi } from './akordovyModel'
 
 // Pomocník: řádek se `n` takty výchozího taktu (obsah buněk je pro tyhle
 // testy lhostejný, jen počet taktů se počítá).
@@ -85,6 +85,62 @@ describe('rozdelSekciOdRadku', () => {
     expect(vysledek.ok).toBe(true)
     expect(vysledek.puvodni.repetice).toEqual([{ od_taktu: 0, do_taktu: 1, krat: 2 }])
     expect(vysledek.nova.repetice).toEqual([{ od_taktu: 0, do_taktu: 1, krat: 3 }])
+  })
+})
+
+describe('rozdelRadekOdTaktu', () => {
+  test('přesune takty od taktIdx do nového řádku hned za původním', () => {
+    const sekce = { nazev: 'S', radky: [radek(2), radek(4), radek(1)], repetice: [] }
+    const vysledek = rozdelRadekOdTaktu(sekce, 1, 2)
+    expect(vysledek.ok).toBe(true)
+    expect(vysledek.sekce.radky).toEqual([radek(2), radek(2), radek(2), radek(1)])
+  })
+
+  test('sousední řádky (mimo ten dělený) zůstanou beze změny', () => {
+    const sekce = { nazev: 'S', radky: [radek(3), radek(4)], repetice: [] }
+    const vysledek = rozdelRadekOdTaktu(sekce, 1, 1)
+    expect(vysledek.ok).toBe(true)
+    expect(vysledek.sekce.radky[0]).toEqual(radek(3))
+    expect(vysledek.sekce.radky[1]).toEqual(radek(1))
+    expect(vysledek.sekce.radky[2]).toEqual(radek(3))
+  })
+
+  test('globální pořadí taktů v sekci se nemění -> repetice indexy zůstávají stejné na obou stranách', () => {
+    // řádky: 2 takty, 4 takty -> dělíme druhý řádek na taktIdx=2 (globálně takt 4)
+    const sekce = {
+      nazev: 'S',
+      radky: [radek(2), radek(4)],
+      repetice: [
+        { od_taktu: 0, do_taktu: 1, krat: 2 }, // celá před hranicí (první řádek)
+        { od_taktu: 4, do_taktu: 5, krat: 3 }, // celá za hranicí (nový řádek)
+      ],
+    }
+    const vysledek = rozdelRadekOdTaktu(sekce, 1, 2)
+    expect(vysledek.ok).toBe(true)
+    // na rozdíl od rozdelSekciOdRadku se tady indexy NEPŘEPOČÍTÁVAJÍ -
+    // řádkové zalomení nemění pořadí ani počet taktů v sekci.
+    expect(vysledek.sekce.repetice).toEqual(sekce.repetice)
+  })
+
+  test('repetice přesně končící před hranicí (do_taktu = hranice-1) split povolí', () => {
+    const sekce = {
+      nazev: 'S',
+      radky: [radek(4)],
+      repetice: [{ od_taktu: 0, do_taktu: 1, krat: 2 }], // konci v taktu 1, hranice=2
+    }
+    const vysledek = rozdelRadekOdTaktu(sekce, 0, 2)
+    expect(vysledek.ok).toBe(true)
+  })
+
+  test('repetice přes místo zalomení split odmítne se stejnou hláškou jako u sekce', () => {
+    const sekce = {
+      nazev: 'S',
+      radky: [radek(4)],
+      repetice: [{ od_taktu: 1, do_taktu: 2, krat: 2 }], // zasahuje přes hranici (taktIdx=2)
+    }
+    const vysledek = rozdelRadekOdTaktu(sekce, 0, 2)
+    expect(vysledek.ok).toBe(false)
+    expect(vysledek.hlaska).toBe('Tady je repetice přes více řádků, nejdřív ji zruš.')
   })
 })
 

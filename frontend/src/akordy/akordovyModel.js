@@ -331,6 +331,41 @@ export function spojSeSPredchozi(predchozi, aktualni) {
   }
 }
 
+// --- rozdělení řádku na Enter uprostřed (viz zadání) ---
+
+// Rozdělí řádek `radekIdx` v sekci NA DVA od taktu `taktIdx` (musí být
+// >0 a < počet taktů řádku — na hranici MEZI takty, ne na začátku ani na
+// konci, tam by split nedělal nic užitečného). Takty [taktIdx..] se
+// přesunou do NOVÉHO řádku vloženého hned za `radekIdx`, UVNITŘ STEJNÉ
+// sekce — pořadí (a tedy globální indexy, viz `globalniIndexTaktu`)
+// taktů v sekci se tím vůbec nemění, jen se mezi ně vloží zalomení
+// řádku, takže na rozdíl od `rozdelSekciOdRadku` repetice nepotřebují
+// přepočet indexů. Přesto: repetice přes hranici zalomení (začíná před
+// `taktIdx`, končí na něm nebo za ním) rozdělení odmítne stejnou
+// hláškou jako `rozdelSekciOdRadku` — i když by šla geometricky
+// zobrazit (repetice smí přes víc řádků JEDNÉ sekce), řádkový split ji
+// úmyslně nepodporuje (zadání to výslovně chce takhle).
+export function rozdelRadekOdTaktu(sekce, radekIdx, taktIdx) {
+  const radek = sekce.radky[radekIdx]
+  const hraniceTaktu = globalniIndexTaktu(sekce, radekIdx, taktIdx)
+
+  const pretina = sekce.repetice.some(
+    (r) => r.od_taktu < hraniceTaktu && r.do_taktu >= hraniceTaktu,
+  )
+  if (pretina) {
+    return { ok: false, hlaska: 'Tady je repetice přes více řádků, nejdřív ji zruš.' }
+  }
+
+  const noveRadky = [...sekce.radky]
+  noveRadky.splice(
+    radekIdx,
+    1,
+    { ...radek, takty: radek.takty.slice(0, taktIdx) },
+    { takty: radek.takty.slice(taktIdx) },
+  )
+  return { ok: true, sekce: { ...sekce, radky: noveRadky } }
+}
+
 // `novyTakt` je {dob, hodnota}, nebo null pro "výchozí" (zruší přepis).
 export function aplikujZmenuTaktuNaVyber(zapis, vyber, novyTakt) {
   const cile = new Set(

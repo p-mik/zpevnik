@@ -2130,6 +2130,9 @@ class MazaniZpevnikuTests(TestCase):
 FIXTURE_AFRICA = os.path.join(
     os.path.dirname(os.path.dirname(__file__)), "tests", "fixtures", "africa_moises.musicxml"
 )
+FIXTURE_THE_LOOK = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "tests", "fixtures", "the_look_moises.musicxml"
+)
 
 
 class MusicXmlParserTests(TestCase):
@@ -2237,6 +2240,120 @@ class MusicXmlParserTests(TestCase):
         )
         with self.assertRaises(Exception):
             parsuj_musicxml(xml)
+
+    def test_the_look_fixture_predtakti_zkraceno_a_akordy_na_spravne_dobe(self):
+        # the_look_moises.musicxml: takt 1 je předtaktí (Moises ho nezkrátí
+        # v XML, jen před první akord dá plné 2 doby pomlk navíc) - musí
+        # vyjít jako takt o 2 dobách s "A" na 1. době, ne akord uprostřed
+        # plného 4/4 taktu. Takt 3 (Am na 3. době) je regulérní - beze změny.
+        from .import_musicxml import parsuj_musicxml
+
+        with open(FIXTURE_THE_LOOK, "rb") as f:
+            vysledek = parsuj_musicxml(f)
+
+        self.assertEqual(vysledek["pocet_taktu"], 92)
+        self.assertEqual(vysledek["harmony_chyb"], 0)
+        akordy = vysledek["akordy"]
+        self.assertEqual(akordy["takt"], {"dob": 4, "hodnota": 4})
+        self.assertEqual(akordy["tempo"], 95)
+
+        takty = akordy["sekce"][0]["radky"][0]["takty"]
+        self.assertEqual(takty[0]["bunky"], ["A", ""])
+        self.assertEqual(takty[0]["takt"], {"dob": 2, "hodnota": 4})
+        self.assertEqual(takty[1]["bunky"], ["", "", "", ""])
+        self.assertNotIn("takt", takty[1])
+        self.assertEqual(takty[2]["bunky"], ["", "", "Am", ""])
+        self.assertNotIn("takt", takty[2])
+        self.assertEqual(takty[3]["bunky"], ["", "", "", ""])
+
+    def test_africa_fixture_nema_predtakti_prvni_takt_beze_zmeny(self):
+        # Africa: první takt je úplně tichý (žádná harmonie) - "předtaktí"
+        # heuristika se nesmí spustit jen proto, že je první takt skladby.
+        from .import_musicxml import parsuj_musicxml
+
+        with open(FIXTURE_AFRICA, "rb") as f:
+            vysledek = parsuj_musicxml(f)
+
+        prvni_takt = vysledek["akordy"]["sekce"][0]["radky"][0]["takty"][0]
+        self.assertEqual(prvni_takt["bunky"], ["", "", "", ""])
+        self.assertNotIn("takt", prvni_takt)
+
+    def test_predtakti_jen_pokud_pred_prvni_harmonii_je_jen_ticho(self):
+        # Znějící nota (ne pomlka) před první harmonií v prvním taktu ->
+        # neni to "tiché zahřívací" místo, předtaktí heuristika se nesmí
+        # uplatnit.
+        xml = self._xml(
+            "<measure number=\"1\">"
+            "<attributes><divisions>1</divisions>"
+            "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+            "<note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "<harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "</measure>"
+        )
+        from .import_musicxml import parsuj_musicxml
+
+        vysledek = parsuj_musicxml(xml)
+        takt1 = vysledek["akordy"]["sekce"][0]["radky"][0]["takty"][0]
+        self.assertEqual(takt1["bunky"], ["", "", "G", ""])
+        self.assertNotIn("takt", takt1)
+
+    def test_predtakti_se_neuplatni_na_druhy_takt(self):
+        # Stejný vzor pomlk před harmonií, ale ve DRUHÉM taktu skladby -
+        # předtaktí je z definice jen na začátku, tenhle akord musí
+        # zůstat na spočtené (nezkrácené) době.
+        xml = self._xml(
+            "<measure number=\"1\">"
+            "<attributes><divisions>1</divisions>"
+            "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "</measure>"
+            "<measure number=\"2\">"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "<harmony><root><root-step>D</root-step></root><kind>major</kind></harmony>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "</measure>"
+        )
+        from .import_musicxml import parsuj_musicxml
+
+        vysledek = parsuj_musicxml(xml)
+        takt2 = vysledek["akordy"]["sekce"][0]["radky"][0]["takty"][1]
+        self.assertEqual(takt2["bunky"], ["", "", "D", ""])
+        self.assertNotIn("takt", takt2)
+
+    def test_harmony_offset_posune_dobu(self):
+        # <offset> u <harmony> (Moises konvence, může být i záporný) -
+        # posune vypočtenou dobu, i když je note/rest struktura beze změny.
+        xml = self._xml(
+            "<measure number=\"1\">"
+            "<attributes><divisions>4</divisions>"
+            "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+            "<harmony><root><root-step>C</root-step></root><kind>major</kind>"
+            "<offset>4</offset></harmony>"
+            "<note><rest/><duration>4</duration></note>"
+            "<note><rest/><duration>4</duration></note>"
+            "<harmony><root><root-step>G</root-step></root><kind>major</kind>"
+            "<offset>-4</offset></harmony>"
+            "<note><rest/><duration>4</duration></note>"
+            "<note><rest/><duration>4</duration></note>"
+            "</measure>"
+        )
+        from .import_musicxml import parsuj_musicxml
+
+        vysledek = parsuj_musicxml(xml)
+        takt1 = vysledek["akordy"]["sekce"][0]["radky"][0]["takty"][0]
+        # C: bez posunu doba 0, s offsetem +4 (1 doba) -> doba 1.
+        # G: bez posunu doba 2 (po 2 dobách pomlk), s offsetem -4 -> doba 1,
+        # ale to uz je obsazene C, takze G ho prepise (poslednejsi harmonie
+        # na stejne dobe vyhrava - stejne jako dosud).
+        self.assertEqual(takt1["bunky"], ["", "G", "", ""])
 
 
 class ImportMusicXmlApiTests(TestCase):

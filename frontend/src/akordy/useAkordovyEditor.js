@@ -10,6 +10,7 @@ import {
   novyTakt,
   odeberTaktZeSekce,
   pridejTaktDoRadku,
+  rozdelRadekOdTaktu,
   rozdelSekciOdRadku,
   spojSeSPredchozi,
 } from './akordovyModel'
@@ -129,6 +130,21 @@ export function useAkordovyEditor(verzeId) {
     }))
   }, [])
 
+  // Validaci (repetice přes hranici zalomení) dělá volající PŘED
+  // zavoláním téhle akce — stejný vzor jako `rozdelSekci`. Neplatný
+  // požadavek: `rozdelRadekOdTaktu` vrátí `{ok:false}`, tady se nic
+  // nezmění (tichý no-op).
+  const rozdelRadek = useCallback((sekceIdx, radekIdx, taktIdx) => {
+    setZapis((prev) => {
+      const vysledek = rozdelRadekOdTaktu(prev.sekce[sekceIdx], radekIdx, taktIdx)
+      if (!vysledek.ok) return prev
+      return {
+        ...prev,
+        sekce: prev.sekce.map((s, i) => (i === sekceIdx ? vysledek.sekce : s)),
+      }
+    })
+  }, [])
+
   // --- takty a buňky ---
 
   const pridejTakt = useCallback((sekceIdx, radekIdx) => {
@@ -238,6 +254,7 @@ export function useAkordovyEditor(verzeId) {
     rozdelSekci,
     spojSePredchozi,
     vlozRadekPo,
+    rozdelRadek,
     pridejTakt,
     smazTakt,
     upravBunku,
