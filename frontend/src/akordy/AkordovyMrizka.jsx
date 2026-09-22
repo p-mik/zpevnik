@@ -52,7 +52,7 @@ export default function AkordovyMrizka({
   const [repeticePopoverOtevreny, setRepeticePopoverOtevreny] = useState(false)
   const [taktPopoverOtevreny, setTaktPopoverOtevreny] = useState(false)
   const [sirkaBunky, setSirkaBunky] = useState(64)
-  const prvniTaktyRef = useRef(null)
+  const sondaRef = useRef(null)
 
   // Šířka buňky: 4 takty výchozího taktu se musí vejít na šířku řádku bez
   // scrollu (viz zadání bod 1). Hrubý odhad (šířka sloupce / počet dob)
@@ -62,8 +62,15 @@ export default function AkordovyMrizka({
   // oddělovače + padding), která NEZÁVISÍ na šířce buňky, takže jedna
   // korekce z reálně vykreslené šířky buňky stačí. Pod MIN_SIRKA_BUNKY je
   // scroll povolený (viz CSS).
+  //
+  // Měří se ze skryté SONDY (viz JSX níž), NE z prvního skutečného řádku —
+  // ten často NEMÁ 4 takty (nová píseň má 1, po smazání taktů může mít
+  // taky 1, viz bod 2), takže by "celkemDob = 4 * dob" nesedělo s tím, co
+  // je doopravdy vykreslené, a přepočet by vyšel řádově mimo (to byl
+  // skutečný důvod produkčního bugu, ne rozjezd webfontů — viz report).
+  // Sonda má vždycky přesně 4 takty výchozího taktu, takže platí vždycky.
   useEffect(() => {
-    const el = prvniTaktyRef.current
+    const el = sondaRef.current
     if (!el) return undefined
     function prepocitej() {
       const celkemDob = 4 * dob
@@ -79,8 +86,18 @@ export default function AkordovyMrizka({
     prepocitej()
     const ro = new ResizeObserver(prepocitej)
     ro.observe(el)
-    return () => ro.disconnect()
-  }, [dob, zapis.sekce.length])
+    // Pojistka pro případ, že by CSS/fonty dorazily až po prvním layoutu
+    // (viz zadání) — i bez vlastního webfontu se může první měření strefit
+    // do okna, kdy prohlížeč ještě nemá layout/fonty definitivně ustálené.
+    let zruseno = false
+    document.fonts?.ready?.then(() => {
+      if (!zruseno) prepocitej()
+    })
+    return () => {
+      zruseno = true
+      ro.disconnect()
+    }
+  }, [dob])
 
   useEffect(() => {
     const { typ, poz } = zamereniRef.current
@@ -255,7 +272,38 @@ export default function AkordovyMrizka({
       : null
 
   return (
-    <div className="akordy-mrizka">
+    <>
+      {/* Skrytá sonda jen pro měření šířky buňky (viz efekt výš) — VŽDY
+          přesně 4 takty výchozího taktu, nezávisle na skutečném obsahu
+          zápisu (ten první takt/řádek klidně nemá). Neinteraktivní,
+          mimo tab-pořadí, nulová výška — nezabírá místo, nevidí ji nikdo. */}
+      <div className="akordy-mereni-sondy" aria-hidden="true">
+        <div className="akordy-sekce-blok">
+          <div className="akordy-radek">
+            <div className="akordy-takty" ref={sondaRef}>
+              {Array.from({ length: 4 }).map((_, taktIdx) => (
+                <div key={taktIdx} className="akordy-takt">
+                  <div className="akordy-takt-bunky">
+                    {Array.from({ length: dob }).map((_, dobaIdx) => (
+                      <input
+                        key={dobaIdx}
+                        type="text"
+                        tabIndex={-1}
+                        readOnly
+                        value=""
+                        className="akordy-bunka"
+                        style={{ width: `${sirkaBunky}px` }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="akordy-mrizka">
       {zapis.sekce.length === 0 && (
         <p className="akordy-prazdno">Zápis je zatím prázdný — přidej první sekci.</p>
       )}
@@ -283,10 +331,7 @@ export default function AkordovyMrizka({
           <ul className="akordy-radky">
             {sekce.radky.map((radek, radekIdx) => (
               <li key={radekIdx} className="akordy-radek">
-                <div
-                  className="akordy-takty"
-                  ref={sekceIdx === 0 && radekIdx === 0 ? prvniTaktyRef : undefined}
-                >
+                <div className="akordy-takty">
                   {radek.takty.map((takt, taktIdx) => {
                     const efektivni = efektivniTakt(takt, zapis.takt)
                     return (
@@ -402,6 +447,7 @@ export default function AkordovyMrizka({
       {taktPopoverOtevreny && (
         <ZmenitTaktPopover onPotvrdit={potvrdZmenuTaktu} onZrusit={() => setTaktPopoverOtevreny(false)} />
       )}
-    </div>
+      </div>
+    </>
   )
 }

@@ -4,6 +4,20 @@
   gap: var(--space-5);
 }
 
+/* Sonda pro měření šířky buňky (viz AkordovyMrizka.jsx) — vykreslená
+   stejnými třídami jako skutečná mřížka (takže má úplně stejnou šířku
+   ovlivněnou paddingem/bordery), ale visuálně skrytá a bez zabraného
+   místa: height:0 + overflow:hidden nechá layout/šířku počítat normálně,
+   jen to nezabírá výšku ani to nikdo nevidí. NENÍ position:absolute —
+   to by ji vyndalo z normálního flow a přestala by dostávat stejnou
+   šířku jako skutečný obsah. */
+.akordy-mereni-sondy {
+  height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .akordy-prazdno {
   color: var(--app-ink-70);
   margin: 0;
