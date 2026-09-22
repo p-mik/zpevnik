@@ -1249,10 +1249,15 @@ class AkordyPdfMrizkaTests(TestCase):
     prázdných dob za sebou, dokud nenarazí na obsazenou dobu nebo konec
     taktu — zmenšuje se, jen když by se tam nevešel."""
 
-    def test_ctyri_ctvrtove_takty_se_vejdou_na_radek(self):
-        from zpevnik.akordy_pdf import DOBY_NA_RADEK
+    def test_ctyri_takty_na_radek_bez_ohledu_na_takt(self):
+        from zpevnik.akordy_pdf import _pocet_taktu_na_radek
 
-        self.assertEqual(DOBY_NA_RADEK // 4, 4)
+        # 3/4, 4/4, 6/8, 12/8 — čtyři takty na řádek pro VŠECHNY, ne jen 4/4.
+        # Dřívější chybná verze počítala z počtu DOB na řádek (16 // dob),
+        # což dalo 5/4/2/1 — přesně tohle už se nesmí vrátit.
+        for dob in (3, 4, 6, 12):
+            with self.subTest(dob=dob):
+                self.assertEqual(_pocet_taktu_na_radek(dob), 4)
 
     def test_akord_smi_pretect_az_ke_konci_taktu(self):
         from zpevnik.akordy_pdf import _pozice_v_taktu

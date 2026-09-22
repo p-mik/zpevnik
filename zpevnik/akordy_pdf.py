@@ -51,13 +51,13 @@ def _zaregistruj_fonty():
 SIRKA_STRANKY, VYSKA_STRANKY = A4
 OKRAJ = 30
 SIRKA_GUTTERU = 70  # levý sloupec se sekcí
-# Cíl hustoty řádku: 4 takty 4/4 na řádek A4 při 17.5pt (viz zadání) — takt
-# má v 4/4 čtyři doby, takže "4 takty" = 16 dob. Řádek se ROZPOČÍTÁ na tenhle
-# počet dob bez ohledu na takt (viz taktu_na_radek níž): 3/4 se vejde víc
-# taktů na řádek (16 // 3 = 5), 6/8 míň (16 // 6 = 2) — šířka taktu/doby se
-# pak dopočítá tak, aby PŘESNĚ vyplnila dostupnou šířku, ne aby nechávala
-# místo navíc.
-DOBY_NA_RADEK = 16
+# Cíl hustoty řádku: VŽDY `POCET_TAKTU_NA_RADEK` taktů na řádek A4 při
+# 17.5pt (viz zadání), bez ohledu na `dob` — 3/4, 4/4, 6/8 i 12/8 dají
+# stejný počet taktů, jen jinak široký takt/dobu (širší takt má víc dob,
+# takže je jeho doba užší, viz `sirka_taktu`/`sirka_doby` ve vygeneruj_pdf).
+# NE počet dob na řádek — to by (viz oprava) dalo pro 3/4 5 taktů, pro 6/8
+# 2 a pro 12/8 1, což zadání nechce.
+POCET_TAKTU_NA_RADEK = 4
 VYSKA_RADKU = 28  # výška jedné VIZUÁLNÍ linky s akordy (po zalomení)
 MEZERA_ZALOMENI = 4  # mezi zalomenými pokračováními TÉHOŽ logického řádku
 MEZERA_RADKU = 11  # mezi dvěma RŮZNÝMI logickými řádky (víc než při zalomení)
@@ -134,6 +134,22 @@ def _vyska_logickeho_radku(pocet_taktu, taktu_na_radek):
     return pocet_vizualnich * VYSKA_RADKU + (pocet_vizualnich - 1) * MEZERA_ZALOMENI
 
 
+def _pocet_taktu_na_radek(dob):
+    """VŽDY `POCET_TAKTU_NA_RADEK`, bez ohledu na `dob` — samostatná funkce
+    hlavně proto, aby šlo tenhle kontrakt (na rozdíl od dřívější chybné verze
+    přes počet dob) přímo otestovat pro víc taktů najednou."""
+    return POCET_TAKTU_NA_RADEK
+
+
+def _rozmery_mrizky(dob, sirka_obsahu):
+    """Šířka taktu = dostupná šířka / počet taktů na řádek (VŽDY 4, viz
+    _pocet_taktu_na_radek) — vyplní řádek přesně, beze zbytku. Šířka doby =
+    šířka taktu / dob (víc dob v taktu -> užší doba, ne užší takt)."""
+    sirka_taktu = sirka_obsahu / _pocet_taktu_na_radek(dob)
+    sirka_doby = sirka_taktu / dob
+    return sirka_taktu, sirka_doby
+
+
 def vygeneruj_pdf(pisen, akordy):
     """`pisen` — instance Pisen (název, interpret). `akordy` — JSON prošlý
     přes AkordovyZapisSerializer (dělitelnost taktů i hranice repetic už
@@ -149,13 +165,8 @@ def vygeneruj_pdf(pisen, akordy):
     radky = akordy["radky"]
 
     sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
-    # Cíl: `DOBY_NA_RADEK` dob na řádek bez ohledu na takt (16 // 4 = přesně
-    # 4 takty 4/4). Šířka taktu/doby se PAK dopočítá tak, aby těch
-    # `taktu_na_radek` taktů přesně vyplnilo dostupnou šířku (viz zadání:
-    # "šířka taktu = dostupná šířka / 4 pro 4/4") — ne naopak.
-    taktu_na_radek = max(1, DOBY_NA_RADEK // dob)
-    sirka_taktu = sirka_obsahu / taktu_na_radek
-    sirka_doby = sirka_taktu / dob
+    taktu_na_radek = _pocet_taktu_na_radek(dob)
+    sirka_taktu, sirka_doby = _rozmery_mrizky(dob, sirka_obsahu)
     x0 = OKRAJ + SIRKA_GUTTERU
     dolni_limit = OKRAJ + VYSKA_RADKU
 
