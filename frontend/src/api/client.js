@@ -97,6 +97,7 @@ export const api = {
   post: (path, body, opts = {}) => apiFetch(path, { method: 'POST', body, ...opts }),
   patch: (path, body, opts = {}) => apiFetch(path, { method: 'PATCH', body, ...opts }),
   put: (path, body, opts = {}) => apiFetch(path, { method: 'PUT', body, ...opts }),
+  delete: (path) => apiFetch(path, { method: 'DELETE' }),
   del: (path) => apiFetch(path, { method: 'DELETE' }),
 }
 

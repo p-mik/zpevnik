@@ -143,6 +143,15 @@
   display: inline-flex;
 }
 
+.song-smazat-btn {
+  color: var(--app-error);
+  border-color: var(--app-error);
+}
+.song-smazat-btn:hover:not(:disabled) {
+  background: var(--app-error);
+  color: var(--app-paper);
+}
+
 .akordy-editor-chyba {
   color: var(--app-error);
   font-size: var(--text-sm);

@@ -2,8 +2,8 @@ import json
 
 from django.contrib.auth import authenticate, login, logout
 from django.core.files.base import ContentFile
-from django.db import IntegrityError
-from django.db.models import Max
+from django.db import IntegrityError, transaction
+from django.db.models import Count, Max, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django.utils.decorators import method_decorator
@@ -27,7 +27,7 @@ from .models import (
     Zpevnik,
 )
 from .permissions import IsStaffOrReadOnly, VerzePisnePermission
-from .soubory import odpoved_se_souborem, smi_cist_verzi
+from .soubory import naplanuj_smazani_souboru, odpoved_se_souborem, smi_cist_verzi
 from .serializers import (
     AkordovyZapisSerializer,
     AnotaceSerializer,
@@ -74,6 +74,37 @@ class PisenViewSet(viewsets.ModelViewSet):
         if self.action == "list":
             return PisenListSerializer
         return PisenDetailSerializer
+
+    @action(detail=True, methods=["get"], url_path="smazat-nahled")
+    def smazat_nahled(self, request, pk=None):
+        """Náhled pro potvrzovací dialog "Smazat píseň" (PC_zpevnik_sprava.md
+        bod 5) — jen čte, nic nemaže. `IsStaffOrReadOnly` dovolí GET komukoli
+        přihlášenému, ale tlačítko v UI se zobrazuje jen adminovi (mazání
+        samotné je přes DELETE stejně admin-only, viz `perform_destroy`)."""
+        pisen = self.get_object()
+        pocet_anotaci = Anotace.objects.filter(
+            Q(pisen=pisen) | Q(verze_pisne__pisen=pisen)
+        ).count()
+        return Response(
+            {
+                "verzi": pisen.verze.count(),
+                "anotaci": pocet_anotaci,
+                "zpevniky": list(pisen.zpevniky.values_list("nazev", flat=True)),
+                "setlisty": pisen.setlisty.count(),
+            }
+        )
+
+    def perform_destroy(self, instance):
+        # Soubory na disku se u týhle explicitní, potvrzené admin akce
+        # (na rozdíl od běžného mazání verze, viz naplanuj_smazani_souboru)
+        # OPRAVDU mažou — ale až po úspěšném commitu, ať rollback nenechá
+        # záznamy bez souborů.
+        soubory = [
+            (v.soubor.storage, v.soubor.name) for v in instance.verze.all() if v.soubor
+        ]
+        with transaction.atomic():
+            instance.delete()
+        naplanuj_smazani_souboru(soubory)
 
     @action(
         detail=True,
@@ -267,6 +298,48 @@ class ZpevnikViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return Zpevnik.objects.select_related("slozka").prefetch_related("polozky__pisen")
+
+    def _vyhradni_pisne(self, zpevnik):
+        """Písně, které jsou JEN v tomhle zpěvníku — ty se smažou spolu s
+        ním (píseň bez zpěvníku nemá existovat, viz PC_zpevnik_sprava.md
+        bod 5). `n=1` = přesně jedno zařazení celkem, a to je tohle.
+
+        Kandidáty se filtrují podle PK (`id__in`), NE podle `zpevniky=` —
+        filtr a `Count("zpevniky")` na STEJNÉM vztahu by sdílely jeden join
+        a Count by tak vyšel vždycky 1 (počítal by jen řádek odpovídající
+        filtru), i pro píseň se třemi zařazeními. Filtr po PK je nezávislý
+        join, takže Count správně sečte VŠECHNA zařazení dané písně."""
+        kandidati = Pisen.objects.filter(zpevniky=zpevnik).values_list("id", flat=True)
+        return Pisen.objects.filter(id__in=list(kandidati)).annotate(n=Count("zpevniky")).filter(n=1)
+
+    @action(detail=True, methods=["get"], url_path="smazat-nahled")
+    def smazat_nahled(self, request, pk=None):
+        """Náhled pro potvrzovací dialog "Smazat zpěvník" — jen čte."""
+        zpevnik = self.get_object()
+        vyhradni = self._vyhradni_pisne(zpevnik)
+        pocet_vyhradnich = vyhradni.count()
+        return Response(
+            {
+                "pisni_zmizi": pocet_vyhradnich,
+                "pisni_zustane": zpevnik.polozky.count() - pocet_vyhradnich,
+                "setlisty": Setlist.objects.filter(pisne__in=vyhradni).distinct().count(),
+            }
+        )
+
+    def perform_destroy(self, instance):
+        vyhradni = list(self._vyhradni_pisne(instance))
+        soubory = [
+            (v.soubor.storage, v.soubor.name)
+            for p in vyhradni
+            for v in p.verze.all()
+            if v.soubor
+        ]
+        with transaction.atomic():
+            # Zpěvník napřed — uvolní PolozkaZpevniku vazby, díky čemu jsou
+            # "výhradní" písně po týhle chvíli opravdu bez jediného zařazení.
+            instance.delete()
+            Pisen.objects.filter(pk__in=[p.pk for p in vyhradni]).delete()
+        naplanuj_smazani_souboru(soubory)
 
     @action(detail=True, methods=["get"], url_path="dalsi-kod")
     def dalsi_kod(self, request, pk=None):

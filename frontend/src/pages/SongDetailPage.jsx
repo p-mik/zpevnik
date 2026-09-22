@@ -2,12 +2,14 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useApiResource } from '../hooks/useApiResource'
 import { useGlobalSongNavigation } from '../pdf/useSongNavigation'
+import { useAuth } from '../auth/AuthContext'
 import { STAV_LABELS, TYP_OBSAHU_LABELS } from '../constants'
 import { api } from '../api/client'
 import { extractErrorMessage } from '../api/errors'
 import { popisekCasuVerze } from '../utils/datum'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
+import ConfirmDeleteDialog from '../components/ConfirmDeleteDialog'
 import '../components/ui.css'
 import './SongDetailPage.css'
 
@@ -46,6 +48,7 @@ function SousedniPisen({ pisen, smer }) {
 export default function SongDetailPage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { data: song, loading, error, reload } = useApiResource(`/api/pisne/${id}/`)
   // Listování napříč VŠÍM podle jména — tahle stránka je rozcestník mezi
   // zpěvníky, ne slepá ulička, do které se člověk dostane a musí zpátky přes
@@ -54,6 +57,10 @@ export default function SongDetailPage() {
   const { prevSong, nextSong } = useGlobalSongNavigation(id)
   const [zakladamAkordy, setZakladamAkordy] = useState(false)
   const [chybaAkordy, setChybaAkordy] = useState(null)
+
+  const [nahledMazani, setNahledMazani] = useState(null)
+  const [mazani, setMazani] = useState(false)
+  const [chybaMazani, setChybaMazani] = useState(null)
 
   if (loading) return <LoadingState label="Načítám píseň…" />
   if (error) {
@@ -76,6 +83,28 @@ export default function SongDetailPage() {
     } catch (err) {
       setChybaAkordy(extractErrorMessage(err, 'Akordovou verzi se nepodařilo založit.'))
       setZakladamAkordy(false)
+    }
+  }
+
+  async function otevritSmazani() {
+    setChybaMazani(null)
+    try {
+      const nahled = await api.get(`/api/pisne/${song.id}/smazat-nahled/`)
+      setNahledMazani(nahled)
+    } catch (err) {
+      setChybaMazani(extractErrorMessage(err, 'Náhled smazání se nepodařilo načíst.'))
+    }
+  }
+
+  async function smazatPisen() {
+    setMazani(true)
+    setChybaMazani(null)
+    try {
+      await api.delete(`/api/pisne/${song.id}/`)
+      navigate('/pisne', { replace: true })
+    } catch (err) {
+      setChybaMazani(extractErrorMessage(err, 'Píseň se nepodařilo smazat.'))
+      setMazani(false)
     }
   }
 
@@ -149,14 +178,55 @@ export default function SongDetailPage() {
             >
               {zakladamAkordy ? 'Zakládám…' : 'Nová akordová verze'}
             </button>
+            {user?.role === 'admin' && (
+              <button type="button" className="btn song-smazat-btn" onClick={otevritSmazani}>
+                Smazat píseň
+              </button>
+            )}
           </div>
           {chybaAkordy && (
             <p className="akordy-editor-chyba" role="alert">
               {chybaAkordy}
             </p>
           )}
+          {chybaMazani && !nahledMazani && (
+            <p className="akordy-editor-chyba" role="alert">
+              {chybaMazani}
+            </p>
+          )}
         </div>
       </div>
+
+      {nahledMazani && (
+        <ConfirmDeleteDialog
+          title={`Smazat píseň „${song.nazev}“?`}
+          nazev={song.nazev}
+          mazani={mazani}
+          chyba={chybaMazani}
+          onPotvrdit={smazatPisen}
+          onZrusit={() => setNahledMazani(null)}
+        >
+          <p>Nevratně zmizí:</p>
+          <ul>
+            <li>
+              {nahledMazani.verzi} {nahledMazani.verzi === 1 ? 'verze' : 'verze/verzí'} (i se
+              soubory)
+            </li>
+            <li>{nahledMazani.anotaci} {nahledMazani.anotaci === 1 ? 'poznámka' : 'poznámek'}</li>
+            <li>
+              zařazení ve {nahledMazani.zpevniky.length}{' '}
+              {nahledMazani.zpevniky.length === 1 ? 'zpěvníku' : 'zpěvnících'}
+              {nahledMazani.zpevniky.length > 0 && `: ${nahledMazani.zpevniky.join(', ')}`}
+            </li>
+            {nahledMazani.setlisty > 0 && (
+              <li>
+                položka v {nahledMazani.setlisty}{' '}
+                {nahledMazani.setlisty === 1 ? 'setlistu' : 'setlistech'} (setlist samotný zůstane)
+              </li>
+            )}
+          </ul>
+        </ConfirmDeleteDialog>
+      )}
 
       <h2>Verze ({song.verze.length})</h2>
       {song.verze.length === 0 ? (

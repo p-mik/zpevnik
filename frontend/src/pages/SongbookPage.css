@@ -16,3 +16,12 @@
   flex-wrap: wrap;
   gap: var(--space-3);
 }
+
+.songbook-smazat-btn {
+  color: var(--app-error);
+  border-color: var(--app-error);
+}
+.songbook-smazat-btn:hover:not(:disabled) {
+  background: var(--app-error);
+  color: var(--app-paper);
+}

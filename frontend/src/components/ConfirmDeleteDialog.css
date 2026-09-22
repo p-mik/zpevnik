@@ -1,0 +1,40 @@
+.confirm-delete-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: var(--border-w-lg) solid var(--app-error);
+  background: var(--app-paper);
+  max-width: 32em;
+  margin-block: var(--space-4);
+}
+
+.confirm-delete-title {
+  margin: 0;
+  color: var(--app-error);
+}
+
+.confirm-delete-obsah {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.confirm-delete-obsah ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+
+.confirm-delete-akce {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.confirm-delete-btn {
+  border-color: var(--app-error);
+  color: var(--app-error);
+}
+.confirm-delete-btn:hover:not(:disabled) {
+  background: var(--app-error);
+  color: var(--app-paper);
+}

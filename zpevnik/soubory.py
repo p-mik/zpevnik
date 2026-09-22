@@ -20,6 +20,7 @@ import os
 from urllib.parse import quote
 
 from django.conf import settings
+from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse
 
 from .models import VerzePisne
@@ -77,3 +78,34 @@ def odpoved_se_souborem(verze):
     odpoved = FileResponse(verze.soubor.open("rb"), content_type="application/pdf")
     odpoved["Content-Disposition"] = disposition
     return odpoved
+
+
+def naplanuj_smazani_souboru(storages_a_jmena):
+    """Smaže soubory z disku, ale AŽ PO ÚSPĚŠNÉM COMMITU aktuální transakce
+    (`transaction.on_commit`) — kdyby transakce spadla (rollback), DB řádky
+    zůstanou a soubory k nim taky, místo aby zbyly záznamy bez souboru.
+
+    POZOR — tohle je záměrně JINÉ chování než zbytek appky: běžné mazání
+    verze (VerzePisneViewSet, admin) soubor na disku NEmaže vůbec, viz
+    `uklid_souboru` management command a jeho docstring — dává to prostor
+    překlep v adminu ještě vzít zpět. Tady (PC_zpevnik_sprava.md bod 5,
+    "Smazat píseň"/"Smazat zpěvník") je to naopak explicitní, potvrzená
+    admin akce (typování názvu na potvrzení) — okamžité smazání je žádoucí.
+
+    `storages_a_jmena` — seznam dvojic (storage, name), ne cest ani
+    FieldFile objektů — v okamžiku volání můžou už patřit smazaným řádkům
+    (FieldFile.path by po smazání instance nemuselo jít spolehlivě znovu
+    sestavit), storage+name samo o sobě stačí a nezávisí na existenci řádku.
+    """
+    dvojice = list(storages_a_jmena)
+    if not dvojice:
+        return
+
+    def _smaz():
+        for storage, jmeno in dvojice:
+            try:
+                storage.delete(jmeno)
+            except OSError:
+                pass  # už smazané/nedostupné — cíl (soubor pryč) je stejně splněný
+
+    transaction.on_commit(_smaz)

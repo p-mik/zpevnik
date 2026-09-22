@@ -15,7 +15,16 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from .apps import zkontroluj_servirovani_souboru
-from .models import Anotace, Pisen, PolozkaZpevniku, Slozka, VerzePisne, Zpevnik
+from .models import (
+    Anotace,
+    Pisen,
+    PolozkaSetlistu,
+    PolozkaZpevniku,
+    Setlist,
+    Slozka,
+    VerzePisne,
+    Zpevnik,
+)
 from .serializers import AkordovyZapisSerializer
 
 # Minimální, ale platné PDF (rozhodují úvodní magic bytes "%PDF-").
@@ -1835,3 +1844,162 @@ class E001SystemCheckTests(TestCase):
     def test_lokalni_vyvoj_bez_x_accel_redirect_projde(self):
         """Přesně scénář z README — lokální .env bez nginx."""
         self.assertEqual(zkontroluj_servirovani_souboru(None), [])
+
+
+class MazaniPisneTests(TestCase):
+    """DELETE /api/pisne/<id>/ a GET .../smazat-nahled/ (PC_zpevnik_sprava.md
+    bod 5) — jen admin, kaskáda (verze, anotace, zařazení, položky
+    setlistů), soubory z disku AŽ PO COMMITU, setlist samotný přežije."""
+
+    def setUp(self):
+        self.media = tempfile.mkdtemp(prefix="zpevnik-test-mazani-")
+        prepinac = override_settings(MEDIA_ROOT=self.media)
+        prepinac.enable()
+        self.addCleanup(prepinac.disable)
+        self.addCleanup(shutil.rmtree, self.media, True)
+
+        self.admin = User.objects.create_user(
+            "admin-mazani-pisne", password="heslo123", is_staff=True
+        )
+        self.clen = User.objects.create_user("clen-mazani-pisne", password="heslo123")
+        self.client = APIClient()
+
+    def _pisen_se_vsim(self):
+        pisen = Pisen.objects.create(nazev="Píseň k smazání")
+        verze = VerzePisne.objects.create(
+            pisen=pisen,
+            cislo=pisen.dalsi_cislo_verze(),
+            soubor=pdf_upload(),
+            stav=VerzePisne.STAV_CONFIRMED,
+        )
+        Anotace.objects.create(verze_pisne=verze, vlastnik=self.admin, data=[])
+        Anotace.objects.create(pisen=pisen, vlastnik=self.admin, data=[])
+        zpevnik = Zpevnik.objects.create(nazev="Zpěvník pro mazání písně")
+        PolozkaZpevniku.objects.create(zpevnik=zpevnik, pisen=pisen, kod=101)
+        setlist = Setlist.objects.create(nazev="Koncert")
+        PolozkaSetlistu.objects.create(setlist=setlist, pisen=pisen, poradi=0)
+        return pisen, verze, zpevnik, setlist
+
+    def test_nahled_vraci_spravne_pocty(self):
+        pisen, verze, zpevnik, setlist = self._pisen_se_vsim()
+        self.client.force_authenticate(self.clen)
+        response = self.client.get(f"/api/pisne/{pisen.id}/smazat-nahled/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["verzi"], 1)
+        self.assertEqual(response.data["anotaci"], 2)
+        self.assertEqual(response.data["zpevniky"], [zpevnik.nazev])
+        self.assertEqual(response.data["setlisty"], 1)
+
+    def test_admin_smaze_pisen_kaskadove_a_soubory_z_disku(self):
+        pisen, verze, zpevnik, setlist = self._pisen_se_vsim()
+        cesta_souboru = verze.soubor.path
+        self.assertTrue(os.path.exists(cesta_souboru))
+
+        self.client.force_authenticate(self.admin)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(f"/api/pisne/{pisen.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        self.assertFalse(Pisen.objects.filter(id=pisen.id).exists())
+        self.assertFalse(VerzePisne.objects.filter(id=verze.id).exists())
+        self.assertEqual(Anotace.objects.filter(pisen_id=pisen.id).count(), 0)
+        self.assertEqual(Anotace.objects.filter(verze_pisne_id=verze.id).count(), 0)
+        self.assertFalse(PolozkaZpevniku.objects.filter(pisen_id=pisen.id).exists())
+        self.assertFalse(PolozkaSetlistu.objects.filter(pisen_id=pisen.id).exists())
+        # Setlist SAMOTNÝ zůstává, jen bez týhle položky.
+        self.assertTrue(Setlist.objects.filter(id=setlist.id).exists())
+        # Zpěvník taky zůstává (má i jiné/žádné jiné písně, ale nemazal se on).
+        self.assertTrue(Zpevnik.objects.filter(id=zpevnik.id).exists())
+        self.assertFalse(os.path.exists(cesta_souboru))
+
+    def test_clen_nesmi_smazat_pisen(self):
+        pisen, verze, zpevnik, setlist = self._pisen_se_vsim()
+        self.client.force_authenticate(self.clen)
+        response = self.client.delete(f"/api/pisne/{pisen.id}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Pisen.objects.filter(id=pisen.id).exists())
+
+    def test_neprihlasenemu_se_odmita(self):
+        pisen, verze, zpevnik, setlist = self._pisen_se_vsim()
+        response = self.client.delete(f"/api/pisne/{pisen.id}/")
+        self.assertIn(
+            response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+        )
+        self.assertTrue(Pisen.objects.filter(id=pisen.id).exists())
+
+
+class MazaniZpevnikuTests(TestCase):
+    """DELETE /api/zpevniky/<id>/ a GET .../smazat-nahled/ — výhradní písně
+    (jen v tomhle zpěvníku) zmizí i s verzemi/soubory/anotacemi, sdílené
+    (i v jiném zpěvníku) přežijí."""
+
+    def setUp(self):
+        self.media = tempfile.mkdtemp(prefix="zpevnik-test-mazani-zpevniku-")
+        prepinac = override_settings(MEDIA_ROOT=self.media)
+        prepinac.enable()
+        self.addCleanup(prepinac.disable)
+        self.addCleanup(shutil.rmtree, self.media, True)
+
+        self.admin = User.objects.create_user(
+            "admin-mazani-zpevniku", password="heslo123", is_staff=True
+        )
+        self.clen = User.objects.create_user("clen-mazani-zpevniku", password="heslo123")
+        self.client = APIClient()
+
+        self.zpevnik = Zpevnik.objects.create(nazev="Zpěvník k smazání")
+        self.jiny_zpevnik = Zpevnik.objects.create(nazev="Jiný zpěvník")
+
+        self.vyhradni = Pisen.objects.create(nazev="Jen v mazaném zpěvníku")
+        self.vyhradni_verze = VerzePisne.objects.create(
+            pisen=self.vyhradni,
+            cislo=self.vyhradni.dalsi_cislo_verze(),
+            soubor=pdf_upload("vyhradni.pdf"),
+            stav=VerzePisne.STAV_CONFIRMED,
+        )
+        PolozkaZpevniku.objects.create(zpevnik=self.zpevnik, pisen=self.vyhradni, kod=101)
+        self.setlist_vyhradni = Setlist.objects.create(nazev="Jen výhradní")
+        PolozkaSetlistu.objects.create(
+            setlist=self.setlist_vyhradni, pisen=self.vyhradni, poradi=0
+        )
+
+        self.sdilena = Pisen.objects.create(nazev="V obou zpěvnících")
+        PolozkaZpevniku.objects.create(zpevnik=self.zpevnik, pisen=self.sdilena, kod=102)
+        PolozkaZpevniku.objects.create(zpevnik=self.jiny_zpevnik, pisen=self.sdilena, kod=201)
+
+    def test_nahled_pocita_vyhradni_sdilene_a_setlisty(self):
+        self.client.force_authenticate(self.clen)
+        response = self.client.get(f"/api/zpevniky/{self.zpevnik.id}/smazat-nahled/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["pisni_zmizi"], 1)
+        self.assertEqual(response.data["pisni_zustane"], 1)
+        self.assertEqual(response.data["setlisty"], 1)
+
+    def test_admin_smaze_zpevnik_vyhradni_zmizi_sdilena_zustane(self):
+        cesta_souboru = self.vyhradni_verze.soubor.path
+        self.assertTrue(os.path.exists(cesta_souboru))
+
+        self.client.force_authenticate(self.admin)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.delete(f"/api/zpevniky/{self.zpevnik.id}/")
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+
+        self.assertFalse(Zpevnik.objects.filter(id=self.zpevnik.id).exists())
+        self.assertFalse(Pisen.objects.filter(id=self.vyhradni.id).exists())
+        self.assertFalse(VerzePisne.objects.filter(id=self.vyhradni_verze.id).exists())
+        self.assertFalse(os.path.exists(cesta_souboru))
+        self.assertFalse(PolozkaSetlistu.objects.filter(pisen_id=self.vyhradni.id).exists())
+        self.assertTrue(Setlist.objects.filter(id=self.setlist_vyhradni.id).exists())
+
+        # sdílená píseň přežije a zůstane v tom druhém zpěvníku
+        self.assertTrue(Pisen.objects.filter(id=self.sdilena.id).exists())
+        self.assertTrue(
+            PolozkaZpevniku.objects.filter(
+                zpevnik=self.jiny_zpevnik, pisen=self.sdilena
+            ).exists()
+        )
+
+    def test_clen_nesmi_smazat_zpevnik(self):
+        self.client.force_authenticate(self.clen)
+        response = self.client.delete(f"/api/zpevniky/{self.zpevnik.id}/")
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Zpevnik.objects.filter(id=self.zpevnik.id).exists())
