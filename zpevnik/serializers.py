@@ -359,6 +359,19 @@ class ZpevnikSerializer(serializers.ModelSerializer):
         model = Zpevnik
         fields = ["id", "nazev", "slozka", "pisne", "verejny_token"]
 
+    def validate_nazev(self, hodnota):
+        # Model nemá DB-level unique=True (produkce už dřív vznikla přes
+        # import, kde se stejnojmenné zpěvníky slučují schválně přes
+        # get_or_create — viz import_pisni.py) — unikátnost pro nově
+        # ZAKLÁDANÉ zpěvníky (viz PC_zpevnik_sprava.md bod 2) se proto hlídá
+        # tady, ne migrací s DB constraintem.
+        dotaz = Zpevnik.objects.filter(nazev=hodnota)
+        if self.instance is not None:
+            dotaz = dotaz.exclude(pk=self.instance.pk)
+        if dotaz.exists():
+            raise serializers.ValidationError("Zpěvník s tímhle názvem už existuje.")
+        return hodnota
+
     def get_verejny_token(self, obj):
         """Token je sdílitelný odkaz — viditelný jen adminovi, ne každému členovi."""
         request = self.context.get("request")

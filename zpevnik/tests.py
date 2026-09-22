@@ -1668,6 +1668,43 @@ class PridatPisenDoZpevnikuTests(TestCase):
         )
 
 
+class ZalozeniZpevnikuTests(TestCase):
+    """POST /api/zpevniky/ — založení nového zpěvníku (PC_zpevnik_sprava.md bod 2)."""
+
+    def setUp(self):
+        self.admin = User.objects.create_user(
+            "admin-zalozeni", password="heslo123", is_staff=True
+        )
+        self.clen = User.objects.create_user("clen-zalozeni", password="heslo123")
+        self.client = APIClient()
+
+    def test_admin_zalozi_zpevnik(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            "/api/zpevniky/", {"nazev": "Nový repertoár"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertTrue(Zpevnik.objects.filter(nazev="Nový repertoár").exists())
+        self.assertEqual(response.data["pisne"], [])
+
+    def test_duplicitni_nazev_odmitnut(self):
+        Zpevnik.objects.create(nazev="Repertoár")
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            "/api/zpevniky/", {"nazev": "Repertoár"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("nazev", response.data)
+
+    def test_clen_nesmi_zalozit_zpevnik(self):
+        self.client.force_authenticate(self.clen)
+        response = self.client.post(
+            "/api/zpevniky/", {"nazev": "Repertoár členů"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertFalse(Zpevnik.objects.filter(nazev="Repertoár členů").exists())
+
+
 class CisloVerzeTests(TestCase):
     """VerzePisne.cislo — přiděluje server (max+1), přes všechny cesty
     vzniku verze (viz PC_zpevnik_akordovy_zapis_upravy.md bod 5)."""

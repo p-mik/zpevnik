@@ -1,12 +1,19 @@
-import { Link, useParams } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useAllPages } from '../hooks/useAllPages'
+import { useAuth } from '../auth/AuthContext'
+import { api } from '../api/client'
+import { extractErrorMessage } from '../api/errors'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import EmptyState from '../components/EmptyState'
 import '../components/ui.css'
+import './FoldersPage.css'
 
 export default function FoldersPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
+  const { user } = useAuth()
   const currentId = id ? Number(id) : null
 
   const {
@@ -21,6 +28,8 @@ export default function FoldersPage() {
     error: errorZpevniky,
     reload: reloadZpevniky,
   } = useAllPages('/api/zpevniky/')
+
+  const [formOtevreny, setFormOtevreny] = useState(false)
 
   const loading = loadingSlozky || loadingZpevniky
   const error = errorSlozky || errorZpevniky
@@ -58,14 +67,31 @@ export default function FoldersPage() {
         </Link>
       )}
 
-      <h1 className="section-heading">{currentFolder ? currentFolder.nazev : 'Složky'}</h1>
+      <div className="folders-head">
+        <h1 className="section-heading">{currentFolder ? currentFolder.nazev : 'Složky'}</h1>
+        {user?.role === 'admin' && (
+          <button type="button" className="btn btn-secondary" onClick={() => setFormOtevreny((v) => !v)}>
+            + Nový zpěvník
+          </button>
+        )}
+      </div>
 
-      {isEmpty && (
+      {formOtevreny && (
+        <NovyZpevnikForm
+          slozkaId={currentId}
+          onZalozeno={(zpevnik) => navigate(`/zpevniky/${zpevnik.id}`)}
+          onZrusit={() => setFormOtevreny(false)}
+        />
+      )}
+
+      {isEmpty && !formOtevreny && (
         <EmptyState
           title="Tady zatím nic není"
-          description="Složky a zpěvníky se zakládají přes administraci."
-          actionLabel="Otevřít administraci"
-          actionHref="/admin/"
+          description={
+            user?.role === 'admin'
+              ? 'Založ nový zpěvník tlačítkem nahoře, nebo naimportuj PDF.'
+              : 'Složky a zpěvníky zakládá admin.'
+          }
         />
       )}
 
@@ -95,5 +121,67 @@ export default function FoldersPage() {
         </ul>
       )}
     </div>
+  )
+}
+
+const CHYBA_ZALOZENI = 'Zpěvník se nepodařilo založit.'
+
+// Model Zpevnik nemá pole pro popis (viz zpevnik/models.py) — formulář má
+// proto jen název (PC_zpevnik_sprava.md bod 2: "volitelný popis, pokud ho
+// model má" — nemá). Nový zpěvník se chová stejně jako importovaný: žádné
+// vlastnictví/skupina v modelu není, viditelnost řídí jen IsStaffOrReadOnly
+// na ZpevnikViewSet (čtení každému přihlášenému, zápis adminovi) — přesně
+// stejně jako u kteréhokoliv jiného zpěvníku.
+function NovyZpevnikForm({ slozkaId, onZalozeno, onZrusit }) {
+  const [nazev, setNazev] = useState('')
+  const [zaklada, setZaklada] = useState(false)
+  const [chyba, setChyba] = useState(null)
+
+  async function zalozit(e) {
+    e.preventDefault()
+    if (!nazev.trim()) return
+    setZaklada(true)
+    setChyba(null)
+    try {
+      const zpevnik = await api.post('/api/zpevniky/', { nazev: nazev.trim(), slozka: slozkaId })
+      onZalozeno(zpevnik)
+    } catch (err) {
+      setChyba(extractErrorMessage(err, CHYBA_ZALOZENI))
+      setZaklada(false)
+    }
+  }
+
+  return (
+    <form onSubmit={zalozit} className="panel folders-novy-zpevnik-form">
+      <div>
+        <label className="field-label" htmlFor="nz-nazev">
+          Název zpěvníku
+        </label>
+        <input
+          id="nz-nazev"
+          type="text"
+          className="field-input"
+          value={nazev}
+          onChange={(e) => setNazev(e.target.value)}
+          required
+          autoFocus
+        />
+      </div>
+
+      {chyba && (
+        <p className="akordy-editor-chyba" role="alert">
+          {chyba}
+        </p>
+      )}
+
+      <div className="folders-novy-zpevnik-akce">
+        <button type="submit" className="btn btn-primary" disabled={zaklada}>
+          {zaklada ? 'Zakládám…' : 'Založit zpěvník'}
+        </button>
+        <button type="button" className="btn" onClick={onZrusit} disabled={zaklada}>
+          Zrušit
+        </button>
+      </div>
+    </form>
   )
 }
