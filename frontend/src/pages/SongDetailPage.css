@@ -132,9 +132,27 @@
   margin: 0 0 0 var(--space-1);
 }
 
-.song-open-btn {
+.song-detail-akce {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
   margin-top: var(--space-4);
+}
+
+.song-open-btn {
   display: inline-flex;
+}
+
+.akordy-editor-chyba {
+  color: var(--app-error);
+  font-size: var(--text-sm);
+  margin: var(--space-2) 0 0;
+}
+
+.verze-row-akce {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
 }
 
 .song-detail-page h2 {

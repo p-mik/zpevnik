@@ -19,6 +19,8 @@ const StageModePage = lazy(() => import('./pages/StageModePage'))
 const PublicSongReaderPage = lazy(() => import('./pages/PublicSongReaderPage'))
 const PublicStageModePage = lazy(() => import('./pages/PublicStageModePage'))
 const ImportPage = lazy(() => import('./pages/ImportPage'))
+const AkordovyEditorPage = lazy(() => import('./pages/AkordovyEditorPage'))
+const NovaPisenZAkordyPage = lazy(() => import('./pages/NovaPisenZAkordyPage'))
 
 export default function App() {
   return (
@@ -49,6 +51,8 @@ export default function App() {
             <Route path="/slozky" element={<FoldersPage />} />
             <Route path="/slozky/:id" element={<FoldersPage />} />
             <Route path="/zpevniky/:id" element={<SongbookPage />} />
+            <Route path="/zpevniky/:zpevnikId/nova-pisen-akordy" element={<NovaPisenZAkordyPage />} />
+            <Route path="/verze-pisni/:verzeId/akordy" element={<AkordovyEditorPage />} />
             <Route path="/setlisty" element={<SetlistsPlaceholderPage />} />
             <Route path="/import" element={<ImportPage />} />
           </Route>

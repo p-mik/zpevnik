@@ -1,0 +1,38 @@
+.akordy-editor-page {
+  padding-bottom: var(--space-8);
+}
+
+.akordy-editor-ulozeni {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-top: var(--space-5);
+}
+
+.akordy-editor-stav {
+  font-size: var(--text-sm);
+  color: var(--app-ink-70);
+}
+.akordy-editor-stav-zmeneno {
+  color: var(--app-primary);
+  font-weight: 600;
+}
+
+.akordy-editor-chyba {
+  color: var(--app-error);
+  font-size: var(--text-sm);
+}
+
+.akordy-editor-anotace-varovani {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--app-accent);
+  color: var(--app-ink);
+  font-size: var(--text-sm);
+}
+
+.akordy-editor-odkazy {
+  display: flex;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}

@@ -1,7 +1,10 @@
-import { Link, useParams } from 'react-router-dom'
+import { useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useApiResource } from '../hooks/useApiResource'
 import { useGlobalSongNavigation } from '../pdf/useSongNavigation'
 import { STAV_LABELS, TYP_OBSAHU_LABELS } from '../constants'
+import { api } from '../api/client'
+import { extractErrorMessage } from '../api/errors'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import '../components/ui.css'
@@ -31,12 +34,15 @@ function SousedniPisen({ pisen, smer }) {
 
 export default function SongDetailPage() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { data: song, loading, error, reload } = useApiResource(`/api/pisne/${id}/`)
   // Listování napříč VŠÍM podle jména — tahle stránka je rozcestník mezi
   // zpěvníky, ne slepá ulička, do které se člověk dostane a musí zpátky přes
   // menu. Čtečka/stage mode naopak listují v rámci jednoho zpěvníku podle
   // kódu (viz useSongNavigation) — jiný účel, jiný hook.
   const { prevSong, nextSong } = useGlobalSongNavigation(id)
+  const [zakladamAkordy, setZakladamAkordy] = useState(false)
+  const [chybaAkordy, setChybaAkordy] = useState(null)
 
   if (loading) return <LoadingState label="Načítám píseň…" />
   if (error) {
@@ -49,6 +55,18 @@ export default function SongDetailPage() {
   }
 
   const maNejakySoubor = song.verze.some((v) => v.ma_soubor)
+
+  async function novaAkordovaVerze() {
+    setZakladamAkordy(true)
+    setChybaAkordy(null)
+    try {
+      const verze = await api.post(`/api/pisne/${song.id}/verze-akordy/`)
+      navigate(`/verze-pisni/${verze.id}/akordy`)
+    } catch (err) {
+      setChybaAkordy(extractErrorMessage(err, 'Akordovou verzi se nepodařilo založit.'))
+      setZakladamAkordy(false)
+    }
+  }
 
   return (
     <div className="song-detail-page">
@@ -106,10 +124,25 @@ export default function SongDetailPage() {
               </span>
             )}
           </dl>
-          {maNejakySoubor && (
-            <Link to={`/pisne/${song.id}/ctecka`} className="btn btn-primary song-open-btn">
-              Otevřít noty
-            </Link>
+          <div className="song-detail-akce">
+            {maNejakySoubor && (
+              <Link to={`/pisne/${song.id}/ctecka`} className="btn btn-primary song-open-btn">
+                Otevřít noty
+              </Link>
+            )}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={novaAkordovaVerze}
+              disabled={zakladamAkordy}
+            >
+              {zakladamAkordy ? 'Zakládám…' : 'Nová akordová verze'}
+            </button>
+          </div>
+          {chybaAkordy && (
+            <p className="akordy-editor-chyba" role="alert">
+              {chybaAkordy}
+            </p>
           )}
         </div>
       </div>
@@ -129,16 +162,23 @@ export default function SongDetailPage() {
                   )}
                 </span>
                 <span className="verze-info">
-                  {TYP_OBSAHU_LABELS[verze.typ_obsahu] || verze.typ_obsahu}
+                  {verze.zdroj === 'akordy' ? 'Akordový zápis' : TYP_OBSAHU_LABELS[verze.typ_obsahu] || verze.typ_obsahu}
                   {verze.vlastnik && ` · ${verze.vlastnik.username}`}
                   {!verze.ma_soubor && ' · bez souboru'}
                 </span>
               </div>
-              {verze.ma_soubor && (
-                <Link to={`/pisne/${song.id}/ctecka?verze=${verze.id}`} className="btn verze-open-btn">
-                  Otevřít
-                </Link>
-              )}
+              <div className="verze-row-akce">
+                {verze.zdroj === 'akordy' && (
+                  <Link to={`/verze-pisni/${verze.id}/akordy`} className="btn verze-open-btn">
+                    Upravit akordy
+                  </Link>
+                )}
+                {verze.ma_soubor && (
+                  <Link to={`/pisne/${song.id}/ctecka?verze=${verze.id}`} className="btn verze-open-btn">
+                    Otevřít
+                  </Link>
+                )}
+              </div>
             </li>
           ))}
         </ul>

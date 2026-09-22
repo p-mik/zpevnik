@@ -1,0 +1,49 @@
+.akordy-hlavicka {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  padding: var(--space-4);
+  border: var(--border-w) solid var(--app-ink);
+  margin-bottom: var(--space-5);
+}
+
+.akordy-hlavicka-pole {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.akordy-takt-presety {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.akordy-takt-preset {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-4);
+  min-height: var(--touch-min);
+  border: var(--border-w) solid var(--app-ink);
+  background: transparent;
+  color: var(--app-ink);
+  cursor: pointer;
+}
+.akordy-takt-preset-aktivni {
+  background: var(--app-ink);
+  color: var(--app-paper);
+}
+
+.akordy-takt-vlastni {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.akordy-takt-vlastni .field-input {
+  width: 4.5em;
+}
+
+.akordy-tempo-input {
+  width: 8em;
+}

@@ -1,0 +1,10 @@
+.nova-pisen-akordy-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 28em;
+}
+
+.nova-pisen-akordy-kod {
+  width: 8em;
+}

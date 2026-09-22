@@ -5,6 +5,7 @@ import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import EmptyState from '../components/EmptyState'
 import '../components/ui.css'
+import './SongbookPage.css'
 
 export default function SongbookPage() {
   const { id } = useParams()
@@ -26,7 +27,12 @@ export default function SongbookPage() {
         ← Zpět
       </Link>
 
-      <h1 className="section-heading">{zpevnik.nazev}</h1>
+      <div className="songbook-head">
+        <h1 className="section-heading">{zpevnik.nazev}</h1>
+        <Link to={`/zpevniky/${id}/nova-pisen-akordy`} className="btn btn-secondary">
+          + Nová píseň z akordů
+        </Link>
+      </div>
 
       {zpevnik.pisne.length === 0 ? (
         <EmptyState
