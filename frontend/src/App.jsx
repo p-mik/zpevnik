@@ -52,6 +52,7 @@ export default function App() {
             <Route path="/slozky/:id" element={<FoldersPage />} />
             <Route path="/zpevniky/:id" element={<SongbookPage />} />
             <Route path="/zpevniky/:zpevnikId/nova-pisen-akordy" element={<NovaPisenZAkordyPage />} />
+            <Route path="/pisne/nova-pisen-akordy" element={<NovaPisenZAkordyPage />} />
             <Route path="/verze-pisni/:verzeId/akordy" element={<AkordovyEditorPage />} />
             <Route path="/setlisty" element={<SetlistsPlaceholderPage />} />
             <Route path="/import" element={<ImportPage />} />

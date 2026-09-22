@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import SearchBar, { parseSearchQuery } from '../components/SearchBar'
 import SongRow, { SongList } from '../components/SongRow'
 import LoadingState from '../components/LoadingState'
@@ -6,6 +7,7 @@ import EmptyState from '../components/EmptyState'
 import ErrorState from '../components/ErrorState'
 import { useDebouncedValue } from '../hooks/useDebouncedValue'
 import { useInfiniteList } from '../hooks/useInfiniteList'
+import './SongListPage.css'
 
 export default function SongListPage() {
   const [query, setQuery] = useState('')
@@ -36,7 +38,12 @@ export default function SongListPage() {
 
   return (
     <div>
-      <SearchBar value={query} onChange={setQuery} />
+      <div className="song-list-head">
+        <SearchBar value={query} onChange={setQuery} />
+        <Link to="/pisne/nova-pisen-akordy" className="btn btn-secondary song-list-nova-pisen">
+          + Nová píseň z akordů
+        </Link>
+      </div>
 
       {loading && <LoadingState label="Načítám písně…" />}
 

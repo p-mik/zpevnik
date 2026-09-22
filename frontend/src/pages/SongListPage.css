@@ -1,0 +1,15 @@
+.song-list-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: var(--space-4);
+}
+
+.song-list-head .search-bar {
+  flex: 1 1 16em;
+  margin-bottom: 0;
+}
+
+.song-list-nova-pisen {
+  flex-shrink: 0;
+}
