@@ -45,7 +45,14 @@ class VerzePisneAdmin(admin.ModelAdmin):
     # `akordy` a `soubor` se v adminu neupravují ručně — soubor je u
     # zdroj=akordy VYGENEROVANÝ (viz akordy_pdf.py), přímá editace v adminu
     # by ho rozjela s tím, co je v `akordy` (viz PC_zpevnik_akordovy_zapis.md).
-    readonly_fields = ["puvodni_nazev_souboru", "akordy"]
+    # `cislo` taky jen ke čtení — přiděluje ho server (Pisen.dalsi_cislo_verze,
+    # viz save_model níž), ne ruční zadání v adminu.
+    readonly_fields = ["puvodni_nazev_souboru", "akordy", "cislo"]
+
+    def save_model(self, request, obj, form, change):
+        if obj.cislo is None:
+            obj.cislo = obj.pisen.dalsi_cislo_verze()
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Slozka)

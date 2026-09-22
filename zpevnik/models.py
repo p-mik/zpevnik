@@ -89,6 +89,12 @@ class Pisen(models.Model):
             return None
         return nejnovejsi(zbytek)
 
+    def dalsi_cislo_verze(self):
+        """Další volné pořadové číslo verze (max + 1, 1 pro první verzi) —
+        viz VerzePisne.cislo. Nepřečíslovává, jen navrhuje další volné."""
+        maximum = self.verze.aggregate(m=models.Max("cislo"))["m"]
+        return (maximum or 0) + 1
+
 
 class VerzePisne(models.Model):
     """Konkrétní obsahová verze písně (PDF, později text/ChordPro)."""
@@ -121,6 +127,12 @@ class VerzePisne(models.Model):
     ]
 
     pisen = models.ForeignKey(Pisen, on_delete=models.CASCADE, related_name="verze")
+    # Pořadové číslo verze V RÁMCI PÍSNĚ — přiděluje server při vytvoření
+    # (Pisen.dalsi_cislo_verze, max + 1), nikdy klient. Po smazání verze se
+    # zbylá čísla NEPŘEČÍSLOVÁVAJÍ — "verze 3" zůstává "verze 3", i když
+    # verze 1 a 2 už neexistují. Bez týhle vlastnosti nejde v detailu písně
+    # rozeznat, která verze je která (viz PC_zpevnik_akordovy_zapis_upravy.md).
+    cislo = models.PositiveIntegerField(null=True, blank=True, verbose_name="Číslo verze")
     typ_obsahu = models.CharField(
         max_length=10, choices=TYP_OBSAHU_CHOICES, default=TYP_PDF
     )
@@ -160,6 +172,11 @@ class VerzePisne(models.Model):
         verbose_name = "Verze písně"
         verbose_name_plural = "Verze písní"
         ordering = ["-upraveno"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["pisen", "cislo"], name="unikatni_cislo_verze_pisne"
+            ),
+        ]
 
     def __str__(self):
         return f"{self.pisen} ({self.get_stav_display()})"

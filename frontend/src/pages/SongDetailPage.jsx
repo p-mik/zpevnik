@@ -5,10 +5,21 @@ import { useGlobalSongNavigation } from '../pdf/useSongNavigation'
 import { STAV_LABELS, TYP_OBSAHU_LABELS } from '../constants'
 import { api } from '../api/client'
 import { extractErrorMessage } from '../api/errors'
+import { popisekCasuVerze } from '../utils/datum'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import '../components/ui.css'
 import './SongDetailPage.css'
+
+// Aktivní verze vždy první, zbytek podle nejnovější úpravy (to už appka
+// dostane z API — VerzePisne.Meta.ordering je "-upraveno", viz zadání bod
+// 5: "nejnovější úprava nahoře, aktivní verze vždy první").
+function verzeSerazene(song) {
+  if (!song.aktivni_verze) return song.verze
+  const aktivni = song.verze.find((v) => v.id === song.aktivni_verze.id)
+  if (!aktivni) return song.verze
+  return [aktivni, ...song.verze.filter((v) => v.id !== aktivni.id)]
+}
 
 function SousedniPisen({ pisen, smer }) {
   const popisek = smer === 'predchozi' ? 'Předchozí' : 'Další'
@@ -152,20 +163,23 @@ export default function SongDetailPage() {
         <p>Tahle píseň zatím nemá nahranou žádnou verzi.</p>
       ) : (
         <ul className="verze-list">
-          {song.verze.map((verze) => (
+          {verzeSerazene(song).map((verze) => (
             <li key={verze.id} className="verze-row">
               <div className="verze-text">
                 <span className="stav-label">
-                  {STAV_LABELS[verze.stav] || verze.stav}
+                  {/* Číslo verze — bez něj v detailu nejde poznat, která
+                      verze je která (viz PC_zpevnik_akordovy_zapis_upravy.md
+                      bod 5). Nepřečíslovává se po smazání starších verzí. */}
+                  {verze.cislo != null ? `Verze ${verze.cislo}` : 'Verze'} ·{' '}
+                  {STAV_LABELS[verze.stav] || verze.stav} ·{' '}
+                  {verze.zdroj === 'akordy' ? 'Akordový zápis' : TYP_OBSAHU_LABELS[verze.typ_obsahu] || verze.typ_obsahu}
+                  {verze.vlastnik && ` · ${verze.vlastnik.username}`}
                   {song.aktivni_verze && verze.id === song.aktivni_verze.id && (
                     <span className="active-badge">Aktivní</span>
                   )}
                 </span>
-                <span className="verze-info">
-                  {verze.zdroj === 'akordy' ? 'Akordový zápis' : TYP_OBSAHU_LABELS[verze.typ_obsahu] || verze.typ_obsahu}
-                  {verze.vlastnik && ` · ${verze.vlastnik.username}`}
-                  {!verze.ma_soubor && ' · bez souboru'}
-                </span>
+                <span className="verze-cas">{popisekCasuVerze(verze.vytvoreno, verze.upraveno)}</span>
+                {!verze.ma_soubor && <span className="verze-info">bez souboru</span>}
               </div>
               <div className="verze-row-akce">
                 {verze.zdroj === 'akordy' && (

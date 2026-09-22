@@ -49,7 +49,7 @@ from .serializers import (
 # klient nepošle žádné (viz PC_zpevnik_akordovy_zapis.md: "prázdná, nebo s
 # tělem JSON"). 4/4 je nejběžnější výchozí takt, editor (fáze 2) ho může
 # hned přepnout.
-PRAZDNY_AKORDOVY_ZAPIS = {"schema": 1, "takt": {"dob": 4, "hodnota": 4}, "radky": []}
+PRAZDNY_AKORDOVY_ZAPIS = {"schema": 2, "takt": {"dob": 4, "hodnota": 4}, "tempo": None, "sekce": []}
 
 
 class PisenViewSet(viewsets.ModelViewSet):
@@ -100,6 +100,7 @@ class PisenViewSet(viewsets.ModelViewSet):
         pdf_bytes = vygeneruj_pdf(pisen, serializer.validated_data)
         verze = VerzePisne.objects.create(
             pisen=pisen,
+            cislo=pisen.dalsi_cislo_verze(),
             typ_obsahu=VerzePisne.TYP_PDF,
             zdroj=VerzePisne.ZDROJ_AKORDY,
             akordy=serializer.validated_data,
@@ -125,16 +126,19 @@ class VerzePisneViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = self.request.user
+        # Číslo verze přiděluje výhradně server (viz VerzePisne.cislo) —
+        # `pisen` je v tuhle chvíli vždycky ve validated_data (povinné pole).
+        cislo = serializer.validated_data["pisen"].dalsi_cislo_verze()
         if not user.is_staff:
             # Člen smí vytvořit jen vlastní 'personal' verzi — server přepíše,
             # co by případně poslal v těle požadavku.
-            serializer.save(stav=VerzePisne.STAV_PERSONAL, vlastnik=user)
+            serializer.save(stav=VerzePisne.STAV_PERSONAL, vlastnik=user, cislo=cislo)
             return
         # Admin smí vytvořit libovolný stav, ale osobní verze musí mít majitele:
         # `vlastnik` je v serializeru read-only, takže by jinak vznikla osobní
         # verze bez vlastníka — tu by si nenačetl ani její autor, protože
         # Pisen.aktivni_verze() páruje osobní verze právě přes vlastnika.
-        extra = {}
+        extra = {"cislo": cislo}
         if serializer.validated_data.get("stav") == VerzePisne.STAV_PERSONAL:
             extra["vlastnik"] = user
         serializer.save(**extra)

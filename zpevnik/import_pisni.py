@@ -104,6 +104,7 @@ def proved_import(soubor_pdf, plan):
             )
             VerzePisne.objects.create(
                 pisen=pisen,
+                cislo=pisen.dalsi_cislo_verze(),
                 typ_obsahu=VerzePisne.TYP_PDF,
                 soubor=obsah,
                 stav=VerzePisne.STAV_DOWNLOAD,

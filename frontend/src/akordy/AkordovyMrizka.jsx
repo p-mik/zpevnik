@@ -1,116 +1,175 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   SEKCE_NAVRHY,
-  pocetTaktu,
+  efektivniTakt,
+  flatIndexZPozice,
+  nejdelsiRadekVDobach,
+  poziceVRadku,
   prepniVeVyberu,
+  radekCelkemBunek,
   rozsahMeziPozicemi,
   vyberObsahuje,
   zkontrolujVyberProRepetici,
+  zpusobiZtratuZmenaVyberu,
 } from './akordovyModel'
 import RepeticePopover from './RepeticePopover'
+import ZmenitTaktPopover from './ZmenitTaktPopover'
 import './AkordovyMrizka.css'
 
-// Mřížka akordového zápisu — editor, NE generovaný PDF (ten má vlastní,
-// přesně kalibrovaný vzhled v zpevnik/akordy_pdf.py). Tady jde hlavně o
-// rychlé psaní a navigaci klávesnicí, vizuál je jednodušší (posuvník
-// místo vizuálního zalamování — víc taktů na řádek než se vejde na
-// obrazovku prostě odscrolluje, žádné omezení na 4 takty jako v PDF).
+const MIN_SIRKA_BUNKY = 36
+
+// Mřížka akordového zápisu — sekce jsou bloky (jméno jednou nahoře, pod
+// ním řádky taktů), viz PC_zpevnik_akordovy_zapis_upravy.md bod 1. ŘÁDEK
+// SE NIKDY SÁM NEZALAMUJE (bod 4) — delší řádek prostě odscrolluje
+// vodorovně, PDF ho zmenší jako celek (viz info hláška dole).
 //
-// Klávesy (viz zadání):
+// Klávesy:
 //  Tab        další buňka; na konci řádku přidá nový takt a skočí do něj
-//  Shift+Tab  předchozí buňka; přes hranici řádku do konce předchozího
-//  Enter      nový řádek pod aktuálním (jeden prázdný takt), kurzor do 1. buňky
-//  ↑ / ↓      stejná pozice v řádku nad/pod, jen když tam buňka existuje
-// Backspace v prázdné buňce záměrně nic nemaže (viz zadání) — žádný handler.
+//  Shift+Tab  předchozí buňka; přes hranici řádku (i sekce) do konce předchozího
+//  Enter      nový řádek POD aktuálním, UVNITŘ TÉŽE SEKCE
+//  ↑ / ↓      stejná pozice v řádku nad/pod (napříč celým zápisem), jen
+//             když tam buňka existuje
 export default function AkordovyMrizka({
-  radky,
-  dob,
+  zapis,
   onUpravBunku,
-  onNastavSekci,
+  onNastavNazevSekce,
   onPridejTakt,
   onSmazTakt,
   onSmazRadek,
   onVlozRadekPo,
-  onPridejRadekNaKonec,
+  onSmazSekci,
+  onPridejSekci,
   onPridejRepetici,
   onSmazRepetici,
+  onZmenTaktVyberu,
 }) {
+  const dob = zapis.takt.dob
   const [vyber, setVyber] = useState([])
   const posledniKlikRef = useRef(null)
-  const zamereniRef = useRef(null)
+  const zamereniRef = useRef({ typ: null, poz: null })
   const inputyRef = useRef(new Map())
+  const nazvySekciRef = useRef(new Map())
   const [repeticeChyba, setRepeticeChyba] = useState(null)
-  const [popoverOtevreny, setPopoverOtevreny] = useState(false)
+  const [repeticePopoverOtevreny, setRepeticePopoverOtevreny] = useState(false)
+  const [taktPopoverOtevreny, setTaktPopoverOtevreny] = useState(false)
+  const [sirkaBunky, setSirkaBunky] = useState(64)
+  const prvniTaktyRef = useRef(null)
 
-  // Zaostření po akci, která mění DOM (přidání taktu/řádku) — provede se AŽ
-  // po re-renderu, kdy nová buňka fakt existuje.
+  // Šířka buňky: 4 takty výchozího taktu se musí vejít na šířku řádku bez
+  // scrollu (viz zadání) — dopočítá se z reálné šířky sloupce taktů, ne
+  // z odhadu. Pod MIN_SIRKA_BUNKY je scroll povolený (viz CSS).
   useEffect(() => {
-    if (!zamereniRef.current) return
-    const klic = poziceKlic(zamereniRef.current)
-    zamereniRef.current = null
-    const el = inputyRef.current.get(klic)
-    el?.focus()
+    const el = prvniTaktyRef.current
+    if (!el) return undefined
+    function prepocitej() {
+      const nova = Math.max(MIN_SIRKA_BUNKY, el.clientWidth / (4 * dob))
+      setSirkaBunky(nova)
+    }
+    prepocitej()
+    const ro = new ResizeObserver(prepocitej)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [dob, zapis.sekce.length])
+
+  useEffect(() => {
+    const { typ, poz } = zamereniRef.current
+    if (!typ) return
+    zamereniRef.current = { typ: null, poz: null }
+    if (typ === 'bunka') {
+      inputyRef.current.get(bunkaKlic(poz))?.focus()
+    } else if (typ === 'sekce') {
+      nazvySekciRef.current.get(poz)?.focus()
+    }
   })
 
-  function poziceKlic(p) {
-    return `${p.radek}:${p.bunka}`
+  function bunkaKlic(p) {
+    return `${p.sekceIdx}:${p.radekIdx}:${p.taktIdx}:${p.dobaIdx}`
   }
-
-  function refPro(radekIdx, bunkaIdx) {
+  function refProBunku(p) {
     return (el) => {
-      const klic = `${radekIdx}:${bunkaIdx}`
+      const klic = bunkaKlic(p)
       if (el) inputyRef.current.set(klic, el)
       else inputyRef.current.delete(klic)
     }
   }
-
-  function zaostrPo(pozice) {
-    zamereniRef.current = pozice
+  function zaostrBunku(sekceIdx, radekIdx, taktIdx, dobaIdx) {
+    zamereniRef.current = { typ: 'bunka', poz: { sekceIdx, radekIdx, taktIdx, dobaIdx } }
+  }
+  function zaostrNazevSekce(sekceIdx) {
+    zamereniRef.current = { typ: 'sekce', poz: sekceIdx }
   }
 
-  function naKlavesu(e, radekIdx, bunkaIdx) {
-    const radek = radky[radekIdx]
+  // --- plochý seznam všech řádků dokumentu (pro šipky napříč sekcemi) ---
+  function plochySeznamRadku() {
+    const vysledek = []
+    zapis.sekce.forEach((s, si) => s.radky.forEach((_, ri) => vysledek.push({ sekceIdx: si, radekIdx: ri })))
+    return vysledek
+  }
+
+  function focusFlatVRadku(sekceIdx, radekIdx, flatIdx) {
+    const radek = zapis.sekce[sekceIdx].radky[radekIdx]
+    const p = poziceVRadku(radek, flatIdx)
+    if (!p) return
+    inputyRef.current.get(bunkaKlic({ sekceIdx, radekIdx, ...p }))?.focus()
+  }
+
+  function naKlavesu(e, sekceIdx, radekIdx, taktIdx, dobaIdx) {
+    const radek = zapis.sekce[sekceIdx].radky[radekIdx]
+    const flatIdx = flatIndexZPozice(radek, taktIdx, dobaIdx)
+    const celkem = radekCelkemBunek(radek)
 
     if (e.key === 'Tab' && !e.shiftKey) {
       e.preventDefault()
-      if (bunkaIdx === radek.bunky.length - 1) {
-        onPridejTakt(radekIdx)
-        zaostrPo({ radek: radekIdx, bunka: bunkaIdx + 1 })
+      if (flatIdx === celkem - 1) {
+        const novyTaktIdx = radek.takty.length
+        onPridejTakt(sekceIdx, radekIdx)
+        zaostrBunku(sekceIdx, radekIdx, novyTaktIdx, 0)
       } else {
-        inputyRef.current.get(`${radekIdx}:${bunkaIdx + 1}`)?.focus()
+        focusFlatVRadku(sekceIdx, radekIdx, flatIdx + 1)
       }
       return
     }
 
     if (e.key === 'Tab' && e.shiftKey) {
       e.preventDefault()
-      if (bunkaIdx > 0) {
-        inputyRef.current.get(`${radekIdx}:${bunkaIdx - 1}`)?.focus()
-      } else if (radekIdx > 0) {
-        const predchozi = radky[radekIdx - 1]
-        inputyRef.current.get(`${radekIdx - 1}:${predchozi.bunky.length - 1}`)?.focus()
+      if (flatIdx > 0) {
+        focusFlatVRadku(sekceIdx, radekIdx, flatIdx - 1)
+        return
+      }
+      // Na první buňce řádku — přes hranici řádku (i sekce) do konce předchozího.
+      const seznam = plochySeznamRadku()
+      const tady = seznam.findIndex((r) => r.sekceIdx === sekceIdx && r.radekIdx === radekIdx)
+      if (tady > 0) {
+        const predchozi = seznam[tady - 1]
+        const predRadek = zapis.sekce[predchozi.sekceIdx].radky[predchozi.radekIdx]
+        focusFlatVRadku(predchozi.sekceIdx, predchozi.radekIdx, radekCelkemBunek(predRadek) - 1)
       }
       return
     }
 
     if (e.key === 'Enter') {
       e.preventDefault()
-      onVlozRadekPo(radekIdx)
-      zaostrPo({ radek: radekIdx + 1, bunka: 0 })
+      onVlozRadekPo(sekceIdx, radekIdx)
+      zaostrBunku(sekceIdx, radekIdx + 1, 0, 0)
       return
     }
 
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      const cilRadekIdx = e.key === 'ArrowUp' ? radekIdx - 1 : radekIdx + 1
-      const cilRadek = radky[cilRadekIdx]
-      if (!cilRadek || cilRadek.bunky.length <= bunkaIdx) return
+      const seznam = plochySeznamRadku()
+      const tady = seznam.findIndex((r) => r.sekceIdx === sekceIdx && r.radekIdx === radekIdx)
+      const cil = seznam[e.key === 'ArrowUp' ? tady - 1 : tady + 1]
+      if (!cil) return
+      const cilRadek = zapis.sekce[cil.sekceIdx].radky[cil.radekIdx]
+      if (radekCelkemBunek(cilRadek) <= flatIdx) return
       e.preventDefault()
-      inputyRef.current.get(`${cilRadekIdx}:${bunkaIdx}`)?.focus()
+      focusFlatVRadku(cil.sekceIdx, cil.radekIdx, flatIdx)
     }
   }
 
-  function naKlikBunky(e, radekIdx, bunkaIdx) {
-    const pozice = { radek: radekIdx, bunka: bunkaIdx }
+  function naKlikBunky(e, sekceIdx, radekIdx, taktIdx, dobaIdx) {
+    const radek = zapis.sekce[sekceIdx].radky[radekIdx]
+    const bunkaIdxVRadku = flatIndexZPozice(radek, taktIdx, dobaIdx)
+    const pozice = { sekceIdx, radekIdx, bunkaIdxVRadku }
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault()
       setVyber((prev) => prepniVeVyberu(prev, pozice))
@@ -118,119 +177,187 @@ export default function AkordovyMrizka({
       setRepeticeChyba(null)
     } else if (e.shiftKey && posledniKlikRef.current) {
       e.preventDefault()
-      setVyber(rozsahMeziPozicemi(radky, posledniKlikRef.current, pozice))
+      setVyber(rozsahMeziPozicemi(zapis, posledniKlikRef.current, pozice))
       setRepeticeChyba(null)
     } else {
-      // Obyčejný klik jen zaostří (přirozené chování inputu) a založí kotvu
-      // pro případný příští Shift+klik — výběr nezakládá ani neruší.
       posledniKlikRef.current = pozice
     }
   }
 
   function otevriRepetici() {
-    const kontrola = zkontrolujVyberProRepetici(vyber, radky, dob)
+    const kontrola = zkontrolujVyberProRepetici(zapis, vyber)
     if (!kontrola.ok) {
       setRepeticeChyba(kontrola.hlaska)
       return
     }
     setRepeticeChyba(null)
-    setPopoverOtevreny(true)
+    setRepeticePopoverOtevreny(true)
   }
 
   function potvrdRepetici(krat) {
-    const kontrola = zkontrolujVyberProRepetici(vyber, radky, dob)
-    setPopoverOtevreny(false)
+    const kontrola = zkontrolujVyberProRepetici(zapis, vyber)
+    setRepeticePopoverOtevreny(false)
     if (!kontrola.ok) {
       setRepeticeChyba(kontrola.hlaska)
       return
     }
-    onPridejRepetici(kontrola.indexRadku, kontrola.od_takt, kontrola.do_takt, krat)
+    onPridejRepetici(kontrola.sekceIdx, kontrola.od_taktu, kontrola.do_taktu, krat)
     setVyber([])
   }
 
+  function potvrdZmenuTaktu(novyTakt) {
+    const dobCil = novyTakt ? novyTakt.dob : zapis.takt.dob
+    if (zpusobiZtratuZmenaVyberu(zapis, vyber, dobCil)) {
+      if (
+        !window.confirm(
+          'Zúžení taktu zahodí obsah buněk, které se do nového počtu dob nevejdou. Pokračovat?',
+        )
+      ) {
+        return
+      }
+    }
+    onZmenTaktVyberu(vyber, novyTakt)
+    setTaktPopoverOtevreny(false)
+    setVyber([])
+  }
+
+  function smazatSekci(sekceIdx) {
+    const sekce = zapis.sekce[sekceIdx]
+    const neprazdna = sekce.radky.some((r) => r.takty.some((t) => t.bunky.some((b) => b)))
+    if (neprazdna && !window.confirm(`Smazat sekci „${sekce.nazev || 'bez názvu'}“ i s obsahem?`)) {
+      return
+    }
+    onSmazSekci(sekceIdx)
+  }
+
+  function pridatSekci() {
+    const novyIndex = zapis.sekce.length
+    onPridejSekci()
+    zaostrNazevSekce(novyIndex)
+  }
+
+  const nejdelsi = nejdelsiRadekVDobach(zapis.sekce, zapis.takt)
+  const cilDob = 4 * dob
+  const infoRadek =
+    nejdelsi > cilDob
+      ? `Nejdelší řádek má ${nejdelsi} dob → PDF bude zmenšené na ${Math.round((cilDob / nejdelsi) * 100)} %.`
+      : null
+
   return (
     <div className="akordy-mrizka">
-      {radky.length === 0 && (
-        <p className="akordy-prazdno">Zápis je zatím prázdný — přidej první řádek.</p>
+      {zapis.sekce.length === 0 && (
+        <p className="akordy-prazdno">Zápis je zatím prázdný — přidej první sekci.</p>
       )}
 
-      <ul className="akordy-radky">
-        {radky.map((radek, radekIdx) => (
-          <li key={radekIdx} className="akordy-radek">
+      {zapis.sekce.map((sekce, sekceIdx) => (
+        <div key={sekceIdx} className="akordy-sekce-blok">
+          <div className="akordy-sekce-hlavicka">
             <input
+              ref={(el) => {
+                if (el) nazvySekciRef.current.set(sekceIdx, el)
+                else nazvySekciRef.current.delete(sekceIdx)
+              }}
               list="akordy-sekce-navrhy"
               className="field-input akordy-sekce-input"
-              value={radek.sekce}
-              placeholder="Sekce"
-              onChange={(e) => onNastavSekci(radekIdx, e.target.value)}
-              aria-label={`Sekce řádku ${radekIdx + 1}`}
+              value={sekce.nazev}
+              placeholder="Název sekce"
+              onChange={(e) => onNastavNazevSekce(sekceIdx, e.target.value)}
+              aria-label={`Název sekce ${sekceIdx + 1}`}
             />
+            <button type="button" className="btn akordy-sekce-smazat" onClick={() => smazatSekci(sekceIdx)}>
+              Smazat sekci
+            </button>
+          </div>
 
-            <div className="akordy-takty" role="group" aria-label={`Takty řádku ${radekIdx + 1}`}>
-              {Array.from({ length: pocetTaktu(radek, dob) }, (_, taktIdx) => (
-                <div key={taktIdx} className="akordy-takt">
+          <ul className="akordy-radky">
+            {sekce.radky.map((radek, radekIdx) => (
+              <li key={radekIdx} className="akordy-radek">
+                <div
+                  className="akordy-takty"
+                  ref={sekceIdx === 0 && radekIdx === 0 ? prvniTaktyRef : undefined}
+                >
+                  {radek.takty.map((takt, taktIdx) => {
+                    const efektivni = efektivniTakt(takt, zapis.takt)
+                    return (
+                      <div key={taktIdx} className="akordy-takt">
+                        <div className="akordy-takt-hlavicka">
+                          {takt.takt && (
+                            <span className="akordy-takt-badge">
+                              {efektivni.dob}/{efektivni.hodnota}
+                            </span>
+                          )}
+                          <button
+                            type="button"
+                            className="akordy-takt-smazat"
+                            onClick={() => onSmazTakt(sekceIdx, radekIdx, taktIdx)}
+                            aria-label={`Smazat takt ${taktIdx + 1}`}
+                            title="Smazat takt"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <div className="akordy-takt-bunky">
+                          {takt.bunky.map((text, dobaIdx) => (
+                            <input
+                              key={dobaIdx}
+                              ref={refProBunku({ sekceIdx, radekIdx, taktIdx, dobaIdx })}
+                              type="text"
+                              style={{ width: `${sirkaBunky}px` }}
+                              className={`akordy-bunka${
+                                vyberObsahuje(vyber, {
+                                  sekceIdx,
+                                  radekIdx,
+                                  bunkaIdxVRadku: flatIndexZPozice(radek, taktIdx, dobaIdx),
+                                })
+                                  ? ' akordy-bunka-vybrana'
+                                  : ''
+                              }`}
+                              value={text}
+                              autoCorrect="off"
+                              autoCapitalize="off"
+                              spellCheck={false}
+                              onChange={(e) => onUpravBunku(sekceIdx, radekIdx, taktIdx, dobaIdx, e.target.value)}
+                              onKeyDown={(e) => naKlavesu(e, sekceIdx, radekIdx, taktIdx, dobaIdx)}
+                              onClick={(e) => naKlikBunky(e, sekceIdx, radekIdx, taktIdx, dobaIdx)}
+                              aria-label={`Doba ${dobaIdx + 1}, takt ${taktIdx + 1}, řádek ${radekIdx + 1}, sekce ${sekceIdx + 1}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                <button
+                  type="button"
+                  className="btn akordy-radek-smazat"
+                  onClick={() => onSmazRadek(sekceIdx, radekIdx)}
+                  disabled={sekce.radky.length === 1}
+                  title={sekce.radky.length === 1 ? 'Poslední řádek sekce se maže přes „Smazat sekci“' : undefined}
+                >
+                  Smazat řádek
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {sekce.repetice.length > 0 && (
+            <ul className="akordy-repetice-seznam" aria-label={`Repetice sekce ${sekceIdx + 1}`}>
+              {sekce.repetice.map((rep, repIdx) => (
+                <li key={repIdx}>
                   <button
                     type="button"
-                    className="akordy-takt-smazat"
-                    onClick={() => onSmazTakt(radekIdx, taktIdx)}
-                    aria-label={`Smazat takt ${taktIdx + 1} řádku ${radekIdx + 1}`}
-                    title="Smazat takt"
+                    className="akordy-repetice-chip"
+                    onClick={() => onSmazRepetici(sekceIdx, repIdx)}
+                    title="Klikem odebrat"
                   >
-                    ×
+                    takt {rep.od_taktu + 1}–{rep.do_taktu + 1} ×{rep.krat} ✕
                   </button>
-                  <div className="akordy-takt-bunky">
-                    {Array.from({ length: dob }, (_, doba) => {
-                      const bunkaIdx = taktIdx * dob + doba
-                      const pozice = { radek: radekIdx, bunka: bunkaIdx }
-                      return (
-                        <input
-                          key={bunkaIdx}
-                          ref={refPro(radekIdx, bunkaIdx)}
-                          type="text"
-                          className={`akordy-bunka${vyberObsahuje(vyber, pozice) ? ' akordy-bunka-vybrana' : ''}`}
-                          value={radek.bunky[bunkaIdx]}
-                          autoCorrect="off"
-                          autoCapitalize="off"
-                          spellCheck={false}
-                          onChange={(e) => onUpravBunku(radekIdx, bunkaIdx, e.target.value)}
-                          onKeyDown={(e) => naKlavesu(e, radekIdx, bunkaIdx)}
-                          onClick={(e) => naKlikBunky(e, radekIdx, bunkaIdx)}
-                          aria-label={`Doba ${doba + 1}, takt ${taktIdx + 1}, řádek ${radekIdx + 1}`}
-                        />
-                      )
-                    })}
-                  </div>
-                </div>
+                </li>
               ))}
-            </div>
-
-            <button
-              type="button"
-              className="btn akordy-radek-smazat"
-              onClick={() => onSmazRadek(radekIdx)}
-            >
-              Smazat řádek
-            </button>
-
-            {radek.repetice.length > 0 && (
-              <ul className="akordy-repetice-seznam" aria-label={`Repetice řádku ${radekIdx + 1}`}>
-                {radek.repetice.map((rep, repIdx) => (
-                  <li key={repIdx}>
-                    <button
-                      type="button"
-                      className="akordy-repetice-chip"
-                      onClick={() => onSmazRepetici(radekIdx, repIdx)}
-                      title="Klikem odebrat"
-                    >
-                      takt {rep.od_takt + 1}–{rep.do_takt + 1} ×{rep.krat} ✕
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        ))}
-      </ul>
+            </ul>
+          )}
+        </div>
+      ))}
 
       <datalist id="akordy-sekce-navrhy">
         {SEKCE_NAVRHY.map((s) => (
@@ -239,14 +366,17 @@ export default function AkordovyMrizka({
       </datalist>
 
       <div className="akordy-mrizka-akce">
-        <button type="button" className="btn btn-secondary" onClick={onPridejRadekNaKonec}>
-          + Přidat řádek
+        <button type="button" className="btn btn-secondary" onClick={pridatSekci}>
+          + Přidat sekci
         </button>
         {vyber.length > 0 && (
           <div className="akordy-vyber-akce">
             <span className="akordy-vyber-info">{vyber.length} vybraných buněk</span>
             <button type="button" className="btn btn-secondary" onClick={otevriRepetici}>
               Repetice
+            </button>
+            <button type="button" className="btn btn-secondary" onClick={() => setTaktPopoverOtevreny(true)}>
+              Změnit takt
             </button>
             <button type="button" className="btn akordy-vyber-zrusit" onClick={() => setVyber([])}>
               Zrušit výběr
@@ -260,9 +390,13 @@ export default function AkordovyMrizka({
           {repeticeChyba}
         </p>
       )}
+      {infoRadek && <p className="akordy-info-radek">{infoRadek}</p>}
 
-      {popoverOtevreny && (
-        <RepeticePopover onPotvrdit={potvrdRepetici} onZrusit={() => setPopoverOtevreny(false)} />
+      {repeticePopoverOtevreny && (
+        <RepeticePopover onPotvrdit={potvrdRepetici} onZrusit={() => setRepeticePopoverOtevreny(false)} />
+      )}
+      {taktPopoverOtevreny && (
+        <ZmenitTaktPopover onPotvrdit={potvrdZmenuTaktu} onZrusit={() => setTaktPopoverOtevreny(false)} />
       )}
     </div>
   )

@@ -9,6 +9,34 @@
   margin: 0;
 }
 
+/* Sekce = blok s vlastním rámečkem (viz zadání bod 1) — název nahoře jen
+   jednou, pod ním řádky taktů. */
+.akordy-sekce-blok {
+  border: var(--border-w-lg) solid var(--app-ink);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.akordy-sekce-hlavicka {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.akordy-sekce-input {
+  width: 14em;
+  flex-shrink: 0;
+}
+
+.akordy-sekce-smazat {
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-3);
+  min-height: auto;
+}
+
 .akordy-radky {
   list-style: none;
   margin: 0;
@@ -23,13 +51,6 @@
   flex-wrap: wrap;
   align-items: flex-start;
   gap: var(--space-3);
-  padding: var(--space-3);
-  border: var(--border-w) solid var(--app-ink);
-}
-
-.akordy-sekce-input {
-  width: 9em;
-  flex-shrink: 0;
 }
 
 .akordy-takty {
@@ -38,16 +59,16 @@
   overflow-x: auto;
   flex: 1 1 auto;
   min-width: 0;
-  /* Víc taktů, než se vejde na obrazovku, prostě odscroluje — na rozdíl od
-     generovaného PDF (viz zpevnik/akordy_pdf.py) editor nemá pevnou šířku
-     stránky, kterou by musel dodržet. */
+  /* Řádek se nikdy sám nezalamuje (viz zpevnik/akordy_pdf.py) — delší než
+     4 takty výchozího taktu prostě odscroluje. Šířka buňky se dopočítává
+     v JS (viz AkordovyMrizka), aby přesně 4 takty vyšly na šířku beze
+     scrollu od cca 1024px okna výš. */
 }
 
 .akordy-takt {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--space-1);
+  gap: 0;
   padding: 0 var(--space-2);
   border-left: var(--border-w) solid var(--app-ink-18);
   flex-shrink: 0;
@@ -55,6 +76,22 @@
 .akordy-takt:first-child {
   border-left: none;
   padding-left: 0;
+}
+
+.akordy-takt-hlavicka {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 1.3em;
+}
+
+.akordy-takt-badge {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  color: var(--app-ink-70);
+  background: var(--app-ink-18);
+  padding: 0 var(--space-1);
 }
 
 .akordy-takt-smazat {
@@ -65,6 +102,7 @@
   border: none;
   cursor: pointer;
   padding: 0;
+  margin-left: auto;
   min-height: 1.2em;
 }
 .akordy-takt-smazat:hover {
@@ -77,7 +115,6 @@
 }
 
 .akordy-bunka {
-  width: 4em;
   min-height: var(--touch-min);
   padding: var(--space-2);
   font-family: var(--font-mono);
@@ -133,6 +170,7 @@
 
 .akordy-vyber-akce {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
 }
@@ -151,5 +189,13 @@
 .akordy-repetice-chyba {
   color: var(--app-error);
   font-size: var(--text-sm);
+  margin: 0;
+}
+
+/* Nenápadná info hláška o zalomení/zmenšení PDF (viz zadání bod 4) — nikdy
+   neblokuje, jen informuje. */
+.akordy-info-radek {
+  color: var(--app-ink-45);
+  font-size: var(--text-xs);
   margin: 0;
 }

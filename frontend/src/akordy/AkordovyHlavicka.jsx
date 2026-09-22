@@ -1,12 +1,12 @@
 import { useState } from 'react'
-import { TAKTY_PRESETY } from './akordovyModel'
+import { TAKTY_PRESETY, zpusobiZtratuZmenaVychozihoTaktu } from './akordovyModel'
 import './AkordovyHlavicka.css'
 
-// Takt a tempo. Změna taktu nad NEPRÁZDNÝM zápisem je jednosměrná ztráta
-// (repetice se zahodí, viz akordovyModel.preskladejNaNovyTakt) — proto vždy
-// potvrzovací dialog s vysvětlením, ne tichá změna. Nad prázdným zápisem
-// (žádné řádky) se mění bez ptaní.
-export default function AkordovyHlavicka({ takt, tempo, maRadky, onZmenTakt, onZmenTempo }) {
+// Takt a tempo. Změna VÝCHOZÍHO taktu mění jen takty BEZ vlastního přepisu
+// (viz zadání bod 2) — počet taktů se neměnní, takže repetice zůstávají
+// beze změny. Potvrzovací dialog se ptá JEN když by zúžení počtu dob
+// zahodilo neprázdný obsah (buňky se jinak jen doplní/ořežou zprava).
+export default function AkordovyHlavicka({ takt, tempo, sekce, onZmenTakt, onZmenTempo }) {
   const [vlastniOtevreny, setVlastniOtevreny] = useState(false)
   const [vlastniDob, setVlastniDob] = useState(String(takt.dob))
   const [vlastniHodnota, setVlastniHodnota] = useState(String(takt.hodnota))
@@ -14,10 +14,10 @@ export default function AkordovyHlavicka({ takt, tempo, maRadky, onZmenTakt, onZ
   function pozadatOZmenu(novyDob, novaHodnota) {
     if (novyDob === takt.dob && novaHodnota === takt.hodnota) return
     if (
-      maRadky &&
+      zpusobiZtratuZmenaVychozihoTaktu(sekce, novyDob) &&
       !window.confirm(
-        'Změna taktu přeskládá čáry taktů podle nového dělení — buňky (akordy) zůstanou, ' +
-          'jen se přeskupí. Existující repetice se přitom zruší (odkazovaly na staré hranice taktů). Pokračovat?',
+        `Zúžení výchozího taktu na ${novyDob} dob zahodí obsah buněk, které se do nového ` +
+          'počtu nevejdou (jen u taktů bez vlastního přepisu). Počet taktů ani repetice se neztratí. Pokračovat?',
       )
     ) {
       return

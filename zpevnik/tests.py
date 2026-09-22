@@ -1153,14 +1153,22 @@ class HromadnyImportTests(TestCase):
 
 
 class AkordovyZapisSerializerTests(TestCase):
-    """Validace schématu (viz PC_zpevnik_akordovy_zapis.md) — čisté
-    serializerové testy, bez DB/HTTP, ať se ověřuje jen logika samotná."""
+    """Validace schématu 2 (viz PC_zpevnik_akordovy_zapis_upravy.md) —
+    čisté serializerové testy, bez DB/HTTP. Schéma 1 se NEPODPORUJE
+    (viz test_schema_1_odmitnuto) — v produkci nikdy nic nebylo, není co
+    převádět."""
 
     def zaklad(self, **prepis):
         data = {
-            "schema": 1,
+            "schema": 2,
             "takt": {"dob": 4, "hodnota": 4},
-            "radky": [{"sekce": "Sloka", "bunky": ["A", "", "", ""], "repetice": []}],
+            "sekce": [
+                {
+                    "nazev": "Sloka",
+                    "radky": [{"takty": [{"bunky": ["A", "", "", ""]}]}],
+                    "repetice": [],
+                }
+            ],
         }
         data.update(prepis)
         return data
@@ -1169,19 +1177,70 @@ class AkordovyZapisSerializerTests(TestCase):
         serializer = AkordovyZapisSerializer(data=self.zaklad())
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_pocet_bunek_musi_byt_nasobek_taktu(self):
+    def test_schema_1_odmitnuto(self):
+        data = self.zaklad(schema=1)
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_pocet_bunek_musi_sedet_s_efektivnim_taktem(self):
         data = self.zaklad(
-            radky=[{"sekce": "X", "bunky": ["A", "G", "C"], "repetice": []}]
+            sekce=[{"nazev": "X", "radky": [{"takty": [{"bunky": ["A", "G", "C"]}]}], "repetice": []}]
         )
         serializer = AkordovyZapisSerializer(data=data)
         self.assertFalse(serializer.is_valid())
 
+    def test_vlastni_takt_na_baru_prepise_ocekavany_pocet_bunek(self):
+        # 2 buňky sedí s vlastním přepisem 2/4, i když výchozí je 4/4.
+        data = self.zaklad(
+            sekce=[
+                {
+                    "nazev": "X",
+                    "radky": [{"takty": [{"bunky": ["A", ""], "takt": {"dob": 2, "hodnota": 4}}]}],
+                    "repetice": [],
+                }
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_vlastni_takt_se_spatnym_poctem_bunek_odmitnut(self):
+        data = self.zaklad(
+            sekce=[
+                {
+                    "nazev": "X",
+                    # takt 2/4 očekává 2 buňky, tady jsou 4
+                    "radky": [{"takty": [{"bunky": ["A", "", "", ""], "takt": {"dob": 2, "hodnota": 4}}]}],
+                    "repetice": [],
+                }
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_repetice_pres_vic_radku_jedne_sekce_projde(self):
+        # sekce se 2 řádky po 2 taktech (dob=4 => 8 bunek/radek), repetice
+        # 0..3 sahá přes OBA řádky (takty 0,1 na 1. řádku, 2,3 na 2.)
+        data = self.zaklad(
+            sekce=[
+                {
+                    "nazev": "X",
+                    "radky": [
+                        {"takty": [{"bunky": ["A", "", "", ""]}, {"bunky": ["B", "", "", ""]}]},
+                        {"takty": [{"bunky": ["C", "", "", ""]}, {"bunky": ["D", "", "", ""]}]},
+                    ],
+                    "repetice": [{"od_taktu": 0, "do_taktu": 3, "krat": 2}],
+                }
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
     def test_prekryvajici_se_repetice_odmitnuty(self):
         data = self.zaklad(
-            radky=[
+            sekce=[
                 {
-                    "sekce": "X",
-                    "bunky": ["A", "", "", ""] * 4,
+                    "nazev": "X",
+                    "radky": [{"takty": [{"bunky": ["A", "", "", ""]}] * 4}],
                     "repetice": [
                         {"od_taktu": 0, "do_taktu": 2, "krat": 2},
                         {"od_taktu": 1, "do_taktu": 3, "krat": 2},
@@ -1192,12 +1251,12 @@ class AkordovyZapisSerializerTests(TestCase):
         serializer = AkordovyZapisSerializer(data=data)
         self.assertFalse(serializer.is_valid())
 
-    def test_repetice_mimo_radek_odmitnuta(self):
+    def test_repetice_mimo_sekci_odmitnuta(self):
         data = self.zaklad(
-            radky=[
+            sekce=[
                 {
-                    "sekce": "X",
-                    "bunky": ["A", "", "", ""] * 2,
+                    "nazev": "X",
+                    "radky": [{"takty": [{"bunky": ["A", "", "", ""]}] * 2}],
                     "repetice": [{"od_taktu": 0, "do_taktu": 5, "krat": 2}],
                 }
             ]
@@ -1207,10 +1266,10 @@ class AkordovyZapisSerializerTests(TestCase):
 
     def test_nesousedici_repetice_se_nepovazuji_za_prekryv(self):
         data = self.zaklad(
-            radky=[
+            sekce=[
                 {
-                    "sekce": "X",
-                    "bunky": ["A", "", "", ""] * 6,
+                    "nazev": "X",
+                    "radky": [{"takty": [{"bunky": ["A", "", "", ""]}] * 6}],
                     "repetice": [
                         {"od_taktu": 0, "do_taktu": 1, "krat": 2},
                         {"od_taktu": 2, "do_taktu": 3, "krat": 3},
@@ -1221,68 +1280,126 @@ class AkordovyZapisSerializerTests(TestCase):
         serializer = AkordovyZapisSerializer(data=data)
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
-    def test_prilis_mnoho_radku_odmitnuto(self):
+    def test_prilis_mnoho_radku_celkem_odmitnuto(self):
+        # 200 limit je SOUČET řádků přes všechny sekce, ne per-sekce.
         data = self.zaklad(
-            radky=[{"sekce": "", "bunky": ["A", "", "", ""], "repetice": []}] * 201
+            sekce=[
+                {"nazev": "", "radky": [{"takty": [{"bunky": ["A", "", "", ""]}]}]} for _ in range(201)
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_prilis_mnoho_sekci_odmitnuto(self):
+        data = self.zaklad(
+            sekce=[
+                {"nazev": "", "radky": [{"takty": [{"bunky": ["A", "", "", ""]}]}]} for _ in range(51)
+            ]
         )
         serializer = AkordovyZapisSerializer(data=data)
         self.assertFalse(serializer.is_valid())
 
     def test_prilis_dlouha_bunka_odmitnuta(self):
         data = self.zaklad(
-            radky=[
-                {"sekce": "X", "bunky": ["A" * 17, "", "", ""], "repetice": []}
-            ]
+            sekce=[{"nazev": "X", "radky": [{"takty": [{"bunky": ["A" * 17, "", "", ""]}]}]}]
         )
         serializer = AkordovyZapisSerializer(data=data)
         self.assertFalse(serializer.is_valid())
 
-    def test_prazdne_radky_povoleny(self):
-        serializer = AkordovyZapisSerializer(data=self.zaklad(radky=[]))
+    def test_prazdna_sekce_povolena(self):
+        serializer = AkordovyZapisSerializer(data=self.zaklad(sekce=[]))
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
 
 class AkordyPdfMrizkaTests(TestCase):
-    """Mřížka akordového PDF (zpevnik/akordy_pdf.py): šířka taktu se
-    dopočítá tak, aby 4/4 dalo přesně 4 takty na řádek A4 (viz
-    PC_zpevnik_akordovy_zapis.md), a akord smí vizuálně přetéct do
-    prázdných dob za sebou, dokud nenarazí na obsazenou dobu nebo konec
-    taktu — zmenšuje se, jen když by se tam nevešel."""
-
-    def test_ctyri_takty_na_radek_bez_ohledu_na_takt(self):
-        from zpevnik.akordy_pdf import _pocet_taktu_na_radek
-
-        # 3/4, 4/4, 6/8, 12/8 — čtyři takty na řádek pro VŠECHNY, ne jen 4/4.
-        # Dřívější chybná verze počítala z počtu DOB na řádek (16 // dob),
-        # což dalo 5/4/2/1 — přesně tohle už se nesmí vrátit.
-        for dob in (3, 4, 6, 12):
-            with self.subTest(dob=dob):
-                self.assertEqual(_pocet_taktu_na_radek(dob), 4)
+    """Mřížka akordového PDF (zpevnik/akordy_pdf.py), schéma 2: ŘÁDEK SE
+    NIKDY NEZALAMUJE (viz PC_zpevnik_akordovy_zapis_upravy.md bod 4) — delší
+    než 4 takty výchozího taktu zmenší CELÝ dokument, ne jen ten řádek.
+    Akord smí vizuálně přetéct do prázdných dob za sebou, dokud nenarazí
+    na obsazenou dobu nebo konec taktu — zmenšuje se, jen když by se tam
+    nevešel."""
 
     def test_akord_smi_pretect_az_ke_konci_taktu(self):
         from zpevnik.akordy_pdf import _pozice_v_taktu
 
         vysledek = _pozice_v_taktu(["C", "", "", ""], sirka_doby=10, sirka_taktu=40)
-        self.assertEqual(vysledek, [("C", 0, 40)])
+        self.assertEqual(vysledek, [("C", 0, 0, 40)])
 
     def test_dalsi_obsazena_doba_omezi_pretecni_predchozi(self):
         from zpevnik.akordy_pdf import _pozice_v_taktu
 
         vysledek = _pozice_v_taktu(["C", "", "G", ""], sirka_doby=10, sirka_taktu=40)
-        self.assertEqual(vysledek, [("C", 0, 20), ("G", 20, 20)])
+        self.assertEqual(vysledek, [("C", 0, 0, 20), ("G", 2, 20, 20)])
 
     def test_vsechny_ctyri_doby_obsazene_kazda_dostane_sirku_jedne_doby(self):
         from zpevnik.akordy_pdf import _pozice_v_taktu
 
         vysledek = _pozice_v_taktu(["C", "D", "E", "F"], sirka_doby=10, sirka_taktu=40)
         self.assertEqual(
-            vysledek, [("C", 0, 10), ("D", 10, 10), ("E", 20, 10), ("F", 30, 10)]
+            vysledek, [("C", 0, 0, 10), ("D", 1, 10, 10), ("E", 2, 20, 10), ("F", 3, 30, 10)]
         )
 
     def test_prazdny_takt_nevrati_nic(self):
         from zpevnik.akordy_pdf import _pozice_v_taktu
 
         self.assertEqual(_pozice_v_taktu(["", "", "", ""], sirka_doby=10, sirka_taktu=40), [])
+
+    def _zapis(self, sekce, dob=4, hodnota=4):
+        return {"schema": 2, "takt": {"dob": dob, "hodnota": hodnota}, "tempo": None, "sekce": sekce}
+
+    def test_ctyri_takty_vychoziho_taktu_nezmensi_dokument(self):
+        from zpevnik.akordy_pdf import vygeneruj_pdf
+
+        class FakePisen:
+            nazev = "Test"
+            interpret = ""
+
+        zapis = self._zapis(
+            [
+                {
+                    "nazev": "A",
+                    "radky": [{"takty": [{"bunky": ["A", "", "", ""]}] * 4}],
+                    "repetice": [],
+                }
+            ]
+        )
+        pdf = vygeneruj_pdf(FakePisen(), zapis)
+        self.assertEqual(pdf[:5], b"%PDF-")
+
+    def test_delsi_radek_nez_4_takty_se_nezalomi_zmensi_dokument(self):
+        # 4 takty 4/4 + 1 takt 2/4 = 18 dob > 16 (4*4) -> CELÝ dokument se
+        # zmenší (scale = 16/18), řádek zůstane jeden, žádné auto-zalomení.
+        from zpevnik import akordy_pdf
+
+        class FakePisen:
+            nazev = "Test"
+            interpret = ""
+
+        zapis = self._zapis(
+            [
+                {
+                    "nazev": "A",
+                    "radky": [
+                        {
+                            "takty": [{"bunky": ["A", "", "", ""]}] * 4
+                            + [{"bunky": ["E", ""], "takt": {"dob": 2, "hodnota": 4}}]
+                        }
+                    ],
+                    "repetice": [],
+                }
+            ]
+        )
+        pdf = akordy_pdf.vygeneruj_pdf(FakePisen(), zapis)
+        self.assertEqual(pdf[:5], b"%PDF-")
+        # jen jedna stránka (žádné zalomení řádku ani stránky u tak krátkého
+        # zápisu) — PDF s jednou stránkou má v bytech přesně jeden "/Type /Page"
+        # (ne /Pages, ten je vždy) mimo katalog; jednodušší a stabilnější
+        # ověření je přes pypdf.
+        from pypdf import PdfReader
+        import io
+
+        reader = PdfReader(io.BytesIO(pdf))
+        self.assertEqual(len(reader.pages), 1)
 
 
 class VerzeAkordyVytvoreniTests(TestCase):
@@ -1309,9 +1426,15 @@ class VerzeAkordyVytvoreniTests(TestCase):
         self.client.force_authenticate(self.clen)
         telo = {
             "akordy": {
-                "schema": 1,
+                "schema": 2,
                 "takt": {"dob": 4, "hodnota": 4},
-                "radky": [{"sekce": "Refren", "bunky": ["D", "A", "Bm", "G"], "repetice": []}],
+                "sekce": [
+                    {
+                        "nazev": "Refrén",
+                        "radky": [{"takty": [{"bunky": ["D", "A", "Bm", "G"]}]}],
+                        "repetice": [],
+                    }
+                ],
             }
         }
         response = self.client.post(
@@ -1319,11 +1442,17 @@ class VerzeAkordyVytvoreniTests(TestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
         verze = VerzePisne.objects.get(id=response.data["id"])
-        self.assertEqual(verze.akordy["radky"][0]["sekce"], "Refren")
+        self.assertEqual(verze.akordy["sekce"][0]["nazev"], "Refrén")
 
     def test_neplatny_akordovy_zapis_odmitnut(self):
         self.client.force_authenticate(self.clen)
-        telo = {"akordy": {"schema": 1, "takt": {"dob": 4, "hodnota": 4}, "radky": [{"bunky": ["A", "B"]}]}}
+        telo = {
+            "akordy": {
+                "schema": 2,
+                "takt": {"dob": 4, "hodnota": 4},
+                "sekce": [{"nazev": "X", "radky": [{"takty": [{"bunky": ["A", "B"]}]}]}],
+            }
+        }
         response = self.client.post(
             f"/api/pisne/{self.pisen.id}/verze-akordy/", telo, format="json"
         )
@@ -1347,9 +1476,12 @@ class AkordyApiTests(TestCase):
             "admin-akordy", password="heslo123", is_staff=True
         )
         self.zapis = {
-            "schema": 1,
+            "schema": 2,
             "takt": {"dob": 4, "hodnota": 4},
-            "radky": [{"sekce": "Sloka", "bunky": ["C", "", "", ""], "repetice": []}],
+            "tempo": None,
+            "sekce": [
+                {"nazev": "Sloka", "radky": [{"takty": [{"bunky": ["C", "", "", ""]}]}], "repetice": []}
+            ],
         }
         self.verze_akordy = VerzePisne.objects.create(
             pisen=self.pisen,
@@ -1367,7 +1499,7 @@ class AkordyApiTests(TestCase):
         self.client.force_authenticate(self.alice)
         response = self.client.get(f"/api/verze-pisni/{self.verze_akordy.id}/akordy/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["radky"][0]["sekce"], "Sloka")
+        self.assertEqual(response.data["sekce"][0]["nazev"], "Sloka")
 
     def test_cizi_personal_verze_da_404(self):
         self.client.force_authenticate(self.bob)
@@ -1388,10 +1520,12 @@ class AkordyApiTests(TestCase):
         self.client.force_authenticate(self.alice)
         puvodni_nazev_souboru = self.verze_akordy.soubor.name if self.verze_akordy.soubor else None
         novy_zapis = {
-            "schema": 1,
+            "schema": 2,
             "takt": {"dob": 3, "hodnota": 4},
             "tempo": 120,
-            "radky": [{"sekce": "Bridge", "bunky": ["Em", "G", "D"], "repetice": []}],
+            "sekce": [
+                {"nazev": "Bridge", "radky": [{"takty": [{"bunky": ["Em", "G", "D"]}]}], "repetice": []}
+            ],
         }
         response = self.client.put(
             f"/api/verze-pisni/{self.verze_akordy.id}/akordy/", novy_zapis, format="json"
@@ -1400,7 +1534,7 @@ class AkordyApiTests(TestCase):
         self.assertIn("pocet_anotaci_ktere_mohly_ujet", response.data)
 
         self.verze_akordy.refresh_from_db()
-        self.assertEqual(self.verze_akordy.akordy["radky"][0]["sekce"], "Bridge")
+        self.assertEqual(self.verze_akordy.akordy["sekce"][0]["nazev"], "Bridge")
         self.assertEqual(self.verze_akordy.akordy["takt"]["dob"], 3)
         self.assertTrue(self.verze_akordy.soubor)
         self.assertNotEqual(self.verze_akordy.soubor.name, puvodni_nazev_souboru)
@@ -1440,7 +1574,11 @@ class AkordyApiTests(TestCase):
         self.client.force_authenticate(self.alice)
         response = self.client.put(
             f"/api/verze-pisni/{self.verze_akordy.id}/akordy/",
-            {"schema": 1, "takt": {"dob": 4, "hodnota": 4}, "radky": [{"bunky": ["A", "B", "C"]}]},
+            {
+                "schema": 2,
+                "takt": {"dob": 4, "hodnota": 4},
+                "sekce": [{"nazev": "X", "radky": [{"takty": [{"bunky": ["A", "B", "C"]}]}]}],
+            },
             format="json",
         )
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
@@ -1516,6 +1654,71 @@ class PridatPisenDoZpevnikuTests(TestCase):
         self.assertIn(
             response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
         )
+
+
+class CisloVerzeTests(TestCase):
+    """VerzePisne.cislo — přiděluje server (max+1), přes všechny cesty
+    vzniku verze (viz PC_zpevnik_akordovy_zapis_upravy.md bod 5)."""
+
+    def setUp(self):
+        self.pisen = Pisen.objects.create(nazev="Číslovaná píseň")
+        self.clen = User.objects.create_user("clen-cislo", password="heslo123")
+        self.admin = User.objects.create_user("admin-cislo", password="heslo123", is_staff=True)
+        self.client = APIClient()
+
+    def test_prvni_verze_dostane_cislo_1(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            "/api/verze-pisni/", {"pisen": self.pisen.id, "stav": "confirmed"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["cislo"], 1)
+
+    def test_druha_verze_dostane_cislo_2(self):
+        VerzePisne.objects.create(pisen=self.pisen, cislo=1, stav=VerzePisne.STAV_CONFIRMED)
+        self.client.force_authenticate(self.clen)
+        response = self.client.post(
+            "/api/verze-pisni/", {"pisen": self.pisen.id}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["cislo"], 2)
+
+    def test_cislo_se_neprecisluje_po_smazani(self):
+        VerzePisne.objects.create(pisen=self.pisen, cislo=1, stav=VerzePisne.STAV_CONFIRMED)
+        druha = VerzePisne.objects.create(pisen=self.pisen, cislo=2, stav=VerzePisne.STAV_CONFIRMED)
+        VerzePisne.objects.filter(cislo=1, pisen=self.pisen).delete()
+        # další nová verze pokračuje za nejvyšším ZBÝVAJÍCÍM číslem (2), ne
+        # za tím, co bylo smazáno
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            "/api/verze-pisni/", {"pisen": self.pisen.id, "stav": "confirmed"}, format="json"
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["cislo"], 3)
+        druha.refresh_from_db()
+        self.assertEqual(druha.cislo, 2)  # nedotčeno
+
+    def test_klient_nemuze_poslat_vlastni_cislo(self):
+        self.client.force_authenticate(self.admin)
+        response = self.client.post(
+            "/api/verze-pisni/",
+            {"pisen": self.pisen.id, "stav": "confirmed", "cislo": 999},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["cislo"], 1)  # 999 se ignoruje, cislo je read-only
+
+    def test_akordova_verze_taky_dostane_cislo(self):
+        self.client.force_authenticate(self.clen)
+        response = self.client.post(f"/api/pisne/{self.pisen.id}/verze-akordy/")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["cislo"], 1)
+
+    def test_cisla_ruznych_pisni_se_neovlivnuji(self):
+        jina_pisen = Pisen.objects.create(nazev="Jiná píseň")
+        VerzePisne.objects.create(pisen=jina_pisen, cislo=1, stav=VerzePisne.STAV_CONFIRMED)
+        VerzePisne.objects.create(pisen=jina_pisen, cislo=2, stav=VerzePisne.STAV_CONFIRMED)
+        self.assertEqual(self.pisen.dalsi_cislo_verze(), 1)  # nová píseň, žádná kolize
 
 
 class SpaIndexCacheTests(TestCase):

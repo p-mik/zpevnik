@@ -32,6 +32,7 @@ class VerzePisneSerializer(serializers.ModelSerializer):
         model = VerzePisne
         fields = [
             "id",
+            "cislo",
             "pisen",
             "typ_obsahu",
             "soubor",
@@ -48,7 +49,15 @@ class VerzePisneSerializer(serializers.ModelSerializer):
         # klient přes obecný create/update — jinak by šlo založit zdroj=akordy
         # bez akordového zápisu a bez vygenerovaného PDF, což by porušilo
         # invariant "soubor u akordů je vždycky vygenerovaný, nikdy nahraný".
-        read_only_fields = ["vytvoreno", "upraveno", "puvodni_nazev_souboru", "zdroj"]
+        # `cislo` ze stejného důvodu čtenářské — přiděluje ho výhradně server
+        # (Pisen.dalsi_cislo_verze), viz perform_create níž.
+        read_only_fields = [
+            "vytvoreno",
+            "upraveno",
+            "puvodni_nazev_souboru",
+            "zdroj",
+            "cislo",
+        ]
 
     def get_ma_soubor(self, obj):
         return bool(obj.soubor)
@@ -131,28 +140,41 @@ class AnotaceSerializer(serializers.ModelSerializer):
         return value
 
 
-# --- Akordový zápis (PC_zpevnik_akordovy_zapis, fáze 1) ---
+# --- Akordový zápis, schéma 2 (PC_zpevnik_akordovy_zapis_upravy.md) ---
 # Zdrojová data pro generovaný PDF (viz akordy_pdf.py) — VerzePisne se
 # `zdroj='akordy'` nese tenhle JSON MÍSTO nahraného souboru; `soubor` je z
-# něj vygenerovaný artefakt (viz VerzePisneViewSet.akordy). Schéma má
-# schválně verzi (`schema`) — budoucí rozšíření o text písně (mimo tenhle
-# task) přibude jako další nepovinné pole řádku, ne jako zlom schématu.
+# něj vygenerovaný artefakt (viz VerzePisneViewSet.akordy).
+#
+# Schéma 1 (fáze 1–2) se NEPODPORUJE ani nepřevádí — v produkci nikdy nic
+# nebylo pushnuto, takže není co migrovat (viz zadání úprav). `schema` je
+# napevno 2; jakýkoliv jiný zápis serializer rovnou odmítne.
+#
+# Sekce je teď blok, ne popisek řádku: `sekce[]` → `radky[]` → `takty[]` →
+# `bunky[]`. `takty[].takt` je VOLITELNÝ přepis výchozího taktu (viz
+# PC_zpevnik_akordovy_zapis_upravy.md bod 2) — když chybí, platí dokumentu
+# vlastní `takt`. `repetice` žije na SEKCI, ne na řádku: indexuje takty
+# napříč VŠEMI řádky té sekce (0-based, `do_taktu` včetně) — umožňuje
+# repetici přes víc řádků v rámci jedné sekce, ne přes sekce.
 
 MAX_RADKU_AKORDY = 200
 MAX_ZNAKU_BUNKA = 16
 MAX_TAKTU_NA_RADEK = 64
 MAX_DELKA_SEKCE = 30
+MAX_SEKCI = 50
 
 
 class TaktSerializer(serializers.Serializer):
+    """Tvar {dob, hodnota} — použitý jak pro výchozí takt dokumentu, tak
+    pro přepis jednotlivého taktu v řádku (stejná struktura, jiný kontext)."""
+
     dob = serializers.IntegerField(min_value=1, max_value=32)
     hodnota = serializers.IntegerField(min_value=1, max_value=32)
 
 
 class RepeticeSerializer(serializers.Serializer):
-    # Indexy taktů V RÁMCI ŘÁDKU, 0-based, `do_taktu` včetně — validace proti
-    # skutečnému počtu taktů řádku (a proti překryvu) je až na
-    # AkordovyZapisSerializer.validate, kde je zná oboje najednou.
+    # Indexy taktů NAPŘÍČ VŠEMI ŘÁDKY SEKCE, 0-based, `do_taktu` včetně —
+    # validace proti skutečnému počtu taktů sekce (a proti překryvu) je až
+    # na AkordovyZapisSerializer.validate, kde je zná oboje najednou.
     od_taktu = serializers.IntegerField(min_value=0)
     do_taktu = serializers.IntegerField(min_value=0)
     krat = serializers.IntegerField(min_value=2, max_value=16)
@@ -163,55 +185,74 @@ class RepeticeSerializer(serializers.Serializer):
         return attrs
 
 
-class AkordovyRadekSerializer(serializers.Serializer):
-    sekce = serializers.CharField(max_length=MAX_DELKA_SEKCE, allow_blank=True, default="")
-    # Prázdná buňka = drží se předchozí akord (viz zadání) — validní hodnota,
-    # ne chyba. `allow_empty=False`: řádek bez jediné buňky nedává smysl.
+class TaktVRadkuSerializer(serializers.Serializer):
+    """Jeden takt (bar) uvnitř řádku. `bunky` — prázdná buňka = drží se
+    předchozí akord (validní hodnota, ne chyba). `takt` chybí = platí
+    výchozí takt dokumentu; jeho délka musí sedět s `len(bunky)` — to se
+    ověřuje až na AkordovyZapisSerializer.validate, kde je výchozí takt
+    po ruce."""
+
     bunky = serializers.ListField(
         child=serializers.CharField(max_length=MAX_ZNAKU_BUNKA, allow_blank=True),
         allow_empty=False,
     )
+    takt = TaktSerializer(required=False)
+
+
+class RadekZapisuSerializer(serializers.Serializer):
+    takty = TaktVRadkuSerializer(many=True, allow_empty=False)
+
+    def validate_takty(self, value):
+        if len(value) > MAX_TAKTU_NA_RADEK:
+            raise serializers.ValidationError(f"Nejvýš {MAX_TAKTU_NA_RADEK} taktů na řádek.")
+        return value
+
+
+class SekceSerializer(serializers.Serializer):
+    nazev = serializers.CharField(max_length=MAX_DELKA_SEKCE, allow_blank=True, default="")
+    radky = RadekZapisuSerializer(many=True, allow_empty=True)
     repetice = RepeticeSerializer(many=True, required=False, default=list)
 
 
 class AkordovyZapisSerializer(serializers.Serializer):
-    schema = serializers.IntegerField(min_value=1, max_value=1)
+    schema = serializers.IntegerField(min_value=2, max_value=2)
     takt = TaktSerializer()
     tempo = serializers.IntegerField(min_value=20, max_value=400, required=False, allow_null=True)
-    radky = AkordovyRadekSerializer(many=True, allow_empty=True)
+    sekce = SekceSerializer(many=True, allow_empty=True)
 
-    def validate_radky(self, value):
-        if len(value) > MAX_RADKU_AKORDY:
-            raise serializers.ValidationError(f"Nejvýš {MAX_RADKU_AKORDY} řádků.")
+    def validate_sekce(self, value):
+        if len(value) > MAX_SEKCI:
+            raise serializers.ValidationError(f"Nejvýš {MAX_SEKCI} sekcí.")
+        celkem_radku = sum(len(s["radky"]) for s in value)
+        if celkem_radku > MAX_RADKU_AKORDY:
+            raise serializers.ValidationError(f"Nejvýš {MAX_RADKU_AKORDY} řádků celkem.")
         return value
 
     def validate(self, attrs):
-        # `len(bunky)` musí být násobek `dob` — tady, ne na řádku samotném,
-        # protože teprve tady je `takt.dob` po ruce. Repetice se zarovnávají
-        # na CELÉ TAKTY (viz zadání editoru), takže hranice taktu = index //
-        # dob, ne index buňky.
-        dob = attrs["takt"]["dob"]
-        for i, radek in enumerate(attrs["radky"]):
-            pocet_bunek = len(radek["bunky"])
-            if pocet_bunek % dob != 0:
-                raise serializers.ValidationError(
-                    f"Řádek {i + 1}: počet buněk ({pocet_bunek}) musí být násobek taktu ({dob})."
-                )
-            pocet_taktu = pocet_bunek // dob
-            if pocet_taktu > MAX_TAKTU_NA_RADEK:
-                raise serializers.ValidationError(
-                    f"Řádek {i + 1}: nejvýš {MAX_TAKTU_NA_RADEK} taktů na řádek."
-                )
+        dob_vychozi = attrs["takt"]["dob"]
+        for i_sekce, sekce in enumerate(attrs["sekce"]):
+            pocet_taktu_v_sekci = 0
+            for i_radek, radek in enumerate(sekce["radky"]):
+                for i_takt, takt_v_radku in enumerate(radek["takty"]):
+                    efektivni_dob = takt_v_radku.get("takt", {}).get("dob", dob_vychozi)
+                    pocet_bunek = len(takt_v_radku["bunky"])
+                    if pocet_bunek != efektivni_dob:
+                        raise serializers.ValidationError(
+                            f"Sekce {i_sekce + 1}, řádek {i_radek + 1}, takt {i_takt + 1}: "
+                            f"počet buněk ({pocet_bunek}) musí sedět s taktem ({efektivni_dob})."
+                        )
+                    pocet_taktu_v_sekci += 1
+
             obsazene = set()
-            for rep in radek["repetice"]:
-                if rep["do_taktu"] >= pocet_taktu:
+            for rep in sekce["repetice"]:
+                if rep["do_taktu"] >= pocet_taktu_v_sekci:
                     raise serializers.ValidationError(
-                        f"Řádek {i + 1}: repetice odkazuje na takt mimo řádek."
+                        f"Sekce {i_sekce + 1}: repetice odkazuje na takt mimo sekci."
                     )
                 rozsah = set(range(rep["od_taktu"], rep["do_taktu"] + 1))
                 if obsazene & rozsah:
                     raise serializers.ValidationError(
-                        f"Řádek {i + 1}: repetice se v rámci řádku překrývají."
+                        f"Sekce {i_sekce + 1}: repetice se v rámci sekce překrývají."
                     )
                 obsazene |= rozsah
         return attrs

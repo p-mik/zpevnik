@@ -53,28 +53,30 @@ export default function AkordovyEditorPage() {
 
       <h1 className="section-heading">
         Akordový zápis{song ? ` — ${song.nazev}` : ''}
+        {verze.cislo ? ` · Verze ${verze.cislo}` : ''}
       </h1>
 
       <AkordovyHlavicka
         takt={editor.zapis.takt}
         tempo={editor.zapis.tempo}
-        maRadky={editor.zapis.radky.length > 0}
+        sekce={editor.zapis.sekce}
         onZmenTakt={editor.nastavTakt}
         onZmenTempo={editor.nastavTempo}
       />
 
       <AkordovyMrizka
-        radky={editor.zapis.radky}
-        dob={editor.dob}
+        zapis={editor.zapis}
         onUpravBunku={editor.upravBunku}
-        onNastavSekci={editor.nastavSekci}
+        onNastavNazevSekce={editor.nastavNazevSekce}
         onPridejTakt={editor.pridejTakt}
         onSmazTakt={editor.smazTakt}
         onSmazRadek={editor.smazRadek}
         onVlozRadekPo={editor.vlozRadekPo}
-        onPridejRadekNaKonec={editor.pridejRadekNaKonec}
+        onSmazSekci={editor.smazSekci}
+        onPridejSekci={editor.pridejSekci}
         onPridejRepetici={editor.pridejRepetici}
         onSmazRepetici={editor.smazRepetici}
+        onZmenTaktVyberu={editor.zmenTaktVyberu}
       />
 
       <div className="akordy-editor-ulozeni">
