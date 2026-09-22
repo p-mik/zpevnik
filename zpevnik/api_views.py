@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from .akordy_pdf import vygeneruj_pdf
+from .import_musicxml import parsuj_musicxml
 from .import_pisni import proved_import
 from .models import (
     Anotace,
@@ -144,6 +145,47 @@ class PisenViewSet(viewsets.ModelViewSet):
             VerzePisneSerializer(verze, context={"request": request}).data,
             status=status.HTTP_201_CREATED,
         )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="verze-musicxml",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def verze_musicxml(self, request, pk=None):
+        """Nová akordová verze naimportovaná ze souboru MusicXML (schéma 2,
+        viz PC_zpevnik_akordovy_zapis_upravy.md bod 6 a import_musicxml.py)
+        — jinak stejné jako `verze_akordy` (osobní koncept, PDF rovnou při
+        vytvoření), jen zdroj dat je nahraný soubor místo JSON v těle.
+        """
+        pisen = self.get_object()
+
+        soubor = request.FILES.get("soubor")
+        if not soubor:
+            return Response(
+                {"soubor": ["Soubor je povinný."]}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        vysledek = parsuj_musicxml(soubor)
+        serializer = AkordovyZapisSerializer(data=vysledek["akordy"])
+        serializer.is_valid(raise_exception=True)
+
+        pdf_bytes = vygeneruj_pdf(pisen, serializer.validated_data)
+        verze = VerzePisne.objects.create(
+            pisen=pisen,
+            cislo=pisen.dalsi_cislo_verze(),
+            typ_obsahu=VerzePisne.TYP_PDF,
+            zdroj=VerzePisne.ZDROJ_AKORDY,
+            akordy=serializer.validated_data,
+            stav=VerzePisne.STAV_PERSONAL,
+            vlastnik=request.user,
+        )
+        verze.soubor.save(f"akordy-{verze.pk}.pdf", ContentFile(pdf_bytes), save=True)
+
+        data = VerzePisneSerializer(verze, context={"request": request}).data
+        data["pocet_taktu"] = vysledek["pocet_taktu"]
+        data["harmony_chyb"] = vysledek["harmony_chyb"]
+        return Response(data, status=status.HTTP_201_CREATED)
 
 
 class VerzePisneViewSet(viewsets.ModelViewSet):

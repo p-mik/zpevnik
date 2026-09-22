@@ -57,6 +57,7 @@ export default function SongDetailPage() {
   const { prevSong, nextSong } = useGlobalSongNavigation(id)
   const [zakladamAkordy, setZakladamAkordy] = useState(false)
   const [chybaAkordy, setChybaAkordy] = useState(null)
+  const [importujiMusicXml, setImportujiMusicXml] = useState(false)
 
   const [nahledMazani, setNahledMazani] = useState(null)
   const [mazani, setMazani] = useState(false)
@@ -83,6 +84,25 @@ export default function SongDetailPage() {
     } catch (err) {
       setChybaAkordy(extractErrorMessage(err, 'Akordovou verzi se nepodařilo založit.'))
       setZakladamAkordy(false)
+    }
+  }
+
+  async function importMusicXml(e) {
+    const soubor = e.target.files?.[0]
+    e.target.value = ''
+    if (!soubor) return
+    setImportujiMusicXml(true)
+    setChybaAkordy(null)
+    try {
+      const formData = new FormData()
+      formData.append('soubor', soubor)
+      const verze = await api.post(`/api/pisne/${song.id}/verze-musicxml/`, formData, {
+        isFormData: true,
+      })
+      navigate(`/verze-pisni/${verze.id}/akordy`)
+    } catch (err) {
+      setChybaAkordy(extractErrorMessage(err, 'MusicXML se nepodařilo naimportovat.'))
+      setImportujiMusicXml(false)
     }
   }
 
@@ -178,6 +198,16 @@ export default function SongDetailPage() {
             >
               {zakladamAkordy ? 'Zakládám…' : 'Nová akordová verze'}
             </button>
+            <label className="btn btn-secondary song-musicxml-label">
+              {importujiMusicXml ? 'Importuji…' : 'Import MusicXML'}
+              <input
+                type="file"
+                accept=".musicxml,.xml"
+                onChange={importMusicXml}
+                disabled={importujiMusicXml}
+                className="song-musicxml-input"
+              />
+            </label>
             {user?.role === 'admin' && (
               <button type="button" className="btn song-smazat-btn" onClick={otevritSmazani}>
                 Smazat píseň

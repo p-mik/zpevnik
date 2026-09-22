@@ -2003,3 +2003,168 @@ class MazaniZpevnikuTests(TestCase):
         response = self.client.delete(f"/api/zpevniky/{self.zpevnik.id}/")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Zpevnik.objects.filter(id=self.zpevnik.id).exists())
+
+
+FIXTURE_AFRICA = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "tests", "fixtures", "africa_moises.musicxml"
+)
+
+
+class MusicXmlParserTests(TestCase):
+    """import_musicxml.parsuj_musicxml — čisté parserové testy, bez DB/HTTP
+    (PC_zpevnik_akordovy_zapis_upravy.md bod 6)."""
+
+    def test_africa_fixture_se_precte_cele_bez_chyb(self):
+        from .import_musicxml import parsuj_musicxml
+
+        with open(FIXTURE_AFRICA, "rb") as f:
+            vysledek = parsuj_musicxml(f)
+
+        self.assertEqual(vysledek["pocet_taktu"], 101)
+        self.assertEqual(vysledek["harmony_chyb"], 0)
+        akordy = vysledek["akordy"]
+        self.assertEqual(akordy["schema"], 2)
+        self.assertEqual(akordy["takt"], {"dob": 4, "hodnota": 4})
+        self.assertEqual(akordy["tempo"], 94)
+
+        # 101 taktů / 4 na řádek -> 26 řádků (poslední neúplný, 1 takt)
+        radky = akordy["sekce"][0]["radky"]
+        self.assertEqual(len(radky), 26)
+        self.assertEqual(sum(len(r["takty"]) for r in radky), 101)
+
+        # takt 6 (index 5): "A . . C#m7" (viz XML — harmony na dobu 1 a 4)
+        takt6 = radky[1]["takty"][1]
+        self.assertEqual(takt6["bunky"], ["A", "", "", "C#m7"])
+
+        # posledni takt (101, index 100): stejný vzorec, "A . . C#m7"
+        posledni = radky[-1]["takty"][-1]
+        self.assertEqual(posledni["bunky"], ["A", "", "", "C#m7"])
+
+        # žádný takt v týhle fixture nemá vlastní přepis - je jen 4/4 všude
+        self.assertTrue(all("takt" not in t for r in radky for t in r["takty"]))
+
+    def test_akordy_z_fixture_projdou_validaci_serializeru(self):
+        from .import_musicxml import parsuj_musicxml
+
+        with open(FIXTURE_AFRICA, "rb") as f:
+            vysledek = parsuj_musicxml(f)
+        serializer = AkordovyZapisSerializer(data=vysledek["akordy"])
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def _xml(self, telo):
+        hlavicka = (
+            '<?xml version="1.0" encoding="UTF-8"?>'
+            '<score-partwise version="4.0"><part-list>'
+            '<score-part id="P1"><part-name>X</part-name></score-part>'
+            "</part-list><part id=\"P1\">"
+        )
+        return io.BytesIO((hlavicka + telo + "</part></score-partwise>").encode("utf-8"))
+
+    def test_harmony_bez_korene_se_pocita_jako_neprectena(self):
+        xml = self._xml(
+            "<measure number=\"1\">"
+            "<attributes><divisions>1</divisions>"
+            "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+            "<harmony><kind>major</kind></harmony>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "</measure>"
+        )
+        from .import_musicxml import parsuj_musicxml
+
+        vysledek = parsuj_musicxml(xml)
+        self.assertEqual(vysledek["harmony_chyb"], 1)
+        self.assertEqual(vysledek["akordy"]["sekce"][0]["radky"][0]["takty"][0]["bunky"], ["", "", "", ""])
+
+    def test_zmena_taktu_uprostred_skladby_se_projevi_jako_prepis(self):
+        xml = self._xml(
+            "<measure number=\"1\">"
+            "<attributes><divisions>1</divisions>"
+            "<time><beats>4</beats><beat-type>4</beat-type></time></attributes>"
+            "<harmony><root><root-step>C</root-step></root><kind>major</kind></harmony>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "</measure>"
+            "<measure number=\"2\">"
+            "<attributes><time><beats>3</beats><beat-type>4</beat-type></time></attributes>"
+            "<harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "<note><rest/><duration>1</duration></note>"
+            "</measure>"
+        )
+        from .import_musicxml import parsuj_musicxml
+
+        vysledek = parsuj_musicxml(xml)
+        akordy = vysledek["akordy"]
+        self.assertEqual(akordy["takt"], {"dob": 4, "hodnota": 4})
+        takty = akordy["sekce"][0]["radky"][0]["takty"]
+        self.assertNotIn("takt", takty[0])
+        self.assertEqual(takty[1]["takt"], {"dob": 3, "hodnota": 4})
+        self.assertEqual(takty[1]["bunky"], ["G", "", ""])
+
+    def test_nezname_score_timewise_odmitnuto(self):
+        from .import_musicxml import parsuj_musicxml
+
+        xml = io.BytesIO(
+            b'<?xml version="1.0"?><score-timewise version="4.0"></score-timewise>'
+        )
+        with self.assertRaises(Exception):
+            parsuj_musicxml(xml)
+
+
+class ImportMusicXmlApiTests(TestCase):
+    """POST /api/pisne/<id>/verze-musicxml/ — end-to-end přes API."""
+
+    def setUp(self):
+        self.pisen = Pisen.objects.create(nazev="Africa", interpret="Toto")
+        self.clen = User.objects.create_user("clen-musicxml", password="heslo123")
+        self.client = APIClient()
+
+    def _soubor(self):
+        with open(FIXTURE_AFRICA, "rb") as f:
+            obsah = f.read()
+        return SimpleUploadedFile(
+            "africa_moises.musicxml", obsah, content_type="application/xml"
+        )
+
+    def test_clen_naimportuje_musicxml(self):
+        self.client.force_authenticate(self.clen)
+        response = self.client.post(
+            f"/api/pisne/{self.pisen.id}/verze-musicxml/",
+            {"soubor": self._soubor()},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+        self.assertEqual(response.data["pocet_taktu"], 101)
+        self.assertEqual(response.data["harmony_chyb"], 0)
+
+        verze = VerzePisne.objects.get(id=response.data["id"])
+        self.assertEqual(verze.zdroj, VerzePisne.ZDROJ_AKORDY)
+        self.assertEqual(verze.stav, VerzePisne.STAV_PERSONAL)
+        self.assertEqual(verze.vlastnik_id, self.clen.id)
+        self.assertEqual(verze.akordy["tempo"], 94)
+        self.assertTrue(verze.soubor)
+        with verze.soubor.open("rb") as f:
+            self.assertEqual(f.read(5), b"%PDF-")
+
+    def test_bez_souboru_odmitnuto(self):
+        self.client.force_authenticate(self.clen)
+        response = self.client.post(
+            f"/api/pisne/{self.pisen.id}/verze-musicxml/", {}, format="multipart"
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_nepriblasenemu_se_odmita(self):
+        response = self.client.post(
+            f"/api/pisne/{self.pisen.id}/verze-musicxml/",
+            {"soubor": self._soubor()},
+            format="multipart",
+        )
+        self.assertIn(
+            response.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN)
+        )

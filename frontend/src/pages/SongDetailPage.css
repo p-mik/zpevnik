@@ -143,6 +143,20 @@
   display: inline-flex;
 }
 
+.song-musicxml-label {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.song-musicxml-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+}
+
 .song-smazat-btn {
   color: var(--app-error);
   border-color: var(--app-error);
