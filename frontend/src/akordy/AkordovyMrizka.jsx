@@ -43,6 +43,10 @@ const CIL_TAKTU_PRO_SIRKU = 4.5
 //             prázdný řádek pod ním (zalomení by nemělo co přesouvat).
 //             Repetice přes místo zalomení: odmítnuto se stejnou hláškou
 //             jako u dělení sekce.
+//  Backspace  v PRVNÍ (prázdné) buňce řádku spojí takty řádku na konec
+//             PŘEDCHOZÍHO řádku téže sekce, řádek zmizí, kurzor zůstane
+//             na stejné (teď přesunuté) buňce. První řádek sekce: nic
+//             (hranice sekcí se nespojuje). Jinak maže text jako obvykle.
 //  ↑ / ↓      stejná pozice v řádku nad/pod (napříč celým zápisem), jen
 //             když tam buňka existuje
 export default function AkordovyMrizka({
@@ -53,6 +57,7 @@ export default function AkordovyMrizka({
   onSmazTakt,
   onVlozRadekPo,
   onRozdelRadek,
+  onSpojRadek,
   onSmazSekci,
   onPridejSekci,
   onPridejSekciBezRadku,
@@ -215,6 +220,21 @@ export default function AkordovyMrizka({
       setChybaRozdeleni(null)
       onRozdelRadek(sekceIdx, radekIdx, taktIdx + 1)
       zaostrBunku(sekceIdx, radekIdx, taktIdx, dobaIdx)
+      return
+    }
+
+    if (e.key === 'Backspace') {
+      // Jen v PRVNÍ (flatIdx 0) buňce řádku, kterou je PRÁZDNÁ, a jen
+      // když je co spojit (ne první řádek sekce — hranice sekcí se
+      // nespojuje). Jinak Backspace maže text jako obvykle — nic se tu
+      // nedělá, žádný preventDefault.
+      if (flatIdx === 0 && !e.target.value && radekIdx > 0) {
+        e.preventDefault()
+        const predchoziRadek = zapis.sekce[sekceIdx].radky[radekIdx - 1]
+        const noveTaktIdx = predchoziRadek.takty.length
+        onSpojRadek(sekceIdx, radekIdx)
+        zaostrBunku(sekceIdx, radekIdx - 1, noveTaktIdx, 0)
+      }
       return
     }
 

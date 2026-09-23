@@ -72,6 +72,7 @@ export default function AkordovyEditorPage() {
         onSmazTakt={editor.smazTakt}
         onVlozRadekPo={editor.vlozRadekPo}
         onRozdelRadek={editor.rozdelRadek}
+        onSpojRadek={editor.spojRadek}
         onSmazSekci={editor.smazSekci}
         onPridejSekci={editor.pridejSekci}
         onPridejSekciBezRadku={editor.pridejSekciBezRadku}

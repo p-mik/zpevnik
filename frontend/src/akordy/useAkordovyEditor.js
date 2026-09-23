@@ -15,6 +15,7 @@ import {
   pridejTaktDoRadku,
   rozdelRadekOdTaktu,
   rozdelSekciOdRadku,
+  spojRadekSPredchozim,
   spojSeSPredchozi,
 } from './akordovyModel'
 
@@ -160,6 +161,16 @@ export function useAkordovyEditor(verzeId) {
     })
   }, [])
 
+  // Validaci (radekIdx > 0, buňka prázdná) dělá volající (AkordovyMrizka,
+  // na Backspace v první buňce řádku) — `spojRadekSPredchozim` sama
+  // nic neodmítá, jen mimo rozsah vrátí sekci beze změny.
+  const spojRadek = useCallback((sekceIdx, radekIdx) => {
+    setZapis((prev) => ({
+      ...prev,
+      sekce: prev.sekce.map((s, i) => (i === sekceIdx ? spojRadekSPredchozim(s, radekIdx) : s)),
+    }))
+  }, [])
+
   // --- takty a buňky ---
 
   const pridejTakt = useCallback((sekceIdx, radekIdx) => {
@@ -271,6 +282,7 @@ export function useAkordovyEditor(verzeId) {
     duplikuj,
     vlozRadekPo,
     rozdelRadek,
+    spojRadek,
     pridejTakt,
     smazTakt,
     upravBunku,

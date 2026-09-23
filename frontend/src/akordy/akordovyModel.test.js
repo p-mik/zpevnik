@@ -1,10 +1,12 @@
 import { describe, expect, test } from 'vitest'
 import {
   duplikujSekci,
+  globalniIndexTaktu,
   odeberTaktZeSekce,
   posunSekciVPoli,
   rozdelRadekOdTaktu,
   rozdelSekciOdRadku,
+  spojRadekSPredchozim,
   spojSeSPredchozi,
 } from './akordovyModel'
 
@@ -245,6 +247,72 @@ describe('rozdelRadekOdTaktu', () => {
     const vysledek = rozdelRadekOdTaktu(sekce, 0, 2)
     expect(vysledek.ok).toBe(false)
     expect(vysledek.hlaska).toBe('Tady je repetice přes více řádků, nejdřív ji zruš.')
+  })
+})
+
+describe('spojRadekSPredchozim', () => {
+  test('připojí takty řádku na konec předchozího, řádek zmizí', () => {
+    const sekce = { nazev: 'S', radky: [radek(2), radek(3), radek(1)], repetice: [] }
+    const vysledek = spojRadekSPredchozim(sekce, 1)
+    expect(vysledek.radky).toEqual([radek(5), radek(1)])
+  })
+
+  test('mimo rozsah (radekIdx <= 0, první řádek sekce) vrátí sekci beze změny', () => {
+    const sekce = { nazev: 'S', radky: [radek(2), radek(3)], repetice: [] }
+    const vysledek = spojRadekSPredchozim(sekce, 0)
+    expect(vysledek).toBe(sekce)
+  })
+
+  test('globální index taktů v sekci se nemění -> repetice před i za místem spojení zůstávají beze změny', () => {
+    // řádky: 2 takty, 3 takty, 1 takt -> spojíme 2. řádek (3 takty) do 1.
+    const sekce = {
+      nazev: 'S',
+      radky: [radek(2), radek(3), radek(1)],
+      repetice: [
+        { od_taktu: 0, do_taktu: 1, krat: 2 }, // celá v prvním řádku
+        { od_taktu: 5, do_taktu: 5, krat: 4 }, // celá ve třetím řádku (za místem spojení)
+      ],
+    }
+    const vysledek = spojRadekSPredchozim(sekce, 1)
+    expect(vysledek.radky).toEqual([radek(5), radek(1)])
+    expect(vysledek.repetice).toEqual(sekce.repetice)
+  })
+
+  test('repetice přesahující PŘES místo spojení (na hranici dvou spojovaných řádků) zůstane platná beze změny', () => {
+    // repetice na taktech 1-2 (0-based) - poslední takt 1. řádku + první
+    // takt 2. řádku - spojení nemění pořadí taktů, takže zůstává validní
+    // beze změny indexů (na rozdíl od rozdělení tohle NENÍ odmítnuto).
+    const sekce = {
+      nazev: 'S',
+      radky: [radek(2), radek(3)],
+      repetice: [{ od_taktu: 1, do_taktu: 2, krat: 2 }],
+    }
+    const vysledek = spojRadekSPredchozim(sekce, 1)
+    expect(vysledek.repetice).toEqual(sekce.repetice)
+    // a globální index taktu 2 (teď v jediném spojeném řádku) odkazuje
+    // pořád na stejný takt jako před spojením.
+    const globalniPred = globalniIndexTaktu(sekce, 1, 0) // 1. takt 2. řádku před spojením
+    const globalniPo = globalniIndexTaktu(vysledek, 0, 2) // stejný takt, teď na indexu 2 spojeného řádku
+    expect(globalniPo).toBe(globalniPred)
+  })
+
+  test('spojení je přesná inverze rozdělení (round-trip taktů i repetic)', () => {
+    // řádky: 2, 3, 1 takt -> dělíme 2. řádek (takty 2,3,4) na taktIdx=2
+    // (globálně takt 4) - repetice nesmí přes tohle místo přesahovat,
+    // jinak by ji rozdelRadekOdTaktu odmítl (viz ten popis výš).
+    const puvodniSekce = {
+      nazev: 'Refrén',
+      radky: [radek(2), radek(3), radek(1)],
+      repetice: [
+        { od_taktu: 0, do_taktu: 1, krat: 2 },
+        { od_taktu: 4, do_taktu: 5, krat: 3 },
+      ],
+    }
+    const rozdeleno = rozdelRadekOdTaktu(puvodniSekce, 1, 2)
+    expect(rozdeleno.ok).toBe(true)
+    const spojeno = spojRadekSPredchozim(rozdeleno.sekce, 2)
+    expect(spojeno.radky).toEqual(puvodniSekce.radky)
+    expect(spojeno.repetice).toEqual(puvodniSekce.repetice)
   })
 })
 

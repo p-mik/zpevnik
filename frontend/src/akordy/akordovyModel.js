@@ -405,6 +405,30 @@ export function rozdelRadekOdTaktu(sekce, radekIdx, taktIdx) {
   return { ok: true, sekce: { ...sekce, radky: noveRadky } }
 }
 
+// --- spojení řádku s předchozím na Backspace (PC_zpevnik_akordy_ovladani.md
+// bod 4) — přesná inverze rozdelRadekOdTaktu výš ---
+
+// Spojí řádek `radekIdx` s PŘEDCHOZÍM (`radekIdx - 1`) V RÁMCI TÉŽE
+// SEKCE — jeho takty se připojí na konec předchozího řádku, řádek
+// `radekIdx` zmizí. `radekIdx <= 0` (první řádek sekce — nespojovat
+// přes hranici sekcí, o to se ale musí postarat už volající, viz
+// AkordovyMrizka) vrátí sekci beze změny, jen jako pojistka.
+//
+// Repetice se NEPŘEPOČÍTÁVAJÍ ani neodmítají: spojení dvou SOUSEDNÍCH
+// řádků neměni pořadí taktů v sekci (na rozdíl od rozdelSekciOdRadku
+// tu žádná hranice sekce nevzniká ani nemizí) — žádný globální index
+// taktu (viz globalniIndexTaktu) se posunem nezmění, je to přesná
+// inverze rozdelRadekOdTaktu.
+export function spojRadekSPredchozim(sekce, radekIdx) {
+  if (radekIdx <= 0 || radekIdx >= sekce.radky.length) return sekce
+  const predchozi = sekce.radky[radekIdx - 1]
+  const aktualni = sekce.radky[radekIdx]
+  const spojenyRadek = { takty: [...predchozi.takty, ...aktualni.takty] }
+  const radky = [...sekce.radky]
+  radky.splice(radekIdx - 1, 2, spojenyRadek)
+  return { ...sekce, radky }
+}
+
 // `novyTakt` je {dob, hodnota}, nebo null pro "výchozí" (zruší přepis).
 export function aplikujZmenuTaktuNaVyber(zapis, vyber, novyTakt) {
   const cile = new Set(
