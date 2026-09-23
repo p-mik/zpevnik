@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import {
+  duplikujSekci,
   odeberTaktZeSekce,
   posunSekciVPoli,
   rozdelRadekOdTaktu,
@@ -44,6 +45,34 @@ describe('posunSekciVPoli', () => {
     const vysledek = posunSekciVPoli([a, b], 0, 1)
     expect(vysledek).toEqual([b, a])
     expect(vysledek[1].repetice).toEqual([{ od_taktu: 0, do_taktu: 1, krat: 2 }])
+  })
+})
+
+describe('duplikujSekci', () => {
+  test('vloží kopii hned pod původní sekci, se stejným názvem', () => {
+    const sekce = [
+      { nazev: 'Sloka', radky: [radek(2)], repetice: [{ od_taktu: 0, do_taktu: 1, krat: 2 }] },
+      { nazev: 'Refrén', radky: [radek(1)], repetice: [] },
+    ]
+    const vysledek = duplikujSekci(sekce, 0)
+    expect(vysledek.length).toBe(3)
+    expect(vysledek[0].nazev).toBe('Sloka')
+    expect(vysledek[1].nazev).toBe('Sloka')
+    expect(vysledek[1]).toEqual(vysledek[0])
+    expect(vysledek[2].nazev).toBe('Refrén')
+  })
+
+  test('kopie je hluboká — úprava kopie nemutuje originál', () => {
+    const sekce = [{ nazev: 'Sloka', radky: [radek(2)], repetice: [] }]
+    const vysledek = duplikujSekci(sekce, 0)
+    vysledek[1].radky[0].takty[0].bunky[0] = 'ZMĚNA'
+    expect(sekce[0].radky[0].takty[0].bunky[0]).toBe('')
+  })
+
+  test('duplikace prostřední sekce vloží kopii hned za ni, ne na konec', () => {
+    const sekce = [{ nazev: 'A', radky: [], repetice: [] }, { nazev: 'B', radky: [], repetice: [] }, { nazev: 'C', radky: [], repetice: [] }]
+    const vysledek = duplikujSekci(sekce, 1)
+    expect(vysledek.map((s) => s.nazev)).toEqual(['A', 'B', 'B', 'C'])
   })
 })
 

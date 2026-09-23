@@ -5,6 +5,7 @@ import {
   PRAZDNY_ZAPIS,
   aplikujZmenuTaktuNaVyber,
   aplikujZmenuVychozihoTaktu,
+  duplikujSekci,
   novaSekce,
   novaSekceBezRadku,
   novyRadek,
@@ -124,6 +125,10 @@ export function useAkordovyEditor(verzeId) {
 
   const posunSekci = useCallback((sekceIdx, smer) => {
     setZapis((prev) => ({ ...prev, sekce: posunSekciVPoli(prev.sekce, sekceIdx, smer) }))
+  }, [])
+
+  const duplikuj = useCallback((sekceIdx) => {
+    setZapis((prev) => ({ ...prev, sekce: duplikujSekci(prev.sekce, sekceIdx) }))
   }, [])
 
   // --- řádky ---
@@ -263,6 +268,7 @@ export function useAkordovyEditor(verzeId) {
     rozdelSekci,
     spojSePredchozi,
     posunSekci,
+    duplikuj,
     vlozRadekPo,
     rozdelRadek,
     pridejTakt,

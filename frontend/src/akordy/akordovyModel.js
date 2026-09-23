@@ -301,6 +301,20 @@ export function posunSekciVPoli(vsechnySekce, sekceIdx, smer) {
   return nove
 }
 
+// --- duplikace sekce (PC_zpevnik_akordy_ovladani.md bod 3) ---
+
+// Vloží HLUBOKOU kopii sekce `sekceIdx` hned pod ni — název beze změny
+// (na rozdíl od "Nová sekce od tohoto řádku", kde nová sekce nemá
+// název), řádky i repetice (a volty, až budou) jdou s ní. Hluboká
+// kopie (structuredClone), ať psaní do kopie nemutuje pole/objekty
+// sdílené s originálem.
+export function duplikujSekci(vsechnySekce, sekceIdx) {
+  const kopie = structuredClone(vsechnySekce[sekceIdx])
+  const nove = [...vsechnySekce]
+  nove.splice(sekceIdx + 1, 0, kopie)
+  return nove
+}
+
 // --- rozdělení / spojení sekcí (viz zadání bod 3) ---
 
 // Rozdělí sekci na dvě OD `radekIdx` (musí být >0 — první řádek sekce se

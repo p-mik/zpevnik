@@ -78,6 +78,7 @@ export default function AkordovyEditorPage() {
         onRozdelSekci={editor.rozdelSekci}
         onSpojSePredchozi={editor.spojSePredchozi}
         onPosunSekci={editor.posunSekci}
+        onDuplikujSekci={editor.duplikuj}
         onPridejRepetici={editor.pridejRepetici}
         onSmazRepetici={editor.smazRepetici}
         onZmenTaktVyberu={editor.zmenTaktVyberu}

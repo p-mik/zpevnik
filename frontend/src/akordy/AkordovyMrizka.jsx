@@ -59,6 +59,7 @@ export default function AkordovyMrizka({
   onRozdelSekci,
   onSpojSePredchozi,
   onPosunSekci,
+  onDuplikujSekci,
   onPridejRepetici,
   onSmazRepetici,
   onZmenTaktVyberu,
@@ -325,6 +326,11 @@ export default function AkordovyMrizka({
     onSpojSePredchozi(sekceIdx)
   }
 
+  function duplikovat(sekceIdx) {
+    onDuplikujSekci(sekceIdx)
+    zaostrNazevSekce(sekceIdx + 1)
+  }
+
   const nejdelsi = nejdelsiRadekVDobach(zapis.sekce, zapis.takt)
   const cilDob = 4 * dob
   const infoRadek =
@@ -425,6 +431,14 @@ export default function AkordovyMrizka({
                   Spojit s předchozí
                 </button>
               )}
+              <button
+                type="button"
+                className="btn akordy-sekce-duplikovat"
+                onClick={() => duplikovat(sekceIdx)}
+                title="Vloží kopii téhle sekce hned pod ni."
+              >
+                Duplikovat
+              </button>
               <button type="button" className="btn akordy-sekce-smazat" onClick={() => smazatSekci(sekceIdx)}>
                 Smazat sekci
               </button>
