@@ -1468,6 +1468,7 @@ class AkordyPdfMrizkaTests(TestCase):
             OKRAJ,
             SIRKA_GUTTERU,
             SIRKA_STRANKY,
+            _najdi_scale,
             _radky_s_metadaty,
             _rozvrhni_stranky,
         )
@@ -1480,17 +1481,19 @@ class AkordyPdfMrizkaTests(TestCase):
             }
         ]
         polozky = _radky_s_metadaty(sekce)
+        radky = [p["radek"] for p in polozky]
         sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
-        stranky = _rozvrhni_stranky(polozky, sirka_obsahu, 4)
+        scale = _najdi_scale(radky, sirka_obsahu, 4)
+        self.assertAlmostEqual(scale, 1.0, places=2)
+        stranky = _rozvrhni_stranky(polozky, scale)
         self.assertEqual(len(stranky), 1)
-        self.assertAlmostEqual(stranky[0][1], 1.0, places=2)
 
-    def test_rozvrhni_stranky_rozdeli_hustou_pisen_na_vic_stranek_s_lepsim_scale(self):
-        # Regrese k nálezu (viz modul docstring): sdílená mřížka přes MOC
-        # řádků najde široký akord skoro na každé pozici, i když žádný
-        # JEDNOTLIVÝ řádek jich nemá víc než jeden — stránkování proto musí
-        # umět rozdělit i řádky, které by se na VÝŠKU klidně vešly na
-        # jednu stránku všechny.
+    def test_rozvrhni_stranky_deli_jen_podle_vysky_ne_podle_scale(self):
+        # Mřížka je teď SPOLEČNÁ pro celý dokument (viz modul docstring) —
+        # stránkování už nesmí dělit podle scale, jen podle výšky. Dost
+        # řádků na to, aby se na výšku nevešly na jednu stránku, musí dát
+        # víc stránek se STEJNÝM scale na všech (na rozdíl od dřívějšího
+        # chování, kdy pozdější stránky mohly vyjít větší).
         from zpevnik.akordy_pdf import (
             OKRAJ,
             SIRKA_GUTTERU,
@@ -1500,28 +1503,59 @@ class AkordyPdfMrizkaTests(TestCase):
             _rozvrhni_stranky,
         )
 
-        # 16 řádků (4 takty po 4 dobách = 16 pozic), každý má "G#m7" na
-        # JINÉ z 16 pozic — žádný řádek sám o sobě není široký (jen 1
-        # široký akord v něm), ale mřížka sdílená přes všech 16 by musela
-        # rozšířit VŠECH 16 pozic najednou.
-        radky = []
-        for i in range(16):
+        sekce = [
+            {
+                "nazev": "A",
+                "radky": [{"takty": [{"bunky": ["C", "", "", ""]}] * 4}] * 60,
+                "repetice": [],
+            }
+        ]
+        polozky = _radky_s_metadaty(sekce)
+        radky = [p["radek"] for p in polozky]
+        sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
+        scale = _najdi_scale(radky, sirka_obsahu, 4)
+
+        stranky = _rozvrhni_stranky(polozky, scale)
+        self.assertGreater(len(stranky), 1)
+        self.assertEqual(sum(len(s) for s in stranky), len(polozky))
+
+    def test_husta_pisen_uz_nerozdeli_stranky_kvuli_scale(self):
+        # Regrese k ZRUŠENÉMU chování (viz modul docstring): dřív sdílená
+        # mřížka přes moc řádků srážela scale, a stránkování na to reagovalo
+        # děním stránek i podle výšky by se vešly. Teď je mřížka pro celý
+        # dokument a stránkování řeší JEN výšku — hustá "písnička", co se na
+        # výšku vejde na jednu stránku, musí zůstat na jedné, i když je
+        # scale kvůli širokým akordům nízký.
+        from zpevnik.akordy_pdf import (
+            OKRAJ,
+            SIRKA_GUTTERU,
+            SIRKA_STRANKY,
+            _najdi_scale,
+            _radky_s_metadaty,
+            _rozvrhni_stranky,
+        )
+
+        # 12 řádků (4 takty po 4 dobách = 16 pozic), každý má "G#m7" na
+        # JINÉ z prvních 12 pozic — žádný řádek sám o sobě není široký (jen
+        # 1 široký akord v něm), ale mřížka sdílená přes všech 12 rozšíří
+        # 12 pozic najednou, takže scale vyjde pod 1.0 — 12 řádků se ale
+        # při tomhle scale pořád vejde na výšku jedné (landscape) stránky.
+        radky_data = []
+        for i in range(12):
             bunky = ["C", "", "", ""] * 4
             bunky[i] = "G#m7"
             takty = [{"bunky": bunky[t * 4 : t * 4 + 4]} for t in range(4)]
-            radky.append({"takty": takty})
-        sekce = [{"nazev": "A", "radky": radky, "repetice": []}]
-
-        sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
-        scale_jedna_mrizka = _najdi_scale(radky, sirka_obsahu, 4)
-        self.assertLess(scale_jedna_mrizka, 1.0)  # sanity: scénář fix skutečně cvičí
+            radky_data.append({"takty": takty})
+        sekce = [{"nazev": "A", "radky": radky_data, "repetice": []}]
 
         polozky = _radky_s_metadaty(sekce)
-        stranky = _rozvrhni_stranky(polozky, sirka_obsahu, 4)
+        radky = [p["radek"] for p in polozky]
+        sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
+        scale = _najdi_scale(radky, sirka_obsahu, 4)
+        self.assertLess(scale, 1.0)  # sanity: scénář skutečně cvičí zúžení
 
-        self.assertGreater(len(stranky), 1)
-        for _, scale in stranky:
-            self.assertGreaterEqual(scale, scale_jedna_mrizka)
+        stranky = _rozvrhni_stranky(polozky, scale)
+        self.assertEqual(len(stranky), 1)
 
     def _zapis(self, sekce, dob=4, hodnota=4):
         return {"schema": 2, "takt": {"dob": dob, "hodnota": hodnota}, "tempo": None, "sekce": sekce}
