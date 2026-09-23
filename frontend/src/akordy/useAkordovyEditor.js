@@ -6,6 +6,7 @@ import {
   aplikujZmenuTaktuNaVyber,
   aplikujZmenuVychozihoTaktu,
   novaSekce,
+  novaSekceBezRadku,
   novyRadek,
   novyTakt,
   odeberTaktZeSekce,
@@ -78,6 +79,10 @@ export function useAkordovyEditor(verzeId) {
 
   const pridejSekci = useCallback(() => {
     setZapis((prev) => ({ ...prev, sekce: [...prev.sekce, novaSekce(prev.takt.dob)] }))
+  }, [])
+
+  const pridejSekciBezRadku = useCallback(() => {
+    setZapis((prev) => ({ ...prev, sekce: [...prev.sekce, novaSekceBezRadku()] }))
   }, [])
 
   const smazSekci = useCallback((sekceIdx) => {
@@ -247,6 +252,7 @@ export function useAkordovyEditor(verzeId) {
     nastavTakt,
     nastavTempo,
     pridejSekci,
+    pridejSekciBezRadku,
     smazSekci,
     nastavNazevSekce,
     rozdelSekci,

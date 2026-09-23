@@ -44,6 +44,13 @@ export function novaSekce(dob) {
   return { nazev: '', radky: [novyRadek(dob)], repetice: [] }
 }
 
+// Sekce jen s nadpisem, bez řádků (viz schéma — "Sloka 2 = Sloka 1" apod.,
+// obsah přijde přes repetici nebo se odkazuje jinak, nepotřebuje vlastní
+// takty). Jednu z variant "+ Přidat sekci" v AkordovyMrizka.
+export function novaSekceBezRadku() {
+  return { nazev: '', radky: [], repetice: [] }
+}
+
 // --- efektivní takt taktu v řádku (vlastní přepis, nebo výchozí) ---
 
 export function efektivniTakt(taktVRadku, taktVychozi) {

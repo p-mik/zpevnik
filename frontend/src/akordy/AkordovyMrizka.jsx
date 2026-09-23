@@ -55,6 +55,7 @@ export default function AkordovyMrizka({
   onRozdelRadek,
   onSmazSekci,
   onPridejSekci,
+  onPridejSekciBezRadku,
   onRozdelSekci,
   onSpojSePredchozi,
   onPridejRepetici,
@@ -297,6 +298,12 @@ export default function AkordovyMrizka({
     zaostrNazevSekce(novyIndex)
   }
 
+  function pridatSekciBezRadku() {
+    const novyIndex = zapis.sekce.length
+    onPridejSekciBezRadku()
+    zaostrNazevSekce(novyIndex)
+  }
+
   // Rozdělení se validuje TADY (čistá funkce nad aktuálním zápisem, stejný
   // vzor jako potvrzení "Změnit takt") — akce v useAkordovyEditor pak jen
   // aplikuje, beze změny se stará jen o no-op, kdyby se sem přesto dostal
@@ -519,6 +526,14 @@ export default function AkordovyMrizka({
         <div className="akordy-mrizka-akce">
           <button type="button" className="btn btn-secondary" onClick={pridatSekci}>
             + Přidat sekci
+          </button>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={pridatSekciBezRadku}
+            title="Sekce jen s nadpisem, bez taktů — třeba „Sloka 2 = Sloka 1“."
+          >
+            + Jen nadpis
           </button>
           {vyber.length > 0 && (
             <div className="akordy-vyber-akce">
