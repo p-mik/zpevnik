@@ -1355,6 +1355,35 @@ class AkordovyZapisSerializerTests(TestCase):
         serializer = AkordovyZapisSerializer(data=self.zaklad(sekce=[]))
         self.assertTrue(serializer.is_valid(), serializer.errors)
 
+    def test_sekce_bez_radku_povolena(self):
+        # Sekce jen s nadpisem, bez taktů (editor: smazání úplně posledního
+        # taktu sekci na tohle nechá, viz akordovyModel.odeberTaktZeSekce) —
+        # `radky: []` musí projít, i beze změny výchozího `takt`.
+        data = self.zaklad(sekce=[{"nazev": "Interlude", "radky": [], "repetice": []}])
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+        self.assertEqual(serializer.validated_data["sekce"][0]["radky"], [])
+
+    def test_sekce_bez_radku_a_bez_nazvu_take_povolena(self):
+        data = self.zaklad(sekce=[{"nazev": "", "radky": [], "repetice": []}])
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_sekce_bez_radku_s_repetici_odmitnuta(self):
+        # V sekci bez taktů nemá repetice co indexovat — jakýkoliv rozsah
+        # je nutně "mimo sekci" (0 taktů celkem).
+        data = self.zaklad(
+            sekce=[
+                {
+                    "nazev": "Interlude",
+                    "radky": [],
+                    "repetice": [{"od_taktu": 0, "do_taktu": 0, "krat": 2}],
+                }
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
 
 class AkordyPdfMrizkaTests(TestCase):
     """Mřížka akordového PDF (zpevnik/akordy_pdf.py), schéma 2: ŘÁDEK SE
@@ -1557,6 +1586,94 @@ class AkordyPdfMrizkaTests(TestCase):
         stranky = _rozvrhni_stranky(polozky, scale)
         self.assertEqual(len(stranky), 1)
 
+    def test_radky_s_metadaty_sekce_bez_radku_je_polozka_typu_nadpis(self):
+        from zpevnik.akordy_pdf import _radky_s_metadaty
+
+        sekce = [
+            {"nazev": "Intro", "radky": [], "repetice": []},
+            {"nazev": "Sloka", "radky": [{"takty": [{"bunky": ["A"]}]}], "repetice": []},
+        ]
+        polozky = _radky_s_metadaty(sekce)
+        self.assertEqual(len(polozky), 2)
+        self.assertEqual(polozky[0]["typ"], "nadpis")
+        self.assertNotIn("radek", polozky[0])
+        self.assertTrue(polozky[0]["je_prvni_v_sekci"])
+        self.assertTrue(polozky[0]["je_posledni_v_sekci"])
+        self.assertEqual(polozky[1]["typ"], "radek")
+
+    def test_seskup_pro_zalomeni_slepi_nadpis_s_prvni_polozkou_za_nim(self):
+        from zpevnik.akordy_pdf import _seskup_pro_zalomeni
+
+        radek1 = {"typ": "radek", "je_prvni_v_sekci": True, "je_posledni_v_sekci": False}
+        nadpis = {"typ": "nadpis", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
+        radek2 = {"typ": "radek", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
+        skupiny = _seskup_pro_zalomeni([radek1, nadpis, radek2])
+        self.assertEqual(skupiny, [[radek1], [nadpis, radek2]])
+
+    def test_seskup_pro_zalomeni_slepi_retez_nadpisu_az_po_prvni_skutecny_radek(self):
+        from zpevnik.akordy_pdf import _seskup_pro_zalomeni
+
+        nadpis1 = {"typ": "nadpis", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
+        nadpis2 = {"typ": "nadpis", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
+        radek = {"typ": "radek", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
+        skupiny = _seskup_pro_zalomeni([nadpis1, nadpis2, radek])
+        self.assertEqual(skupiny, [[nadpis1, nadpis2, radek]])
+
+    def test_seskup_pro_zalomeni_osamoceny_nadpis_na_konci_dokumentu_zustane_sam(self):
+        # Nemá s čím se slepit - to zadání výslovně neřeší (viz modul
+        # docstring).
+        from zpevnik.akordy_pdf import _seskup_pro_zalomeni
+
+        radek = {"typ": "radek", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
+        nadpis = {"typ": "nadpis", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
+        skupiny = _seskup_pro_zalomeni([radek, nadpis])
+        self.assertEqual(skupiny, [[radek], [nadpis]])
+
+    def test_rozvrhni_stranky_nenecha_osamoceny_nadpis_na_konci_stranky(self):
+        # Regrese k požadavku "nadpis a první řádek další sekce nejsou
+        # rozdělené koncem stránky": sestavíme scénář, kde by se BEZ
+        # seskupení (_seskup_pro_zalomeni) nadpis vešel jako poslední
+        # položka na stránku, ale spolu s řádkem hned za ním už ne - a
+        # ověříme, že se stránkuje po CELÉ skupině, ne po jednotlivé
+        # položce.
+        from zpevnik.akordy_pdf import OKRAJ, Y_ZACATEK_OBSAHU, _rozvrhni_stranky, _vyska_obsahu_stranky
+
+        scale = 1.0
+        vyska_dostupna = Y_ZACATEK_OBSAHU - OKRAJ
+
+        def filler_radek():
+            return {
+                "typ": "radek",
+                "radek": {"takty": [{"bunky": [""]}]},
+                "je_prvni_v_sekci": False,
+                "je_posledni_v_sekci": False,
+            }
+
+        nadpis = {"typ": "nadpis", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
+        posledni_radek = {
+            "typ": "radek",
+            "radek": {"takty": [{"bunky": [""]}]},
+            "je_prvni_v_sekci": True,
+            "je_posledni_v_sekci": True,
+        }
+
+        filler = []
+        while True:
+            filler.append(filler_radek())
+            s_nadpisem = _vyska_obsahu_stranky(filler + [nadpis], scale)
+            s_obema = _vyska_obsahu_stranky(filler + [nadpis, posledni_radek], scale)
+            if s_nadpisem <= vyska_dostupna < s_obema:
+                break
+            if len(filler) > 500:
+                self.fail("nepodařilo se sestavit scénář pro test")
+
+        polozky = filler + [nadpis, posledni_radek]
+        stranky = _rozvrhni_stranky(polozky, scale)
+
+        self.assertNotIn(nadpis, stranky[0])
+        self.assertIn(nadpis, stranky[1])
+        self.assertIn(posledni_radek, stranky[1])
+
     def _zapis(self, sekce, dob=4, hodnota=4):
         return {"schema": 2, "takt": {"dob": dob, "hodnota": hodnota}, "tempo": None, "sekce": sekce}
 
@@ -1613,6 +1730,53 @@ class AkordyPdfMrizkaTests(TestCase):
 
         reader = PdfReader(io.BytesIO(pdf))
         self.assertEqual(len(reader.pages), 1)
+
+    def test_sekce_bez_radku_v_pdf_projde(self):
+        # Sekce jen s nadpisem (Intro) vedle normální sekce s obsahem -
+        # vygeneruj_pdf nesmí spadnout, jen vykreslí Intro jako samotný
+        # nadpis bez mřížky (viz akordy_pdf docstring).
+        from zpevnik import akordy_pdf
+
+        class FakePisen:
+            nazev = "Test"
+            interpret = ""
+
+        zapis = self._zapis(
+            [
+                {"nazev": "Intro", "radky": [], "repetice": []},
+                {
+                    "nazev": "Sloka",
+                    "radky": [{"takty": [{"bunky": ["A", "", "", ""]}] * 4}],
+                    "repetice": [],
+                },
+            ]
+        )
+        pdf = akordy_pdf.vygeneruj_pdf(FakePisen(), zapis)
+        self.assertEqual(pdf[:5], b"%PDF-")
+
+        from pypdf import PdfReader
+        import io
+
+        reader = PdfReader(io.BytesIO(pdf))
+        self.assertEqual(len(reader.pages), 1)
+
+    def test_dokument_jen_z_nadpisu_bez_radku_v_pdf_projde(self):
+        # Krajní případ: žádná sekce v celém dokumentu nemá řádky - mřížka
+        # (scale i sirky_pozic) se počítá z prázdného seznamu.
+        from zpevnik import akordy_pdf
+
+        class FakePisen:
+            nazev = "Test"
+            interpret = ""
+
+        zapis = self._zapis(
+            [
+                {"nazev": "Intro", "radky": [], "repetice": []},
+                {"nazev": "Outro", "radky": [], "repetice": []},
+            ]
+        )
+        pdf = akordy_pdf.vygeneruj_pdf(FakePisen(), zapis)
+        self.assertEqual(pdf[:5], b"%PDF-")
 
 
 class VerzeAkordyVytvoreniTests(TestCase):

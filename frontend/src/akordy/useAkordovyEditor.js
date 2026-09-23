@@ -161,9 +161,7 @@ export function useAkordovyEditor(verzeId) {
   const smazTakt = useCallback((sekceIdx, radekIdx, taktIdx) => {
     setZapis((prev) => ({
       ...prev,
-      sekce: prev.sekce.map((s, i) =>
-        i === sekceIdx ? odeberTaktZeSekce(s, radekIdx, taktIdx, prev.takt.dob) : s,
-      ),
+      sekce: prev.sekce.map((s, i) => (i === sekceIdx ? odeberTaktZeSekce(s, radekIdx, taktIdx) : s)),
     }))
   }, [])
 

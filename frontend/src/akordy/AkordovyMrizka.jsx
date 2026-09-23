@@ -398,6 +398,20 @@ export default function AkordovyMrizka({
               </button>
             </div>
 
+            {sekce.radky.length === 0 ? (
+              // Sekce jen s nadpisem, bez taktů (viz schéma bod "radky
+              // smí být prázdné") — smazáním úplně posledního taktu sem
+              // sekce dojde sama (viz odeberTaktZeSekce), zpátky na
+              // obsah vede jen tenhle jeden krok. `-1` = vlož na začátek
+              // (vlozRadekPo počítá "po radekIdx", -1 je "před vším").
+              <button
+                type="button"
+                className="btn btn-secondary akordy-radek-pridat"
+                onClick={() => onVlozRadekPo(sekceIdx, -1)}
+              >
+                + Přidat řádek
+              </button>
+            ) : (
             <div className="akordy-sekce-scroll">
               <ul className="akordy-radky">
                 {sekce.radky.map((radek, radekIdx) => (
@@ -469,6 +483,7 @@ export default function AkordovyMrizka({
                 ))}
               </ul>
             </div>
+            )}
 
             {chybaRozdeleni && chybaRozdeleni.sekceIdx === sekceIdx && (
               <p className="akordy-repetice-chyba" role="alert">

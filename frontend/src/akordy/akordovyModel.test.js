@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { rozdelRadekOdTaktu, rozdelSekciOdRadku, spojSeSPredchozi } from './akordovyModel'
+import { odeberTaktZeSekce, rozdelRadekOdTaktu, rozdelSekciOdRadku, spojSeSPredchozi } from './akordovyModel'
 
 // Pomocník: řádek se `n` takty výchozího taktu (obsah buněk je pro tyhle
 // testy lhostejný, jen počet taktů se počítá).
@@ -85,6 +85,41 @@ describe('rozdelSekciOdRadku', () => {
     expect(vysledek.ok).toBe(true)
     expect(vysledek.puvodni.repetice).toEqual([{ od_taktu: 0, do_taktu: 1, krat: 2 }])
     expect(vysledek.nova.repetice).toEqual([{ od_taktu: 0, do_taktu: 1, krat: 3 }])
+  })
+})
+
+describe('odeberTaktZeSekce', () => {
+  test('smazání posledního taktu jediného řádku nechá sekci bez řádků (ne reset na prázdný takt)', () => {
+    const sekce = { nazev: 'S', radky: [{ takty: [{ bunky: ['C'] }] }], repetice: [] }
+    const vysledek = odeberTaktZeSekce(sekce, 0, 0)
+    expect(vysledek.radky).toEqual([])
+  })
+
+  test('repetice na jediném taktu se smaže spolu s ním, když sekci nezbydou řádky', () => {
+    const sekce = {
+      nazev: 'S',
+      radky: [{ takty: [{ bunky: ['C'] }] }],
+      repetice: [{ od_taktu: 0, do_taktu: 0, krat: 2 }],
+    }
+    const vysledek = odeberTaktZeSekce(sekce, 0, 0)
+    expect(vysledek.radky).toEqual([])
+    expect(vysledek.repetice).toEqual([])
+  })
+
+  test('smazání posledního taktu posledního řádku, když sekce má víc řádků, jen smaže ten řádek (beze změny)', () => {
+    const sekce = {
+      nazev: 'S',
+      radky: [{ takty: [{ bunky: ['C'] }, { bunky: ['D'] }] }, { takty: [{ bunky: ['E'] }] }],
+      repetice: [],
+    }
+    const vysledek = odeberTaktZeSekce(sekce, 1, 0)
+    expect(vysledek.radky).toEqual([{ takty: [{ bunky: ['C'] }, { bunky: ['D'] }] }])
+  })
+
+  test('smazání jednoho z víc taktů v řádku jen odebere ten takt, řádek zůstane', () => {
+    const sekce = { nazev: 'S', radky: [{ takty: [{ bunky: ['C'] }, { bunky: ['D'] }] }], repetice: [] }
+    const vysledek = odeberTaktZeSekce(sekce, 0, 0)
+    expect(vysledek.radky).toEqual([{ takty: [{ bunky: ['D'] }] }])
   })
 })
 

@@ -109,6 +109,16 @@
   color: var(--app-secondary);
 }
 
+/* Sekce bez řádků (jen nadpis, viz schéma) — jediná akce, co takové sekci
+   zbývá, je založit první řádek. align-self, ať se nenatáhne na celou
+   šířku bloku sekce (ten je flex column, default stretch) jako call-to-
+   action pruh — má vypadat jako normální tlačítko, stejně jako
+   "+ Přidat sekci". */
+.akordy-radek-pridat {
+  align-self: flex-start;
+  font-size: var(--text-sm);
+}
+
 .akordy-takt {
   display: flex;
   flex-direction: column;

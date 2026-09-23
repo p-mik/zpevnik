@@ -33,6 +33,12 @@ portrétu, což tenhle problém řeší přímo (viz report u příslušného
 committu pro čísla) — proto teď stačí jedna mřížka pro celý dokument,
 žádné dělení podle scale. Stránkování (`_rozvrhni_stranky`) řeší JEN
 výšku — scale je pro celý dokument jeden a stejný na všech stránkách.
+
+SEKCE BEZ ŘÁDKŮ (`radky: []`, jen nadpis — typicky rozdělením editoru,
+kdy se smaže úplně poslední takt) se v `_radky_s_metadaty` zploští na
+položku typu "nadpis" místo "radek": kreslí se jen jméno sekce, žádná
+mřížka. `_seskup_pro_zalomeni` hlídá, aby takový osamocený nadpis
+nezůstal na konci stránky odtržený od obsahu, co po něm hned následuje.
 """
 
 import io
@@ -75,7 +81,10 @@ POCET_TAKTU_NA_RADEK = 4  # cíl: 4 takty VÝCHOZÍHO taktu na řádek, vždy
 
 VYSKA_RADKU = 28  # výška řádku PŘI scale=1
 MEZERA_RADKU_STEJNA_SEKCE = 4  # mezi dvěma řádky TÉŽE sekce
-MEZERA_MEZI_SEKCEMI = 11  # mezi poslední řádkou jedné sekce a první další
+MEZERA_MEZI_SEKCEMI = 18  # mezi poslední řádkou jedné sekce a první další — ZNATELNĚ víc než
+# MEZERA_RADKU_STEJNA_SEKCE, ať jsou sekce opticky oddělené (zvlášť důležité u sekce bez
+# řádků, viz "nadpis" v _radky_s_metadaty — tam kromě samotného nadpisu nic jiného
+# hranici sekce nenaznačuje, žádná mřížka)
 MEZERA_PRO_BADGE = 11  # NAVÍC před řádkem, který má aspoň jeden takt s vlastním taktem
 CHORD_BASELINE_OFFSET = 19  # od horního okraje řádkového pásu
 SEKCE_BASELINE_OFFSET = 18
@@ -190,15 +199,32 @@ def _najdi_scale(radky, sirka_obsahu, dob_vychozi):
 def _radky_s_metadaty(vsechny_sekce):
     """Zploští VŠECHNY řádky dokumentu (napříč sekcemi) do jednoho seznamu
     polozek s metadaty potřebnými pro vykreslení a stránkování — pořadí
-    je zachované, takže řádky jedné sekce zůstávají pohromadě."""
+    je zachované, takže řádky jedné sekce zůstávají pohromadě.
+
+    Sekce BEZ řádků (`radky: []`, viz schéma) dostane jednu položku typu
+    "nadpis" místo běžných položek typu "radek" — nese jen `sekce`, žádný
+    `radek`/`od_g`/`do_g` (není co kreslit do mřížky ani co by repetice
+    mohla indexovat). Je triviálně "první i poslední řádek" své sekce,
+    takže dostane mezeru před i po jako normální osamocený řádek sekce."""
     polozky = []
     for sekce in vsechny_sekce:
+        if not sekce["radky"]:
+            polozky.append(
+                {
+                    "typ": "nadpis",
+                    "sekce": sekce,
+                    "je_prvni_v_sekci": True,
+                    "je_posledni_v_sekci": True,
+                }
+            )
+            continue
         globalni_takt_idx = 0
         pocet_radku_sekce = len(sekce["radky"])
         for i_radek, radek in enumerate(sekce["radky"]):
             pocet_taktu = len(radek["takty"])
             polozky.append(
                 {
+                    "typ": "radek",
                     "radek": radek,
                     "sekce": sekce,
                     "je_prvni_v_sekci": i_radek == 0,
@@ -216,16 +242,18 @@ def _ma_badge(radek):
 
 
 def _vyska_obsahu_stranky(polozky_stranky, scale):
-    """Součet výšek všech řádků (+ mezer mezi nimi + rezervy pro badge)
+    """Součet výšek všech položek (+ mezer mezi nimi + rezervy pro badge)
     stránky PŘI daném `scale` — pro rozhodnutí, jestli se `polozky_stranky`
-    ještě vejdou na výšku."""
+    ještě vejdou na výšku. Položka typu "nadpis" (sekce bez řádků, viz
+    _radky_s_metadaty) nemá badge a bere stejnou výšku jako běžný řádek —
+    jen se do ní nekreslí mřížka, viz vygeneruj_pdf."""
     vyska_radku = VYSKA_RADKU * scale
     mezera_stejna_sekce = MEZERA_RADKU_STEJNA_SEKCE * scale
     mezera_mezi_sekcemi = MEZERA_MEZI_SEKCEMI * scale
     mezera_pro_badge = MEZERA_PRO_BADGE * scale
     celkem = 0.0
     for polozka in polozky_stranky:
-        if _ma_badge(polozka["radek"]):
+        if polozka["typ"] == "radek" and _ma_badge(polozka["radek"]):
             celkem += mezera_pro_badge
         celkem += vyska_radku
         celkem += (
@@ -234,20 +262,46 @@ def _vyska_obsahu_stranky(polozky_stranky, scale):
     return celkem
 
 
+def _seskup_pro_zalomeni(polozky):
+    """Seskupí položky tak, aby "nadpis" (sekce bez řádků) nikdy nezůstal
+    sám na konci stránky, oddělený zalomením od obsahu, co po něm hned
+    následuje — stránkuje se pak po CELÝCH skupinách (viz _rozvrhni_stranky),
+    ne po jednotlivých položkách. Řetěz víc "nadpisů" za sebou (víc
+    prázdných sekcí vedle sebe) se slepí dohromady s první SKUTEČNOU
+    položkou, co po nich přijde — jinak by mohl zůstat osamocený i
+    prostřední z nich. Nadpis úplně na konci dokumentu (nic už za ním
+    není) zůstane sám — nemá s čím se slepit, a "osamocený na konci
+    stránky" u posledního obsahu dokumentu není problém řešený tímhle
+    zadáním (viz modul docstring)."""
+    skupiny = []
+    i = 0
+    n = len(polozky)
+    while i < n:
+        skupina = [polozky[i]]
+        i += 1
+        while skupina[-1]["typ"] == "nadpis" and i < n:
+            skupina.append(polozky[i])
+            i += 1
+        skupiny.append(skupina)
+    return skupiny
+
+
 def _rozvrhni_stranky(polozky, scale):
     """Rozdělí řádky na stránky JEN podle výšky — scale je teď společný
     pro celý dokument (viz modul docstring), takže se tu (na rozdíl od
     dřívější verze) neřeší nic jiného než kolik řádků se při něm vejde
-    nad sebe na jednu stránku."""
+    nad sebe na jednu stránku. Dělí se po SKUPINÁCH (_seskup_pro_zalomeni),
+    ne po jednotlivých položkách, aby osamocený "nadpis" sekce bez řádků
+    nezůstal na konci stránky odtržený od obsahu za ním."""
     vyska_dostupna = Y_ZACATEK_OBSAHU - OKRAJ
     stranky = []
     aktualni = []
-    for polozka in polozky:
-        kandidat = aktualni + [polozka]
+    for skupina in _seskup_pro_zalomeni(polozky):
+        kandidat = aktualni + skupina
         vyska = _vyska_obsahu_stranky(kandidat, scale)
         if aktualni and vyska > vyska_dostupna:
             stranky.append(aktualni)
-            aktualni = [polozka]
+            aktualni = skupina
         else:
             aktualni = kandidat
     if aktualni:
@@ -310,7 +364,9 @@ def vygeneruj_pdf(pisen, akordy):
     # Mřížka (scale i šířky pozic) je SPOLEČNÁ pro CELÝ dokument, ne jen
     # jednu stránku (viz modul docstring) — počítá se tu JEDNOU, mimo
     # smyčku přes stránky, a použije se beze změny na každé z nich.
-    radky_dokumentu = [p["radek"] for p in polozky]
+    # Položky typu "nadpis" (sekce bez řádků) do mřížky nepřispívají —
+    # nemají žádné buňky.
+    radky_dokumentu = [p["radek"] for p in polozky if p["typ"] == "radek"]
     scale = _najdi_scale(radky_dokumentu, sirka_obsahu, dob_vychozi)
     sirka_doby_zakladni = (sirka_obsahu / (POCET_TAKTU_NA_RADEK * dob_vychozi)) * scale
     velikost_akordu = max(VELIKOST_AKORDU * scale, TECHNICKY_MIN_VELIKOST)
@@ -330,8 +386,33 @@ def vygeneruj_pdf(pisen, akordy):
         y = kresli_hlavicku()
 
         for polozka in polozky_stranky:
-            radek = polozka["radek"]
             sekce = polozka["sekce"]
+
+            if polozka["typ"] == "nadpis":
+                # Sekce bez řádků: jen nadpis na vlastním řádku, stejný
+                # styl jako nadpis normální sekce (viz níž) — žádná
+                # mřížka, žádné takty, žádné repetice (schéma repetice na
+                # sekci bez taktů nepřipouští).
+                y_radku = y
+                if sekce.get("nazev"):
+                    nazev_velky = sekce["nazev"].upper()
+                    velikost_nazvu = _velikost_pro_text(
+                        nazev_velky,
+                        FONT_POPISEK_TUCNE,
+                        SIRKA_GUTTERU - 6,
+                        velikost_sekce,
+                        TECHNICKY_MIN_VELIKOST,
+                    )
+                    c.setFont(FONT_POPISEK_TUCNE, velikost_nazvu)
+                    c.setFillColorRGB(*BARVA_SEDA)
+                    c.drawString(OKRAJ, y_radku - sekce_offset, nazev_velky)
+
+                y -= vyska_radku + (
+                    mezera_stejna_sekce if not polozka["je_posledni_v_sekci"] else mezera_mezi_sekcemi
+                )
+                continue
+
+            radek = polozka["radek"]
             od_g, do_g = polozka["od_g"], polozka["do_g"]
 
             navic_pred_radkem = mezera_pro_badge if _ma_badge(radek) else 0

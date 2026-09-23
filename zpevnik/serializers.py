@@ -210,6 +210,11 @@ class RadekZapisuSerializer(serializers.Serializer):
 
 class SekceSerializer(serializers.Serializer):
     nazev = serializers.CharField(max_length=MAX_DELKA_SEKCE, allow_blank=True, default="")
+    # allow_empty=True záměrně — sekce jen s nadpisem, bez řádků (editor:
+    # smazání úplně posledního taktu sekci na 1 prázdný řádek už neresetuje,
+    # PDF: taková sekce vyjde jako samotný nadpis, viz akordy_pdf.py).
+    # `validate` níž zajišťuje, že prázdná sekce nemůže mít repetici (ta by
+    # nutně odkazovala mimo sekci, protože v ní není žádný takt).
     radky = RadekZapisuSerializer(many=True, allow_empty=True)
     repetice = RepeticeSerializer(many=True, required=False, default=list)
 

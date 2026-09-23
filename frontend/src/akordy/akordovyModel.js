@@ -86,10 +86,11 @@ export function pridejTaktDoRadku(radek, dobVychozi) {
 // odkazující na takty PO tom smazaném, napříč VŠEMI řádky sekce.
 //
 // Smazání POSLEDNÍHO taktu řádku smaže i řádek — žádné samostatné
-// "Smazat řádek" tlačítko není potřeba. Výjimka: jediný řádek sekce se
-// nesmí smazat (nebylo by kam se vrátit přes Enter), místo toho se
-// resetuje na jeden prázdný takt.
-export function odeberTaktZeSekce(sekce, radekIdx, taktIdx, dobVychozi) {
+// "Smazat řádek" tlačítko není potřeba. Smazání posledního taktu
+// JEDINÉHO řádku sekce nechá sekci BEZ řádků (`radky: []`, viz schéma
+// — sekce jen s nadpisem) místo dřívějšího resetu na 1 prázdný takt;
+// zpátky na obsah se jde přes "+ Přidat řádek" (viz AkordovyMrizka).
+export function odeberTaktZeSekce(sekce, radekIdx, taktIdx) {
   const globalni = globalniIndexTaktu(sekce, radekIdx, taktIdx)
   const radek = sekce.radky[radekIdx]
   const jePosledniTaktRadku = radek.takty.length === 1
@@ -97,7 +98,7 @@ export function odeberTaktZeSekce(sekce, radekIdx, taktIdx, dobVychozi) {
 
   let noveRadky
   if (jePosledniTaktRadku && jeJedinyRadekSekce) {
-    noveRadky = [novyRadek(dobVychozi)]
+    noveRadky = []
   } else if (jePosledniTaktRadku) {
     noveRadky = sekce.radky.filter((_, ri) => ri !== radekIdx)
   } else {
