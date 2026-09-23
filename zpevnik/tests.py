@@ -1384,6 +1384,137 @@ class AkordovyZapisSerializerTests(TestCase):
         serializer = AkordovyZapisSerializer(data=data)
         self.assertFalse(serializer.is_valid())
 
+    def _sekce_s_10_takty(self, **prepis):
+        radky = [{"takty": [{"bunky": ["A", "", "", ""]}] * 10}]
+        sekce = {"nazev": "X", "radky": radky, "repetice": [], "volty": []}
+        sekce.update(prepis)
+        return sekce
+
+    def test_volta_uvnitr_repetice_povolena(self):
+        # Přesně příklad ze zadání: repetice 6-7, volta 1 UVNITŘ ní.
+        data = self.zaklad(
+            sekce=[
+                self._sekce_s_10_takty(
+                    repetice=[{"od_taktu": 4, "do_taktu": 7, "krat": 2}],
+                    volty=[{"cislo": 1, "od_taktu": 6, "do_taktu": 7}],
+                )
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_volta_hned_za_repetici_povolena(self):
+        data = self.zaklad(
+            sekce=[
+                self._sekce_s_10_takty(
+                    repetice=[{"od_taktu": 4, "do_taktu": 7, "krat": 2}],
+                    volty=[{"cislo": 2, "od_taktu": 8, "do_taktu": 9}],
+                )
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_prima_a_secunda_volta_spolu_povoleny(self):
+        # Celý příklad ze zadání najednou - 1. UVNITŘ repetice, 2. HNED ZA ní.
+        data = self.zaklad(
+            sekce=[
+                self._sekce_s_10_takty(
+                    repetice=[{"od_taktu": 4, "do_taktu": 7, "krat": 2}],
+                    volty=[
+                        {"cislo": 1, "od_taktu": 6, "do_taktu": 7},
+                        {"cislo": 2, "od_taktu": 8, "do_taktu": 9},
+                    ],
+                )
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertTrue(serializer.is_valid(), serializer.errors)
+
+    def test_volta_s_mezerou_za_repetici_odmitnuta(self):
+        # "hned za" - MEZERA (takt 9, ne 8) repetici nesplňuje.
+        data = self.zaklad(
+            sekce=[
+                self._sekce_s_10_takty(
+                    repetice=[{"od_taktu": 4, "do_taktu": 7, "krat": 2}],
+                    volty=[{"cislo": 2, "od_taktu": 9, "do_taktu": 9}],
+                )
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_volta_bez_jakekoliv_repetice_odmitnuta(self):
+        data = self.zaklad(
+            sekce=[self._sekce_s_10_takty(volty=[{"cislo": 1, "od_taktu": 2, "do_taktu": 3}])]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_volta_castecne_prekryvajici_repetici_ale_ne_cela_uvnitr_odmitnuta(self):
+        # od_taktu(3) je PŘED repetici (4-7) - není to "uvnitř" ani "hned za".
+        data = self.zaklad(
+            sekce=[
+                self._sekce_s_10_takty(
+                    repetice=[{"od_taktu": 4, "do_taktu": 7, "krat": 2}],
+                    volty=[{"cislo": 1, "od_taktu": 3, "do_taktu": 5}],
+                )
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_prekryvajici_se_volty_odmitnuty(self):
+        data = self.zaklad(
+            sekce=[
+                self._sekce_s_10_takty(
+                    repetice=[{"od_taktu": 4, "do_taktu": 7, "krat": 2}],
+                    volty=[
+                        {"cislo": 1, "od_taktu": 6, "do_taktu": 7},
+                        {"cislo": 2, "od_taktu": 7, "do_taktu": 7},
+                    ],
+                )
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_volta_mimo_sekci_odmitnuta(self):
+        data = self.zaklad(
+            sekce=[
+                self._sekce_s_10_takty(
+                    repetice=[{"od_taktu": 4, "do_taktu": 9, "krat": 2}],
+                    volty=[{"cislo": 1, "od_taktu": 8, "do_taktu": 10}],
+                )
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_volta_cislo_mimo_rozsah_odmitnuta(self):
+        data = self.zaklad(
+            sekce=[
+                self._sekce_s_10_takty(
+                    repetice=[{"od_taktu": 4, "do_taktu": 7, "krat": 2}],
+                    volty=[{"cislo": 5, "od_taktu": 6, "do_taktu": 7}],
+                )
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
+    def test_volta_do_taktu_pred_od_taktu_odmitnuta(self):
+        data = self.zaklad(
+            sekce=[
+                self._sekce_s_10_takty(
+                    repetice=[{"od_taktu": 4, "do_taktu": 7, "krat": 2}],
+                    volty=[{"cislo": 1, "od_taktu": 7, "do_taktu": 6}],
+                )
+            ]
+        )
+        serializer = AkordovyZapisSerializer(data=data)
+        self.assertFalse(serializer.is_valid())
+
 
 class AkordyPdfMrizkaTests(TestCase):
     """Mřížka akordového PDF (zpevnik/akordy_pdf.py), schéma 2: ŘÁDEK SE
@@ -1580,6 +1711,108 @@ class AkordyPdfMrizkaTests(TestCase):
         konec_textu = x_konec_znacky + ODSTUP_ZNACKY_KONCE_OD_CARY + sirka_textu
         self.assertLessEqual(konec_textu, hranice_s_rep - ODSTUP_ZA_ZNACKOU_KONCE + 0.01)
 
+    def test_volty_v_radku_najde_jen_volty_ktere_radek_zasahuji(self):
+        from zpevnik.akordy_pdf import _volty_v_radku
+
+        sekce = {
+            "volty": [
+                {"cislo": 1, "od_taktu": 0, "do_taktu": 1},  # v prvnim radku (0-3)
+                {"cislo": 2, "od_taktu": 5, "do_taktu": 5},  # v druhem radku (4-7)
+            ]
+        }
+        self.assertEqual(len(_volty_v_radku(sekce, 0, 4)), 1)
+        self.assertEqual(_volty_v_radku(sekce, 0, 4)[0]["cislo"], 1)
+        self.assertEqual(len(_volty_v_radku(sekce, 4, 8)), 1)
+        self.assertEqual(_volty_v_radku(sekce, 4, 8)[0]["cislo"], 2)
+
+    def test_ma_navic_nad_radkem_kvuli_volte_i_bez_badge(self):
+        from zpevnik.akordy_pdf import _ma_navic_nad_radkem
+
+        sekce = {"volty": [{"cislo": 1, "od_taktu": 0, "do_taktu": 1}]}
+        radek = {"takty": [{"bunky": ["A", "", "", ""]}] * 4}
+        polozka = {"typ": "radek", "radek": radek, "sekce": sekce, "od_g": 0, "do_g": 4}
+        self.assertTrue(_ma_navic_nad_radkem(polozka))
+
+        polozka_bez_volty = {"typ": "radek", "radek": radek, "sekce": {"volty": []}, "od_g": 0, "do_g": 4}
+        self.assertFalse(_ma_navic_nad_radkem(polozka_bez_volty))
+
+    def test_volta_zavorka_koncici_soucasne_s_repetici_nezasahuje_do_znacky_konce(self):
+        # Regrese k nálezu při ladění bodu 5: volta, co končí PŘESNĚ na
+        # stejné pozici jako repetice (běžný případ - "volta 1" těsně
+        # před ':|'), musí svojí závorkou skončit PŘED rezervou pro '×N',
+        # ne za ní (jinak by přesahovala přes okraj stránky).
+        from zpevnik.akordy_pdf import (
+            OKRAJ,
+            SIRKA_GUTTERU,
+            SIRKA_STRANKY,
+            VELIKOST_AKORDU,
+            VELIKOST_REPETICE_N,
+            POCET_TAKTU_NA_RADEK,
+            TECHNICKY_MIN_VELIKOST,
+            _mezery_znacek_repetice,
+            _najdi_scale,
+            _pozice_zacatku_taktu,
+            _radky_s_metadaty,
+            _rozsir_sirky_pro_znacky,
+            _sirky_pozic,
+            _x_pozice_taktu,
+            _zaregistruj_fonty,
+        )
+
+        _zaregistruj_fonty()
+        sekce = [
+            {
+                "nazev": "S",
+                "radky": [{"takty": [{"bunky": ["A"]}, {"bunky": ["B"]}, {"bunky": ["C"]}, {"bunky": ["D"]}]}],
+                "repetice": [{"od_taktu": 0, "do_taktu": 3, "krat": 2}],
+                "volty": [{"cislo": 1, "od_taktu": 2, "do_taktu": 3}],
+            }
+        ]
+        polozky = _radky_s_metadaty(sekce)
+        polozky_radek = [p for p in polozky if p["typ"] == "radek"]
+        radek = polozky_radek[0]["radek"]
+        sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
+        scale = _najdi_scale(polozky_radek, sirka_obsahu, 4)
+        sirka_doby_zakladni = (sirka_obsahu / (POCET_TAKTU_NA_RADEK * 4)) * scale
+        velikost_akordu = max(VELIKOST_AKORDU * scale, TECHNICKY_MIN_VELIKOST)
+        velikost_repetice_n = max(VELIKOST_REPETICE_N * scale, TECHNICKY_MIN_VELIKOST)
+        sirky = _sirky_pozic([radek], sirka_doby_zakladni, velikost_akordu)
+        vlevo, vpravo = _mezery_znacek_repetice(polozky_radek, velikost_repetice_n)
+        sirky = _rozsir_sirky_pro_znacky(sirky, vlevo, vpravo)
+
+        # volta konci na taktu 3 (index 3, posledni takt radku) - stejne
+        # jako repetice - takze p_konec_volty == p_konec_repetice.
+        p_konec_volty = _pozice_zacatku_taktu(radek, 3) + len(radek["takty"][3]["bunky"]) - 1
+        posun_konce = vpravo.get(p_konec_volty, 0.0)
+        self.assertGreater(posun_konce, 0)
+
+        x_konec_hranice = _x_pozice_taktu(radek, sirky, 4)
+        x_konec_zavorky = x_konec_hranice - posun_konce
+        x_konec_znacky_repetice = x_konec_hranice - vpravo[p_konec_volty]
+        # zavorka konci PŘESNĚ tam, kde zacina rezerva pro ':|'+'×N', ne za ni.
+        self.assertAlmostEqual(x_konec_zavorky, x_konec_znacky_repetice)
+
+    def test_dokument_s_repetici_a_voltou_v_pdf_projde(self):
+        from zpevnik import akordy_pdf
+
+        class FakePisen:
+            nazev = "Test"
+            interpret = ""
+
+        zapis = self._zapis(
+            [
+                {
+                    "nazev": "Sloka",
+                    "radky": [{"takty": [{"bunky": ["A"]}, {"bunky": ["B"]}, {"bunky": ["C"]}, {"bunky": ["D"]}]}],
+                    "repetice": [{"od_taktu": 0, "do_taktu": 3, "krat": 2}],
+                    "volty": [{"cislo": 1, "od_taktu": 2, "do_taktu": 3}],
+                }
+            ],
+            dob=1,
+        )
+        pdf = akordy_pdf.vygeneruj_pdf(FakePisen(), zapis)
+        self.assertEqual(pdf[:5], b"%PDF-")
+
     def test_rozvrhni_stranky_jednoducha_pisen_zustane_na_jedne_strance(self):
         from zpevnik.akordy_pdf import (
             OKRAJ,
@@ -1726,10 +1959,15 @@ class AkordyPdfMrizkaTests(TestCase):
         scale = 1.0
         vyska_dostupna = Y_ZACATEK_OBSAHU - OKRAJ
 
+        prazdna_sekce = {"volty": []}
+
         def filler_radek():
             return {
                 "typ": "radek",
                 "radek": {"takty": [{"bunky": [""]}]},
+                "sekce": prazdna_sekce,
+                "od_g": 0,
+                "do_g": 1,
                 "je_prvni_v_sekci": False,
                 "je_posledni_v_sekci": False,
             }
@@ -1738,6 +1976,9 @@ class AkordyPdfMrizkaTests(TestCase):
         posledni_radek = {
             "typ": "radek",
             "radek": {"takty": [{"bunky": [""]}]},
+            "sekce": prazdna_sekce,
+            "od_g": 0,
+            "do_g": 1,
             "je_prvni_v_sekci": True,
             "je_posledni_v_sekci": True,
         }

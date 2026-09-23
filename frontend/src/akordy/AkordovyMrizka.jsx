@@ -11,10 +11,13 @@ import {
   rozdelSekciOdRadku,
   rozsahMeziPozicemi,
   vyberObsahuje,
+  voltyVRadku,
   zkontrolujVyberProRepetici,
+  zkontrolujVyberProVoltu,
   zpusobiZtratuZmenaVyberu,
 } from './akordovyModel'
 import RepeticePopover from './RepeticePopover'
+import VoltaPopover from './VoltaPopover'
 import ZmenitTaktPopover from './ZmenitTaktPopover'
 import './AkordovyMrizka.css'
 
@@ -67,6 +70,8 @@ export default function AkordovyMrizka({
   onDuplikujSekci,
   onPridejRepetici,
   onSmazRepetici,
+  onPridejVoltu,
+  onSmazVoltu,
   onZmenTaktVyberu,
 }) {
   const dob = zapis.takt.dob
@@ -77,6 +82,7 @@ export default function AkordovyMrizka({
   const nazvySekciRef = useRef(new Map())
   const [repeticeChyba, setRepeticeChyba] = useState(null)
   const [repeticePopoverOtevreny, setRepeticePopoverOtevreny] = useState(false)
+  const [voltaPopoverOtevreny, setVoltaPopoverOtevreny] = useState(false)
   const [taktPopoverOtevreny, setTaktPopoverOtevreny] = useState(false)
   const [chybaRozdeleni, setChybaRozdeleni] = useState(null)
   const [sirkaBunky, setSirkaBunky] = useState(64)
@@ -289,6 +295,27 @@ export default function AkordovyMrizka({
     setVyber([])
   }
 
+  function otevriVoltu() {
+    const kontrola = zkontrolujVyberProVoltu(zapis, vyber)
+    if (!kontrola.ok) {
+      setRepeticeChyba(kontrola.hlaska)
+      return
+    }
+    setRepeticeChyba(null)
+    setVoltaPopoverOtevreny(true)
+  }
+
+  function potvrdVoltu(cislo) {
+    const kontrola = zkontrolujVyberProVoltu(zapis, vyber)
+    setVoltaPopoverOtevreny(false)
+    if (!kontrola.ok) {
+      setRepeticeChyba(kontrola.hlaska)
+      return
+    }
+    onPridejVoltu(kontrola.sekceIdx, kontrola.od_taktu, kontrola.do_taktu, cislo)
+    setVyber([])
+  }
+
   function potvrdZmenuTaktu(novyTakt) {
     const dobCil = novyTakt ? novyTakt.dob : zapis.takt.dob
     if (zpusobiZtratuZmenaVyberu(zapis, vyber, dobCil)) {
@@ -480,13 +507,36 @@ export default function AkordovyMrizka({
             ) : (
             <div className="akordy-sekce-scroll">
               <ul className="akordy-radky">
-                {sekce.radky.map((radek, radekIdx) => (
+                {sekce.radky.map((radek, radekIdx) => {
+                  const voltySeznam = voltyVRadku(sekce, radekIdx)
+                  const voltaProTakt = (taktIdx) =>
+                    voltySeznam.find((v) => taktIdx >= v.odTaktLokalni && taktIdx <= v.doTaktLokalni)
+                  return (
                   <li key={radekIdx} className="akordy-radek">
                     <div className="akordy-takty">
                       {radek.takty.map((takt, taktIdx) => {
                         const efektivni = efektivniTakt(takt, zapis.takt)
+                        const voltaTady = voltaProTakt(taktIdx)
+                        const jeZacatekVoltyVRadku =
+                          voltaTady && taktIdx === voltaTady.odTaktLokalni && voltaTady.kresliZacatek
+                        const jeKonecVoltyVRadku =
+                          voltaTady && taktIdx === voltaTady.doTaktLokalni && voltaTady.kresliKonec
                         return (
                           <div key={taktIdx} className="akordy-takt">
+                            {voltaTady && (
+                              <button
+                                type="button"
+                                className={`akordy-volta-segment${jeZacatekVoltyVRadku ? ' akordy-volta-zacatek' : ''}${
+                                  jeKonecVoltyVRadku && voltaTady.volta.cislo !== 1 ? ' akordy-volta-konec-uzavrena' : ''
+                                }`}
+                                onClick={() => onSmazVoltu(sekceIdx, voltaTady.voltaIdx)}
+                                title={`Volta ${voltaTady.volta.cislo} — kliknutím smazat`}
+                              >
+                                {jeZacatekVoltyVRadku && (
+                                  <span className="akordy-volta-cislo">{voltaTady.volta.cislo}.</span>
+                                )}
+                              </button>
+                            )}
                             <div className="akordy-takt-hlavicka">
                               {takt.takt && (
                                 <span className="akordy-takt-badge">
@@ -546,7 +596,8 @@ export default function AkordovyMrizka({
                       </button>
                     )}
                   </li>
-                ))}
+                  )
+                })}
               </ul>
             </div>
             )}
@@ -600,6 +651,9 @@ export default function AkordovyMrizka({
               <button type="button" className="btn btn-secondary" onClick={otevriRepetici}>
                 Repetice
               </button>
+              <button type="button" className="btn btn-secondary" onClick={otevriVoltu}>
+                Volta
+              </button>
               <button type="button" className="btn btn-secondary" onClick={() => setTaktPopoverOtevreny(true)}>
                 Změnit takt
               </button>
@@ -619,6 +673,9 @@ export default function AkordovyMrizka({
 
         {repeticePopoverOtevreny && (
           <RepeticePopover onPotvrdit={potvrdRepetici} onZrusit={() => setRepeticePopoverOtevreny(false)} />
+        )}
+        {voltaPopoverOtevreny && (
+          <VoltaPopover onPotvrdit={potvrdVoltu} onZrusit={() => setVoltaPopoverOtevreny(false)} />
         )}
         {taktPopoverOtevreny && (
           <ZmenitTaktPopover onPotvrdit={potvrdZmenuTaktu} onZrusit={() => setTaktPopoverOtevreny(false)} />

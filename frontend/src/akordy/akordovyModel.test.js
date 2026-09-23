@@ -8,6 +8,8 @@ import {
   rozdelSekciOdRadku,
   spojRadekSPredchozim,
   spojSeSPredchozi,
+  voltyVRadku,
+  zkontrolujVyberProVoltu,
 } from './akordovyModel'
 
 // Pomocník: řádek se `n` takty výchozího taktu (obsah buněk je pro tyhle
@@ -140,7 +142,7 @@ describe('rozdelSekciOdRadku', () => {
     }
     const vysledek = rozdelSekciOdRadku(sekce, 1)
     expect(vysledek.ok).toBe(false)
-    expect(vysledek.hlaska).toBe('Tady je repetice přes více řádků, nejdřív ji zruš.')
+    expect(vysledek.hlaska).toBe('Tady je repetice nebo volta přes více řádků, nejdřív ji zruš.')
   })
 
   test('víc repetic - jedna nahoře, jedna dole, obě se správně rozdělí', () => {
@@ -156,6 +158,34 @@ describe('rozdelSekciOdRadku', () => {
     expect(vysledek.ok).toBe(true)
     expect(vysledek.puvodni.repetice).toEqual([{ od_taktu: 0, do_taktu: 1, krat: 2 }])
     expect(vysledek.nova.repetice).toEqual([{ od_taktu: 0, do_taktu: 1, krat: 3 }])
+  })
+
+  test('volta se rozdělí stejně jako repetice — dolní se přepočte, horní zůstane', () => {
+    const sekce = {
+      nazev: 'S',
+      radky: [radek(2), radek(3), radek(1)],
+      repetice: [],
+      volty: [
+        { cislo: 1, od_taktu: 0, do_taktu: 1 }, // horní část
+        { cislo: 2, od_taktu: 3, do_taktu: 4 }, // dolní část (hranice=2)
+      ],
+    }
+    const vysledek = rozdelSekciOdRadku(sekce, 1)
+    expect(vysledek.ok).toBe(true)
+    expect(vysledek.puvodni.volty).toEqual([{ cislo: 1, od_taktu: 0, do_taktu: 1 }])
+    expect(vysledek.nova.volty).toEqual([{ cislo: 2, od_taktu: 1, do_taktu: 2 }])
+  })
+
+  test('volta přes hranici dělení rozdělení odmítne', () => {
+    const sekce = {
+      nazev: 'S',
+      radky: [radek(2), radek(3)],
+      repetice: [],
+      volty: [{ cislo: 1, od_taktu: 1, do_taktu: 3 }], // hranice=2, přesahuje
+    }
+    const vysledek = rozdelSekciOdRadku(sekce, 1)
+    expect(vysledek.ok).toBe(false)
+    expect(vysledek.hlaska).toBe('Tady je repetice nebo volta přes více řádků, nejdřív ji zruš.')
   })
 })
 
@@ -191,6 +221,24 @@ describe('odeberTaktZeSekce', () => {
     const sekce = { nazev: 'S', radky: [{ takty: [{ bunky: ['C'] }, { bunky: ['D'] }] }], repetice: [] }
     const vysledek = odeberTaktZeSekce(sekce, 0, 0)
     expect(vysledek.radky).toEqual([{ takty: [{ bunky: ['D'] }] }])
+  })
+
+  test('volta obsahující smazaný takt se zahodí, volta PO něm se přepočte, volta PŘED ním beze změny', () => {
+    const sekce = {
+      nazev: 'S',
+      radky: [{ takty: [{ bunky: ['A'] }, { bunky: ['B'] }, { bunky: ['C'] }, { bunky: ['D'] }] }],
+      repetice: [],
+      volty: [
+        { cislo: 1, od_taktu: 0, do_taktu: 0 }, // před smazaným taktem (index 1) - beze změny
+        { cislo: 2, od_taktu: 1, do_taktu: 1 }, // OBSAHUJE smazaný takt - zahodí se
+        { cislo: 3, od_taktu: 2, do_taktu: 3 }, // po smazaném taktu - posune se o 1
+      ],
+    }
+    const vysledek = odeberTaktZeSekce(sekce, 0, 1)
+    expect(vysledek.volty).toEqual([
+      { cislo: 1, od_taktu: 0, do_taktu: 0 },
+      { cislo: 3, od_taktu: 1, do_taktu: 2 },
+    ])
   })
 })
 
@@ -246,7 +294,31 @@ describe('rozdelRadekOdTaktu', () => {
     }
     const vysledek = rozdelRadekOdTaktu(sekce, 0, 2)
     expect(vysledek.ok).toBe(false)
-    expect(vysledek.hlaska).toBe('Tady je repetice přes více řádků, nejdřív ji zruš.')
+    expect(vysledek.hlaska).toBe('Tady je repetice nebo volta přes více řádků, nejdřív ji zruš.')
+  })
+
+  test('volta přes místo zalomení split odmítne stejnou hláškou', () => {
+    const sekce = {
+      nazev: 'S',
+      radky: [radek(4)],
+      repetice: [],
+      volty: [{ cislo: 1, od_taktu: 1, do_taktu: 2 }], // zasahuje přes hranici (taktIdx=2)
+    }
+    const vysledek = rozdelRadekOdTaktu(sekce, 0, 2)
+    expect(vysledek.ok).toBe(false)
+    expect(vysledek.hlaska).toBe('Tady je repetice nebo volta přes více řádků, nejdřív ji zruš.')
+  })
+
+  test('volta mimo místo zalomení split povolí, indexy beze změny', () => {
+    const sekce = {
+      nazev: 'S',
+      radky: [radek(4)],
+      repetice: [],
+      volty: [{ cislo: 1, od_taktu: 0, do_taktu: 1 }],
+    }
+    const vysledek = rozdelRadekOdTaktu(sekce, 0, 2)
+    expect(vysledek.ok).toBe(true)
+    expect(vysledek.sekce.volty).toEqual(sekce.volty)
   })
 })
 
@@ -350,5 +422,144 @@ describe('spojSeSPredchozi', () => {
     const spojeno = spojSeSPredchozi(rozdeleno.puvodni, { ...rozdeleno.nova, nazev: 'Refrén' })
     expect(spojeno.radky).toEqual(puvodniSekce.radky)
     expect(spojeno.repetice).toEqual(puvodniSekce.repetice)
+  })
+
+  test('volty aktuální sekce se přeindexují o počet taktů předchozí, volty předchozí beze změny', () => {
+    const predchozi = { nazev: 'A', radky: [radek(2), radek(1)], repetice: [], volty: [{ cislo: 1, od_taktu: 0, do_taktu: 0 }] }
+    const aktualni = { nazev: 'B', radky: [radek(2)], repetice: [], volty: [{ cislo: 2, od_taktu: 0, do_taktu: 1 }] }
+    const spojena = spojSeSPredchozi(predchozi, aktualni)
+    expect(spojena.volty).toEqual([
+      { cislo: 1, od_taktu: 0, do_taktu: 0 },
+      { cislo: 2, od_taktu: 3, do_taktu: 4 },
+    ])
+  })
+
+  test('spojení je přesná inverze rozdělení i pro volty (round-trip)', () => {
+    const puvodniSekce = {
+      nazev: 'Refrén',
+      radky: [radek(2), radek(3), radek(1)],
+      repetice: [],
+      volty: [
+        { cislo: 1, od_taktu: 0, do_taktu: 1 },
+        { cislo: 2, od_taktu: 3, do_taktu: 5 },
+      ],
+    }
+    const rozdeleno = rozdelSekciOdRadku(puvodniSekce, 1)
+    expect(rozdeleno.ok).toBe(true)
+    const spojeno = spojSeSPredchozi(rozdeleno.puvodni, { ...rozdeleno.nova, nazev: 'Refrén' })
+    expect(spojeno.volty).toEqual(puvodniSekce.volty)
+  })
+})
+
+describe('zkontrolujVyberProVoltu', () => {
+  function vyberCelehoTaktu(sekceIdx, radekIdx, taktIdx) {
+    return { sekceIdx, radekIdx, bunkaIdxVRadku: taktIdx }
+  }
+
+  test('prázdný výběr odmítne', () => {
+    const zapis = { sekce: [{ nazev: 'S', radky: [radek(4)], repetice: [], volty: [] }] }
+    const vysledek = zkontrolujVyberProVoltu(zapis, [])
+    expect(vysledek.ok).toBe(false)
+    expect(vysledek.hlaska).toBe('Nejdřív vyber aspoň jeden takt.')
+  })
+
+  test('výběr přes víc sekcí odmítne', () => {
+    const zapis = {
+      sekce: [
+        { nazev: 'A', radky: [radek(2)], repetice: [], volty: [] },
+        { nazev: 'B', radky: [radek(2)], repetice: [], volty: [] },
+      ],
+    }
+    const vyber = [vyberCelehoTaktu(0, 0, 0), vyberCelehoTaktu(1, 0, 0)]
+    const vysledek = zkontrolujVyberProVoltu(zapis, vyber)
+    expect(vysledek.ok).toBe(false)
+    expect(vysledek.hlaska).toBe('Volta jen v rámci jedné sekce.')
+  })
+
+  test('výběr UVNITŘ repetice povolí', () => {
+    const zapis = {
+      sekce: [{ nazev: 'S', radky: [radek(4)], repetice: [{ od_taktu: 0, do_taktu: 3, krat: 2 }], volty: [] }],
+    }
+    const vyber = [vyberCelehoTaktu(0, 0, 2), vyberCelehoTaktu(0, 0, 3)]
+    const vysledek = zkontrolujVyberProVoltu(zapis, vyber)
+    expect(vysledek.ok).toBe(true)
+    expect(vysledek.od_taktu).toBe(2)
+    expect(vysledek.do_taktu).toBe(3)
+  })
+
+  test('výběr HNED ZA repeticí (bez mezery) povolí', () => {
+    const zapis = {
+      sekce: [{ nazev: 'S', radky: [radek(6)], repetice: [{ od_taktu: 0, do_taktu: 3, krat: 2 }], volty: [] }],
+    }
+    const vyber = [vyberCelehoTaktu(0, 0, 4), vyberCelehoTaktu(0, 0, 5)]
+    const vysledek = zkontrolujVyberProVoltu(zapis, vyber)
+    expect(vysledek.ok).toBe(true)
+  })
+
+  test('výběr ani uvnitř, ani hned za repeticí odmítne', () => {
+    const zapis = {
+      sekce: [{ nazev: 'S', radky: [radek(8)], repetice: [{ od_taktu: 0, do_taktu: 3, krat: 2 }], volty: [] }],
+    }
+    // mezera - takt 6 je AŽ za taktem 5, ne hned za repeticí (ta konci na 3)
+    const vyber = [vyberCelehoTaktu(0, 0, 6)]
+    const vysledek = zkontrolujVyberProVoltu(zapis, vyber)
+    expect(vysledek.ok).toBe(false)
+    expect(vysledek.hlaska).toBe('Volta musí ležet uvnitř repetice, nebo hned za ní.')
+  })
+
+  test('výběr bez jakékoliv repetice v sekci odmítne', () => {
+    const zapis = { sekce: [{ nazev: 'S', radky: [radek(4)], repetice: [], volty: [] }] }
+    const vyber = [vyberCelehoTaktu(0, 0, 0)]
+    const vysledek = zkontrolujVyberProVoltu(zapis, vyber)
+    expect(vysledek.ok).toBe(false)
+    expect(vysledek.hlaska).toBe('Volta musí ležet uvnitř repetice, nebo hned za ní.')
+  })
+
+  test('překryv s existující voltou odmítne', () => {
+    const zapis = {
+      sekce: [
+        {
+          nazev: 'S',
+          radky: [radek(4)],
+          repetice: [{ od_taktu: 0, do_taktu: 3, krat: 2 }],
+          volty: [{ cislo: 1, od_taktu: 2, do_taktu: 3 }],
+        },
+      ],
+    }
+    const vyber = [vyberCelehoTaktu(0, 0, 3)]
+    const vysledek = zkontrolujVyberProVoltu(zapis, vyber)
+    expect(vysledek.ok).toBe(false)
+    expect(vysledek.hlaska).toBe('Tenhle úsek se překrývá s existující voltou.')
+  })
+})
+
+describe('voltyVRadku', () => {
+  test('najde jen volty, co daný řádek zasahují, s lokálními indexy', () => {
+    const sekce = {
+      radky: [radek(4), radek(4)],
+      volty: [
+        { cislo: 1, od_taktu: 2, do_taktu: 3 }, // v prvním řádku
+        { cislo: 2, od_taktu: 5, do_taktu: 5 }, // v druhém řádku
+      ],
+    }
+    const prvniRadek = voltyVRadku(sekce, 0)
+    expect(prvniRadek.length).toBe(1)
+    expect(prvniRadek[0]).toMatchObject({ odTaktLokalni: 2, doTaktLokalni: 3, kresliZacatek: true, kresliKonec: true })
+
+    const druhyRadek = voltyVRadku(sekce, 1)
+    expect(druhyRadek.length).toBe(1)
+    expect(druhyRadek[0]).toMatchObject({ odTaktLokalni: 1, doTaktLokalni: 1, kresliZacatek: true, kresliKonec: true })
+  })
+
+  test('volta přes víc řádků: kresliZacatek/kresliKonec jen na řádku, kde skutečně začíná/končí', () => {
+    const sekce = {
+      radky: [radek(4), radek(2)],
+      volty: [{ cislo: 1, od_taktu: 3, do_taktu: 5 }], // takt 3 (poslední v radku0) az takt5 (v radku1)
+    }
+    const prvniRadek = voltyVRadku(sekce, 0)
+    expect(prvniRadek[0]).toMatchObject({ odTaktLokalni: 3, doTaktLokalni: 3, kresliZacatek: true, kresliKonec: false })
+
+    const druhyRadek = voltyVRadku(sekce, 1)
+    expect(druhyRadek[0]).toMatchObject({ odTaktLokalni: 0, doTaktLokalni: 1, kresliZacatek: false, kresliKonec: true })
   })
 })

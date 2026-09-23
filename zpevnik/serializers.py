@@ -185,6 +185,22 @@ class RepeticeSerializer(serializers.Serializer):
         return attrs
 
 
+class VoltaSerializer(serializers.Serializer):
+    # Prima/secunda volta (jiný závěr při 1./2. průchodu repeticí) —
+    # PC_zpevnik_akordy_ovladani.md bod 5. Indexy taktů stejně jako u
+    # RepeticeSerializer (napříč všemi řádky sekce, 0-based, `do_taktu`
+    # včetně) — validace proti repetici a proti překryvu s jinými voltami
+    # je až na AkordovyZapisSerializer.validate, kde zná všechno najednou.
+    cislo = serializers.IntegerField(min_value=1, max_value=4)
+    od_taktu = serializers.IntegerField(min_value=0)
+    do_taktu = serializers.IntegerField(min_value=0)
+
+    def validate(self, attrs):
+        if attrs["do_taktu"] < attrs["od_taktu"]:
+            raise serializers.ValidationError("`do_taktu` nesmí být před `od_taktu`.")
+        return attrs
+
+
 class TaktVRadkuSerializer(serializers.Serializer):
     """Jeden takt (bar) uvnitř řádku. `bunky` — prázdná buňka = drží se
     předchozí akord (validní hodnota, ne chyba). `takt` chybí = platí
@@ -217,6 +233,7 @@ class SekceSerializer(serializers.Serializer):
     # nutně odkazovala mimo sekci, protože v ní není žádný takt).
     radky = RadekZapisuSerializer(many=True, allow_empty=True)
     repetice = RepeticeSerializer(many=True, required=False, default=list)
+    volty = VoltaSerializer(many=True, required=False, default=list)
 
 
 class AkordovyZapisSerializer(serializers.Serializer):
@@ -260,6 +277,35 @@ class AkordovyZapisSerializer(serializers.Serializer):
                         f"Sekce {i_sekce + 1}: repetice se v rámci sekce překrývají."
                     )
                 obsazene |= rozsah
+
+            # Volta (bod 5): musí ležet UVNITŘ nějaké repetice, NEBO
+            # HNED ZA NÍ (bez mezery — druhý/třetí konec navazuje přímo
+            # na místo, kam repetice končí). Překryv se hlídá SAMOSTATNĚ
+            # od repetice (`obsazene_volty`, ne `obsazene`) — volta
+            # "uvnitř" repetice se s ní překrývat SMÍ, to je podstata
+            # věci, jen se voltami navzájem překrývat nesmí.
+            obsazene_volty = set()
+            for volta in sekce["volty"]:
+                if volta["do_taktu"] >= pocet_taktu_v_sekci:
+                    raise serializers.ValidationError(
+                        f"Sekce {i_sekce + 1}: volta odkazuje na takt mimo sekci."
+                    )
+                rozsah_volty = set(range(volta["od_taktu"], volta["do_taktu"] + 1))
+                if obsazene_volty & rozsah_volty:
+                    raise serializers.ValidationError(
+                        f"Sekce {i_sekce + 1}: volty se v rámci sekce překrývají."
+                    )
+                obsazene_volty |= rozsah_volty
+
+                lezi_uvnitr_nebo_za = any(
+                    (volta["od_taktu"] >= rep["od_taktu"] and volta["do_taktu"] <= rep["do_taktu"])
+                    or volta["od_taktu"] == rep["do_taktu"] + 1
+                    for rep in sekce["repetice"]
+                )
+                if not lezi_uvnitr_nebo_za:
+                    raise serializers.ValidationError(
+                        f"Sekce {i_sekce + 1}: volta musí ležet uvnitř repetice, nebo hned za ní."
+                    )
         return attrs
 
 

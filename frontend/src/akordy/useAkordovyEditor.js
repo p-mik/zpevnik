@@ -241,6 +241,26 @@ export function useAkordovyEditor(verzeId) {
     }))
   }, [])
 
+  // --- volty (PC_zpevnik_akordy_ovladani.md bod 5) ---
+
+  const pridejVoltu = useCallback((sekceIdx, od_taktu, do_taktu, cislo) => {
+    setZapis((prev) => ({
+      ...prev,
+      sekce: prev.sekce.map((s, i) =>
+        i === sekceIdx ? { ...s, volty: [...(s.volty || []), { od_taktu, do_taktu, cislo }] } : s,
+      ),
+    }))
+  }, [])
+
+  const smazVoltu = useCallback((sekceIdx, voltaIdx) => {
+    setZapis((prev) => ({
+      ...prev,
+      sekce: prev.sekce.map((s, i) =>
+        i === sekceIdx ? { ...s, volty: (s.volty || []).filter((_, j) => j !== voltaIdx) } : s,
+      ),
+    }))
+  }, [])
+
   // --- ukládání ---
 
   const uloz = useCallback(async () => {
@@ -289,6 +309,8 @@ export function useAkordovyEditor(verzeId) {
     zmenTaktVyberu,
     pridejRepetici,
     smazRepetici,
+    pridejVoltu,
+    smazVoltu,
     uloz,
   }
 }

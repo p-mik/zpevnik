@@ -1,0 +1,18 @@
+.volta-popover {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: var(--border-w-lg) solid var(--app-ink);
+  background: var(--app-paper);
+  max-width: 20em;
+}
+
+.volta-popover .field-input {
+  width: 6em;
+}
+
+.volta-popover-akce {
+  display: flex;
+  gap: var(--space-3);
+}

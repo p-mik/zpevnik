@@ -82,6 +82,8 @@ export default function AkordovyEditorPage() {
         onDuplikujSekci={editor.duplikuj}
         onPridejRepetici={editor.pridejRepetici}
         onSmazRepetici={editor.smazRepetici}
+        onPridejVoltu={editor.pridejVoltu}
+        onSmazVoltu={editor.smazVoltu}
         onZmenTaktVyberu={editor.zmenTaktVyberu}
       />
 

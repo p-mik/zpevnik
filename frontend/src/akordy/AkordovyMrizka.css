@@ -162,6 +162,39 @@
   min-height: 1.3em;
 }
 
+/* Volta (PC_zpevnik_akordy_ovladani.md bod 5) — hranatá závorka NAD taktem,
+   jeden segment PER TAKT co volta pokrývá (sousední segmenty na sebe
+   vizuálně navazují a čtou se jako jedna souvislá závorka). Noha vlevo jen
+   na taktu, kde volta SKUTEČNĚ začíná (.akordy-volta-zacatek), vpravo jen
+   tam, kde skutečně končí A NENÍ to volta 1 (.akordy-volta-konec-uzavrena)
+   — volta 1 zůstává otevřená, spoléhá na sousední konec repetice, stejná
+   konvence jako v PDF (_kresli_voltu). Celý segment je tlačítko přes celou
+   šířku taktu — klikem kdekoliv na závorce se volta maže. */
+.akordy-volta-segment {
+  display: flex;
+  align-items: flex-start;
+  height: 1.2em;
+  margin-top: 2px;
+  border: none;
+  border-top: var(--border-w-lg) solid var(--app-ink);
+  background: transparent;
+  padding: 1px 0 0;
+  cursor: pointer;
+}
+.akordy-volta-zacatek {
+  border-left: var(--border-w-lg) solid var(--app-ink);
+}
+.akordy-volta-konec-uzavrena {
+  border-right: var(--border-w-lg) solid var(--app-ink);
+}
+.akordy-volta-cislo {
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1;
+  padding-left: 3px;
+}
+
 .akordy-takt-badge {
   font-family: var(--font-body);
   font-size: var(--text-xs);

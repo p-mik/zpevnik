@@ -1,11 +1,14 @@
 // Čistá logika akordového zápisu, schéma 2 (viz
-// PC_zpevnik_akordovy_zapis_upravy.md) — žádné React, žádné API, jen
-// transformace nad daty. Zrcadlí schéma, které ověřuje server
-// (AkordovyZapisSerializer): sekce[] -> radky[] -> takty[] -> bunky[].
-// `takty[].takt` je VOLITELNÝ přepis výchozího taktu dokumentu. `repetice`
-// žije na SEKCI a indexuje takty přes VŠECHNY její řádky (0-based,
-// `do_taktu` včetně) — repetice smí přes víc řádků JEDNÉ sekce, ne přes
-// sekce.
+// PC_zpevnik_akordovy_zapis_upravy.md a PC_zpevnik_akordy_ovladani.md) —
+// žádné React, žádné API, jen transformace nad daty. Zrcadlí schéma, které
+// ověřuje server (AkordovyZapisSerializer): sekce[] -> radky[] -> takty[]
+// -> bunky[]. `takty[].takt` je VOLITELNÝ přepis výchozího taktu
+// dokumentu. `repetice` i `volty` žijí na SEKCI a indexují takty přes
+// VŠECHNY její řádky (0-based, `do_taktu` včetně) — obě smí přes víc
+// řádků JEDNÉ sekce, ne přes sekce. Volta (jiný závěr při 1./2. průchodu
+// repeticí, PC_zpevnik_akordy_ovladani.md bod 5) musí ležet UVNITŘ nějaké
+// repetice, NEBO HNED ZA NÍ (viz zkontrolujVyberProVoltu, stejná kontrola
+// jako na serveru v serializers.AkordovyZapisSerializer.validate).
 
 export const PRAZDNY_ZAPIS = { schema: 2, takt: { dob: 4, hodnota: 4 }, tempo: null, sekce: [] }
 
@@ -41,14 +44,14 @@ export function novyRadek(dob) {
 }
 
 export function novaSekce(dob) {
-  return { nazev: '', radky: [novyRadek(dob)], repetice: [] }
+  return { nazev: '', radky: [novyRadek(dob)], repetice: [], volty: [] }
 }
 
 // Sekce jen s nadpisem, bez řádků (viz schéma — "Sloka 2 = Sloka 1" apod.,
 // obsah přijde přes repetici nebo se odkazuje jinak, nepotřebuje vlastní
 // takty). Jednu z variant "+ Přidat sekci" v AkordovyMrizka.
 export function novaSekceBezRadku() {
-  return { nazev: '', radky: [], repetice: [] }
+  return { nazev: '', radky: [], repetice: [], volty: [] }
 }
 
 // --- efektivní takt taktu v řádku (vlastní přepis, nebo výchozí) ---
@@ -88,9 +91,20 @@ export function pridejTaktDoRadku(radek, dobVychozi) {
   return { ...radek, takty: [...radek.takty, novyTakt(dobVychozi)] }
 }
 
-// Smazání taktu je operace NA SEKCI (ne jen na řádku) — repetice indexují
-// takty přes celou sekci, takže po smazání se musí posunout i repetice
-// odkazující na takty PO tom smazaném, napříč VŠEMI řádky sekce.
+// Sdílená logika pro repetice I volty: po smazání taktu na globálním
+// indexu `globalni` se úseky OBSAHUJÍCÍ ten takt zahodí, úseky PO něm
+// se posunou o 1 dolů, úseky PŘED ním zůstanou beze změny.
+function posunPoOdstraneniTaktu(useky, globalni) {
+  return useky
+    .filter((u) => u.do_taktu < globalni || u.od_taktu > globalni)
+    .map((u) =>
+      u.od_taktu > globalni ? { ...u, od_taktu: u.od_taktu - 1, do_taktu: u.do_taktu - 1 } : u,
+    )
+}
+
+// Smazání taktu je operace NA SEKCI (ne jen na řádku) — repetice i volty
+// indexují takty přes celou sekci, takže po smazání se musí posunout i
+// ony, když odkazují na takty PO tom smazaném, napříč VŠEMI řádky sekce.
 //
 // Smazání POSLEDNÍHO taktu řádku smaže i řádek — žádné samostatné
 // "Smazat řádek" tlačítko není potřeba. Smazání posledního taktu
@@ -117,14 +131,12 @@ export function odeberTaktZeSekce(sekce, radekIdx, taktIdx) {
     })
   }
 
-  const novaRepetice = sekce.repetice
-    .filter((rep) => rep.do_taktu < globalni || rep.od_taktu > globalni)
-    .map((rep) =>
-      rep.od_taktu > globalni
-        ? { ...rep, od_taktu: rep.od_taktu - 1, do_taktu: rep.do_taktu - 1 }
-        : rep,
-    )
-  return { ...sekce, radky: noveRadky, repetice: novaRepetice }
+  return {
+    ...sekce,
+    radky: noveRadky,
+    repetice: posunPoOdstraneniTaktu(sekce.repetice, globalni),
+    volty: posunPoOdstraneniTaktu(sekce.volty || [], globalni),
+  }
 }
 
 // --- globální (v rámci sekce) index taktu — pro repetice ---
@@ -137,6 +149,33 @@ export function globalniIndexTaktu(sekce, radekIdx, taktIdx) {
 
 export function pocetTaktuVSekci(sekce) {
   return sekce.radky.reduce((sum, r) => sum + r.takty.length, 0)
+}
+
+// Volty, které zasahují do řádku `radekIdx` sekce — s LOKÁLNÍMI (v rámci
+// řádku) indexy taktů a příznaky, jestli SKUTEČNÝ začátek/konec volty
+// padne zrovna do tohoto řádku (volta smí, stejně jako repetice, přes
+// víc řádků jedné sekce — viz modul docstring). Zrcadlí
+// zpevnik/akordy_pdf.py _volty_v_radku/_kresli_voltu (stejná logika,
+// jen tady navíc s indexem volty v `sekce.volty`, ať se dá kliknutím
+// smazat) — používá AkordovyMrizka pro vykreslení hranaté závorky.
+export function voltyVRadku(sekce, radekIdx) {
+  const od_g = globalniIndexTaktu(sekce, radekIdx, 0)
+  const do_g = od_g + sekce.radky[radekIdx].takty.length
+  const vysledek = []
+  ;(sekce.volty || []).forEach((volta, voltaIdx) => {
+    const segOd = Math.max(volta.od_taktu, od_g)
+    const segDo = Math.min(volta.do_taktu, do_g - 1)
+    if (segOd > segDo) return
+    vysledek.push({
+      voltaIdx,
+      volta,
+      odTaktLokalni: segOd - od_g,
+      doTaktLokalni: segDo - od_g,
+      kresliZacatek: volta.od_taktu >= od_g,
+      kresliKonec: volta.do_taktu < do_g,
+    })
+  })
+  return vysledek
 }
 
 // --- délka řádku v dobách (pro info hlášku pod editorem, zrcadlí PDF) ---
@@ -273,6 +312,43 @@ export function zkontrolujVyberProRepetici(zapis, vyber) {
   return { ok: true, sekceIdx, od_taktu, do_taktu }
 }
 
+// --- kontrola výběru + založení volty (PC_zpevnik_akordy_ovladani.md bod
+// 5) — stejný vzor jako zkontrolujVyberProRepetici, plus schémou vyžadovaná
+// vazba na repetici (musí ležet UVNITŘ nějaké repetice, NEBO HNED ZA NÍ,
+// bez mezery — viz serializers.VoltaSerializer/AkordovyZapisSerializer.validate,
+// tohle je ta samá kontrola na klientu, ať se chyba ukáže hned, ne až po
+// uložení) ---
+
+export function zkontrolujVyberProVoltu(zapis, vyber) {
+  if (vyber.length === 0) {
+    return { ok: false, hlaska: 'Nejdřív vyber aspoň jeden takt.' }
+  }
+  const sekceIdxy = new Set(vyber.map((p) => p.sekceIdx))
+  if (sekceIdxy.size > 1) {
+    return { ok: false, hlaska: 'Volta jen v rámci jedné sekce.' }
+  }
+  const sekceIdx = [...sekceIdxy][0]
+  const sekce = zapis.sekce[sekceIdx]
+  const takty = taktyVeVyberu(zapis, vyber)
+  const globalniIndexy = takty.map((t) => globalniIndexTaktu(sekce, t.radekIdx, t.taktIdx))
+  const od_taktu = Math.min(...globalniIndexy)
+  const do_taktu = Math.max(...globalniIndexy)
+
+  const prekryv = (sekce.volty || []).some((v) => od_taktu <= v.do_taktu && do_taktu >= v.od_taktu)
+  if (prekryv) {
+    return { ok: false, hlaska: 'Tenhle úsek se překrývá s existující voltou.' }
+  }
+
+  const lezi = sekce.repetice.some(
+    (r) => (od_taktu >= r.od_taktu && do_taktu <= r.do_taktu) || od_taktu === r.do_taktu + 1,
+  )
+  if (!lezi) {
+    return { ok: false, hlaska: 'Volta musí ležet uvnitř repetice, nebo hned za ní.' }
+  }
+
+  return { ok: true, sekceIdx, od_taktu, do_taktu }
+}
+
 // --- kontrola + aplikace tlačítka "Změnit takt" (bez omezení na 1 sekci —
 // jde jen o přepsání/zrušení taktu vybraných barů, počet barů se neměnní,
 // takže repetice zůstávají v pořádku beze změny) ---
@@ -317,56 +393,71 @@ export function duplikujSekci(vsechnySekce, sekceIdx) {
 
 // --- rozdělení / spojení sekcí (viz zadání bod 3) ---
 
+// Rozdělí SEZNAM úseků (repetice NEBO volty — stejný tvar {od_taktu,
+// do_taktu, ...}) na "horní" (celé před hranicí) a "dolní" (celé za ní,
+// s indexy posunutými o hraniceTaktu) — sdílené mezi repetice a volty
+// v rozdelSekciOdRadku/spojSeSPredchozi níž.
+function rozdelUsekyOdHranice(useky, hraniceTaktu) {
+  const horni = useky.filter((u) => u.do_taktu < hraniceTaktu)
+  const dolni = useky
+    .filter((u) => u.od_taktu >= hraniceTaktu)
+    .map((u) => ({ ...u, od_taktu: u.od_taktu - hraniceTaktu, do_taktu: u.do_taktu - hraniceTaktu }))
+  return { horni, dolni }
+}
+
 // Rozdělí sekci na dvě OD `radekIdx` (musí být >0 — první řádek sekce se
 // dělit nedá, tam by vznikla prázdná horní část). Horní si nechá řádky
-// [0..radekIdx-1] a repetice, které leží CELÉ v ní; dolní dostane řádky
-// [radekIdx..] a repetice, které leží CELÉ v ní, s indexy posunutými o
-// počet taktů horní části (repetice indexují takty relativně k VLASTNÍ
-// sekci, viz modul docstring). Repetice PŘES hranici dělení (začíná
-// nahoře, končí dole) rozdělení jako celek odmítne — vrátí `{ok:false}`
-// místo aby ji tiše osekala nebo přesunula.
+// [0..radekIdx-1] a repetice/volty, které leží CELÉ v ní; dolní dostane
+// řádky [radekIdx..] a repetice/volty, které leží CELÉ v ní, s indexy
+// posunutými o počet taktů horní části (repetice/volty indexují takty
+// relativně k VLASTNÍ sekci, viz modul docstring). Repetice NEBO volta
+// PŘES hranici dělení (začíná nahoře, končí dole) rozdělení jako celek
+// odmítne — vrátí `{ok:false}` místo aby ji tiše osekala nebo přesunula.
 export function rozdelSekciOdRadku(sekce, radekIdx) {
   const hraniceTaktu = sekce.radky
     .slice(0, radekIdx)
     .reduce((sum, r) => sum + r.takty.length, 0)
 
-  const pretina = sekce.repetice.some(
+  const volty = sekce.volty || []
+  const pretinaRepetici = sekce.repetice.some(
     (r) => r.od_taktu < hraniceTaktu && r.do_taktu >= hraniceTaktu,
   )
-  if (pretina) {
-    return { ok: false, hlaska: 'Tady je repetice přes více řádků, nejdřív ji zruš.' }
+  const pretinaVoltu = volty.some((v) => v.od_taktu < hraniceTaktu && v.do_taktu >= hraniceTaktu)
+  if (pretinaRepetici || pretinaVoltu) {
+    return { ok: false, hlaska: 'Tady je repetice nebo volta přes více řádků, nejdřív ji zruš.' }
   }
 
-  const horniRepetice = sekce.repetice.filter((r) => r.do_taktu < hraniceTaktu)
-  const dolniRepetice = sekce.repetice
-    .filter((r) => r.od_taktu >= hraniceTaktu)
-    .map((r) => ({
-      ...r,
-      od_taktu: r.od_taktu - hraniceTaktu,
-      do_taktu: r.do_taktu - hraniceTaktu,
-    }))
+  const { horni: horniRepetice, dolni: dolniRepetice } = rozdelUsekyOdHranice(sekce.repetice, hraniceTaktu)
+  const { horni: horniVolty, dolni: dolniVolty } = rozdelUsekyOdHranice(volty, hraniceTaktu)
 
-  const puvodni = { ...sekce, radky: sekce.radky.slice(0, radekIdx), repetice: horniRepetice }
-  const nova = { nazev: '', radky: sekce.radky.slice(radekIdx), repetice: dolniRepetice }
+  const puvodni = {
+    ...sekce,
+    radky: sekce.radky.slice(0, radekIdx),
+    repetice: horniRepetice,
+    volty: horniVolty,
+  }
+  const nova = {
+    nazev: '',
+    radky: sekce.radky.slice(radekIdx),
+    repetice: dolniRepetice,
+    volty: dolniVolty,
+  }
   return { ok: true, puvodni, nova }
 }
 
 // Spojí `aktualni` sekci S PŘEDCHOZÍ (`predchozi`) do jedné — opak
 // `rozdelSekciOdRadku`. Název: vyhrává `predchozi` (název `aktualni` se
-// zahodí, viz zadání). Repetice `aktualni` se přeindexují o počet taktů
-// `predchozi` (v součtu jsou teď až ZA nimi), repetice `predchozi`
-// zůstávají beze změny (jsou pořád na začátku).
+// zahodí, viz zadání). Repetice i volty `aktualni` se přeindexují o počet
+// taktů `predchozi` (v součtu jsou teď až ZA nimi), repetice/volty
+// `predchozi` zůstávají beze změny (jsou pořád na začátku).
 export function spojSeSPredchozi(predchozi, aktualni) {
   const posun = pocetTaktuVSekci(predchozi)
-  const posunutaRepetice = aktualni.repetice.map((r) => ({
-    ...r,
-    od_taktu: r.od_taktu + posun,
-    do_taktu: r.do_taktu + posun,
-  }))
+  const posunUseku = (u) => ({ ...u, od_taktu: u.od_taktu + posun, do_taktu: u.do_taktu + posun })
   return {
     nazev: predchozi.nazev,
     radky: [...predchozi.radky, ...aktualni.radky],
-    repetice: [...predchozi.repetice, ...posunutaRepetice],
+    repetice: [...predchozi.repetice, ...aktualni.repetice.map(posunUseku)],
+    volty: [...(predchozi.volty || []), ...(aktualni.volty || []).map(posunUseku)],
   }
 }
 
@@ -378,21 +469,24 @@ export function spojSeSPredchozi(predchozi, aktualni) {
 // přesunou do NOVÉHO řádku vloženého hned za `radekIdx`, UVNITŘ STEJNÉ
 // sekce — pořadí (a tedy globální indexy, viz `globalniIndexTaktu`)
 // taktů v sekci se tím vůbec nemění, jen se mezi ně vloží zalomení
-// řádku, takže na rozdíl od `rozdelSekciOdRadku` repetice nepotřebují
-// přepočet indexů. Přesto: repetice přes hranici zalomení (začíná před
-// `taktIdx`, končí na něm nebo za ním) rozdělení odmítne stejnou
-// hláškou jako `rozdelSekciOdRadku` — i když by šla geometricky
-// zobrazit (repetice smí přes víc řádků JEDNÉ sekce), řádkový split ji
-// úmyslně nepodporuje (zadání to výslovně chce takhle).
+// řádku, takže na rozdíl od `rozdelSekciOdRadku` repetice/volty
+// nepotřebují přepočet indexů. Přesto: repetice NEBO volta přes hranici
+// zalomení (začíná před `taktIdx`, končí na něm nebo za ním) rozdělení
+// odmítne stejnou hláškou jako `rozdelSekciOdRadku` — i když by šla
+// geometricky zobrazit (obě smí přes víc řádků JEDNÉ sekce), řádkový
+// split je úmyslně nepodporuje (zadání to výslovně chce takhle).
 export function rozdelRadekOdTaktu(sekce, radekIdx, taktIdx) {
   const radek = sekce.radky[radekIdx]
   const hraniceTaktu = globalniIndexTaktu(sekce, radekIdx, taktIdx)
 
-  const pretina = sekce.repetice.some(
+  const pretinaRepetici = sekce.repetice.some(
     (r) => r.od_taktu < hraniceTaktu && r.do_taktu >= hraniceTaktu,
   )
-  if (pretina) {
-    return { ok: false, hlaska: 'Tady je repetice přes více řádků, nejdřív ji zruš.' }
+  const pretinaVoltu = (sekce.volty || []).some(
+    (v) => v.od_taktu < hraniceTaktu && v.do_taktu >= hraniceTaktu,
+  )
+  if (pretinaRepetici || pretinaVoltu) {
+    return { ok: false, hlaska: 'Tady je repetice nebo volta přes více řádků, nejdřív ji zruš.' }
   }
 
   const noveRadky = [...sekce.radky]

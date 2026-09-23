@@ -96,6 +96,16 @@ VELIKOST_SEKCE = 11
 VELIKOST_AKORDU = 17.5
 VELIKOST_REPETICE_N = 16
 VELIKOST_BADGE_TAKTU = 7
+VELIKOST_VOLTA_CISLO = 8
+
+# --- volta (bod 5 PC_zpevnik_akordy_ovladani.md) — hranatá závorka nad
+# takty, kreslená ve STEJNÉ rezervované mezeře nad řádkem jako badge
+# vlastního taktu (MEZERA_PRO_BADGE — "zvětši mezeru jako u označení
+# vlastního taktu", viz zadání), jen v jejím HORNÍM pásmu, ať se
+# nepotkává s badge textem (ten sedí blíž k y_radku, BADGE_NAD_RADKEM_OFFSET) ---
+VOLTA_CARA_NAD_RADKEM_OFFSET = 9  # vodorovná čára závorky nad y_radku
+VYSKA_VOLTA_NOHY = 6  # délka svislé "nohy" na koncích závorky
+TLOUSTKA_VOLTY = 1.2
 # "Žádná spodní hranice velikosti písma" — tohle NENÍ čitelnostní minimum,
 # jen technická pojistka proti nulové/záporné velikosti.
 TECHNICKY_MIN_VELIKOST = 1
@@ -312,19 +322,46 @@ def _ma_badge(radek):
     return any(t.get("takt") for t in radek["takty"])
 
 
+def _volty_v_radku(sekce, od_g, do_g):
+    """Volty sekce, které ZASAHUJÍ do rozsahu taktů [od_g, do_g) tohoto
+    řádku — může jich být v jednom řádku i víc. Stejný způsob ořezání
+    jako u repetice ve vygeneruj_pdf (seg_od/seg_do), jen tady stačí
+    vědět JESTLI řádek zasahují, ne přesný rozsah (ten si spočte
+    volající, co barvu/x-pozice skutečně kreslí)."""
+    vysledek = []
+    for volta in sekce.get("volty", []):
+        seg_od = max(volta["od_taktu"], od_g)
+        seg_do = min(volta["do_taktu"], do_g - 1)
+        if seg_od <= seg_do:
+            vysledek.append(volta)
+    return vysledek
+
+
+def _ma_navic_nad_radkem(polozka):
+    """Potřebuje řádek REZERVOVANOU MEZERU navíc nad sebou (MEZERA_PRO_BADGE) —
+    buď kvůli badge vlastního taktu, nebo kvůli hranaté závorce volty
+    (zadání: "nad řádky s voltou zvětši mezeru, jako u označení
+    vlastního taktu" — VĚDOMĚ stejný mechanismus, ne dva samostatné)."""
+    if polozka["typ"] != "radek":
+        return False
+    radek = polozka["radek"]
+    return _ma_badge(radek) or bool(_volty_v_radku(polozka["sekce"], polozka["od_g"], polozka["do_g"]))
+
+
 def _vyska_obsahu_stranky(polozky_stranky, scale):
-    """Součet výšek všech položek (+ mezer mezi nimi + rezervy pro badge)
-    stránky PŘI daném `scale` — pro rozhodnutí, jestli se `polozky_stranky`
-    ještě vejdou na výšku. Položka typu "nadpis" (sekce bez řádků, viz
-    _radky_s_metadaty) nemá badge a bere stejnou výšku jako běžný řádek —
-    jen se do ní nekreslí mřížka, viz vygeneruj_pdf."""
+    """Součet výšek všech položek (+ mezer mezi nimi + rezervy pro badge/
+    voltu) stránky PŘI daném `scale` — pro rozhodnutí, jestli se
+    `polozky_stranky` ještě vejdou na výšku. Položka typu "nadpis"
+    (sekce bez řádků, viz _radky_s_metadaty) nemá badge/voltu a bere
+    stejnou výšku jako běžný řádek — jen se do ní nekreslí mřížka, viz
+    vygeneruj_pdf."""
     vyska_radku = VYSKA_RADKU * scale
     mezera_stejna_sekce = MEZERA_RADKU_STEJNA_SEKCE * scale
     mezera_mezi_sekcemi = MEZERA_MEZI_SEKCEMI * scale
     mezera_pro_badge = MEZERA_PRO_BADGE * scale
     celkem = 0.0
     for polozka in polozky_stranky:
-        if polozka["typ"] == "radek" and _ma_badge(polozka["radek"]):
+        if _ma_navic_nad_radkem(polozka):
             celkem += mezera_pro_badge
         celkem += vyska_radku
         celkem += (
@@ -445,6 +482,7 @@ def vygeneruj_pdf(pisen, akordy):
     velikost_sekce = max(VELIKOST_SEKCE * scale, TECHNICKY_MIN_VELIKOST)
     velikost_repetice_n = max(VELIKOST_REPETICE_N * scale, TECHNICKY_MIN_VELIKOST)
     velikost_badge = max(VELIKOST_BADGE_TAKTU * scale, TECHNICKY_MIN_VELIKOST)
+    velikost_volta_cislo = max(VELIKOST_VOLTA_CISLO * scale, TECHNICKY_MIN_VELIKOST)
     vyska_radku = VYSKA_RADKU * scale
     mezera_stejna_sekce = MEZERA_RADKU_STEJNA_SEKCE * scale
     mezera_mezi_sekcemi = MEZERA_MEZI_SEKCEMI * scale
@@ -452,6 +490,8 @@ def vygeneruj_pdf(pisen, akordy):
     chord_offset = CHORD_BASELINE_OFFSET * scale
     sekce_offset = SEKCE_BASELINE_OFFSET * scale
     badge_nad_radkem = BADGE_NAD_RADKEM_OFFSET * scale
+    volta_cara_offset = VOLTA_CARA_NAD_RADKEM_OFFSET * scale
+    volta_noha = VYSKA_VOLTA_NOHY * scale
     sirky_pozic = _sirky_pozic(radky_dokumentu, sirka_doby_zakladni, velikost_akordu)
     mezery_vlevo, mezery_vpravo = _mezery_znacek_repetice(polozky_radek, velikost_repetice_n)
     sirky_pozic = _rozsir_sirky_pro_znacky(sirky_pozic, mezery_vlevo, mezery_vpravo)
@@ -488,8 +528,9 @@ def vygeneruj_pdf(pisen, akordy):
 
             radek = polozka["radek"]
             od_g, do_g = polozka["od_g"], polozka["do_g"]
+            volty_radku = _volty_v_radku(sekce, od_g, do_g)
 
-            navic_pred_radkem = mezera_pro_badge if _ma_badge(radek) else 0
+            navic_pred_radkem = mezera_pro_badge if (_ma_badge(radek) or volty_radku) else 0
             y -= navic_pred_radkem
             y_radku = y
 
@@ -595,6 +636,59 @@ def vygeneruj_pdf(pisen, akordy):
                     mezera_konce=mezera_konce,
                 )
 
+            # --- volty, které zasahují do TOHOTO řádku ---
+            for volta in volty_radku:
+                seg_od = max(volta["od_taktu"], od_g)
+                seg_do = min(volta["do_taktu"], do_g - 1)
+                volta_od_v_radku = seg_od - od_g
+                volta_do_v_radku = seg_do - od_g
+                # Volta smí (stejně jako repetice) přes víc řádků JEDNÉ
+                # sekce — kresli_zacatek/kresli_konec (stejný vzor jako u
+                # _kresli_repetici) řeší, jestli SKUTEČNÝ začátek/konec
+                # volty padne zrovna do TOHOTO řádku, nebo jestli je to
+                # jen pokračování/předěl přes zalomení řádku (tam se noha
+                # závorky nekreslí, jen vodorovná čára pokračuje dál).
+                kresli_zacatek = volta["od_taktu"] >= od_g
+                kresli_konec = volta["do_taktu"] < do_g
+                # Volta se může na svém začátku/konci potkat se sdílenou
+                # pozicí, co má REZERVU pro značku repetice (viz
+                # _mezery_znacek_repetice) — když volta končí přesně tam,
+                # kde končí i repetice (běžný případ, viz zadání), musí
+                # závorka skončit PŘED rezervou pro '×N', ne za ní (jinak
+                # by vyjela až za konec repetice/přes okraj stránky).
+                # Platí to jen tam, kde se skutečně kreslí odpovídající
+                # konec — na pokračovací řádek by se rezerva odjinud
+                # nesouvisejícím způsobem promítla do vodorovné čáry.
+                posun_zacatku = 0.0
+                if kresli_zacatek:
+                    p_zacatek_volty = _pozice_zacatku_taktu(radek, volta_od_v_radku)
+                    posun_zacatku = mezery_vlevo.get(p_zacatek_volty, 0.0)
+                posun_konce = 0.0
+                if kresli_konec:
+                    p_konec_volty = (
+                        _pozice_zacatku_taktu(radek, volta_do_v_radku)
+                        + len(radek["takty"][volta_do_v_radku]["bunky"])
+                        - 1
+                    )
+                    posun_konce = mezery_vpravo.get(p_konec_volty, 0.0)
+                _kresli_voltu(
+                    c,
+                    x0=x0,
+                    y_radku=y_radku,
+                    sirky_pozic=sirky_pozic,
+                    radek=radek,
+                    od_v_radku=volta_od_v_radku,
+                    do_v_radku=volta_do_v_radku,
+                    kresli_zacatek=kresli_zacatek,
+                    kresli_konec=kresli_konec,
+                    posun_zacatku=posun_zacatku,
+                    posun_konce=posun_konce,
+                    cislo=volta["cislo"],
+                    velikost_cisla=velikost_volta_cislo,
+                    volta_cara_offset=volta_cara_offset,
+                    volta_noha=volta_noha,
+                )
+
             y -= vyska_radku + (
                 mezera_stejna_sekce if not polozka["je_posledni_v_sekci"] else mezera_mezi_sekcemi
             )
@@ -665,3 +759,59 @@ def _kresli_repetici(
         c.circle(x_konec - 4.5, y_tecka_dolni, 1.6, stroke=0, fill=1)
         c.setFont(FONT_POPISEK_TUCNE, velikost_repetice_n)
         c.drawString(x_konec + ODSTUP_ZNACKY_KONCE_OD_CARY, y_radku - chord_offset, f"×{krat}")
+
+
+def _kresli_voltu(
+    c,
+    x0,
+    y_radku,
+    sirky_pozic,
+    radek,
+    od_v_radku,
+    do_v_radku,
+    kresli_zacatek,
+    kresli_konec,
+    posun_zacatku,
+    posun_konce,
+    cislo,
+    velikost_cisla,
+    volta_cara_offset,
+    volta_noha,
+):
+    """Hranatá závorka nad takty volty — vodorovná čára v rezervované
+    mezeře nad řádkem (viz _ma_navic_nad_radkem), svislá "noha" VLEVO
+    jen když SKUTEČNÝ začátek volty padne do tohoto řádku, VPRAVO jen
+    tehdy A NAVÍC jen když volta NENÍ číslo 1. Zadání: "otevřená vpravo
+    u volty 1, zavřená u poslední" — u dvojice prima/secunda je "volta
+    1" a "poslední volta" vždycky přesně tahle dvě čísla (1 a 2), takže
+    pravidlo zobecňujeme na STANDARDNÍ notační konvenci pro 3./4. konec:
+    číslo 1 je vždycky otevřené (spoléhá na sousední konec repetice),
+    KAŽDÉ DALŠÍ číslo (2, 3, 4) je uzavřené ze všech stran — ne jen to
+    nejvyšší. Rozsah je už OŘÍZNUTÝ na tenhle řádek (viz volající) —
+    `kresli_zacatek`/`kresli_konec` (stejný vzor jako _kresli_repetici)
+    řeší volty PŘES VÍC ŘÁDKŮ jedné sekce (schéma to dovoluje stejně
+    jako u repetice): na řádku, kde volta jen POKRAČUJE (nezačíná ani
+    nekončí tam), se kreslí jen vodorovná čára, bez nohy a bez čísla.
+
+    `posun_zacatku`/`posun_konce` (viz volající, jen když se odpovídající
+    konec skutečně kreslí) odsunou závorku DOVNITŘ, když se potká se
+    sdílenou pozicí, co má rezervu pro značku repetice
+    (_mezery_znacek_repetice) — jinak by závorka končila/začínala AŽ ZA
+    touhle rezervou, ne na hranici taktu."""
+    x_zacatek = x0 + _x_pozice_taktu(radek, sirky_pozic, od_v_radku) + posun_zacatku
+    x_konec = x0 + _x_pozice_taktu(radek, sirky_pozic, do_v_radku + 1) - posun_konce
+    y_cara = y_radku + volta_cara_offset
+    y_noha_dolu = y_cara - volta_noha
+
+    c.setStrokeColorRGB(*BARVA_CERNA)
+    c.setLineWidth(TLOUSTKA_VOLTY)
+    if kresli_zacatek:
+        c.line(x_zacatek, y_noha_dolu, x_zacatek, y_cara)
+    c.line(x_zacatek, y_cara, x_konec, y_cara)
+    if kresli_konec and cislo != 1:
+        c.line(x_konec, y_noha_dolu, x_konec, y_cara)
+
+    if kresli_zacatek:
+        c.setFont(FONT_POPISEK_TUCNE, velikost_cisla)
+        c.setFillColorRGB(*BARVA_CERNA)
+        c.drawString(x_zacatek + 2, y_cara + 1, f"{cislo}.")
