@@ -284,6 +284,23 @@ export function zpusobiZtratuZmenaVyberu(zapis, vyber, novyDob) {
   })
 }
 
+// --- přesun sekcí (PC_zpevnik_akordy_ovladani.md bod 2) ---
+
+// Posune sekci na indexu `sekceIdx` o jednu pozici (`smer` -1 nahoru,
+// +1 dolů) — prosté prohození dvou položek pole. Repetice (a volty)
+// se NEPŘEPOČÍTÁVAJÍ: indexují takty v RÁMCI SEKCE, ne napříč sekcemi
+// (viz modul docstring), takže přesun celé sekce s sebou nic netahá.
+// Mimo rozsah (první sekce nahoru, poslední dolů) vrátí pole beze
+// změny — volající (AkordovyMrizka) tlačítko pro tenhle směr ani
+// nezobrazí, tohle je jen pojistka.
+export function posunSekciVPoli(vsechnySekce, sekceIdx, smer) {
+  const cil = sekceIdx + smer
+  if (cil < 0 || cil >= vsechnySekce.length) return vsechnySekce
+  const nove = [...vsechnySekce]
+  ;[nove[sekceIdx], nove[cil]] = [nove[cil], nove[sekceIdx]]
+  return nove
+}
+
 // --- rozdělení / spojení sekcí (viz zadání bod 3) ---
 
 // Rozdělí sekci na dvě OD `radekIdx` (musí být >0 — první řádek sekce se

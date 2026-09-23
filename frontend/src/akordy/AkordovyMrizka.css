@@ -45,6 +45,22 @@
   flex-shrink: 0;
 }
 
+/* Přesun sekce (PC_zpevnik_akordy_ovladani.md bod 2) — dvě malé šipky nad
+   sebou, ne vedle textu, ať je jasné, že jde o jednu skupinu akcí. */
+.akordy-sekce-presun {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex-shrink: 0;
+}
+
+.akordy-sekce-sipka {
+  font-size: var(--text-xs);
+  padding: 0 var(--space-2);
+  min-height: auto;
+  line-height: 1.6;
+}
+
 .akordy-sekce-smazat {
   font-size: var(--text-xs);
   padding: var(--space-2) var(--space-3);

@@ -58,6 +58,7 @@ export default function AkordovyMrizka({
   onPridejSekciBezRadku,
   onRozdelSekci,
   onSpojSePredchozi,
+  onPosunSekci,
   onPridejRepetici,
   onSmazRepetici,
   onZmenTaktVyberu,
@@ -378,6 +379,30 @@ export default function AkordovyMrizka({
         {zapis.sekce.map((sekce, sekceIdx) => (
           <div key={sekceIdx} className="akordy-sekce-blok">
             <div className="akordy-sekce-hlavicka">
+              <div className="akordy-sekce-presun">
+                {sekceIdx > 0 && (
+                  <button
+                    type="button"
+                    className="btn akordy-sekce-sipka"
+                    onClick={() => onPosunSekci(sekceIdx, -1)}
+                    aria-label="Posunout sekci nahoru"
+                    title="Posunout sekci nahoru"
+                  >
+                    ↑
+                  </button>
+                )}
+                {sekceIdx < zapis.sekce.length - 1 && (
+                  <button
+                    type="button"
+                    className="btn akordy-sekce-sipka"
+                    onClick={() => onPosunSekci(sekceIdx, 1)}
+                    aria-label="Posunout sekci dolů"
+                    title="Posunout sekci dolů"
+                  >
+                    ↓
+                  </button>
+                )}
+              </div>
               <input
                 ref={(el) => {
                   if (el) nazvySekciRef.current.set(sekceIdx, el)

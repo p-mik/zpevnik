@@ -1,11 +1,51 @@
 import { describe, expect, test } from 'vitest'
-import { odeberTaktZeSekce, rozdelRadekOdTaktu, rozdelSekciOdRadku, spojSeSPredchozi } from './akordovyModel'
+import {
+  odeberTaktZeSekce,
+  posunSekciVPoli,
+  rozdelRadekOdTaktu,
+  rozdelSekciOdRadku,
+  spojSeSPredchozi,
+} from './akordovyModel'
 
 // Pomocník: řádek se `n` takty výchozího taktu (obsah buněk je pro tyhle
 // testy lhostejný, jen počet taktů se počítá).
 function radek(n) {
   return { takty: Array.from({ length: n }, () => ({ bunky: [''] })) }
 }
+
+describe('posunSekciVPoli', () => {
+  test('prohodí sekci s tou o jednu pozici nahoru (smer -1)', () => {
+    const sekce = [{ nazev: 'A' }, { nazev: 'B' }, { nazev: 'C' }]
+    const vysledek = posunSekciVPoli(sekce, 1, -1)
+    expect(vysledek.map((s) => s.nazev)).toEqual(['B', 'A', 'C'])
+  })
+
+  test('prohodí sekci s tou o jednu pozici dolů (smer +1)', () => {
+    const sekce = [{ nazev: 'A' }, { nazev: 'B' }, { nazev: 'C' }]
+    const vysledek = posunSekciVPoli(sekce, 1, 1)
+    expect(vysledek.map((s) => s.nazev)).toEqual(['A', 'C', 'B'])
+  })
+
+  test('mimo rozsah (první sekce nahoru) vrátí pole beze změny', () => {
+    const sekce = [{ nazev: 'A' }, { nazev: 'B' }]
+    const vysledek = posunSekciVPoli(sekce, 0, -1)
+    expect(vysledek).toBe(sekce)
+  })
+
+  test('mimo rozsah (poslední sekce dolů) vrátí pole beze změny', () => {
+    const sekce = [{ nazev: 'A' }, { nazev: 'B' }]
+    const vysledek = posunSekciVPoli(sekce, 1, 1)
+    expect(vysledek).toBe(sekce)
+  })
+
+  test('repetice sekce se přesunou spolu s ní, beze změny indexů', () => {
+    const a = { nazev: 'A', repetice: [{ od_taktu: 0, do_taktu: 1, krat: 2 }] }
+    const b = { nazev: 'B', repetice: [] }
+    const vysledek = posunSekciVPoli([a, b], 0, 1)
+    expect(vysledek).toEqual([b, a])
+    expect(vysledek[1].repetice).toEqual([{ od_taktu: 0, do_taktu: 1, krat: 2 }])
+  })
+})
 
 describe('rozdelSekciOdRadku', () => {
   test('rozdělí řádky na horní a dolní část přesně podle radekIdx', () => {

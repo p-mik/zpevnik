@@ -10,6 +10,7 @@ import {
   novyRadek,
   novyTakt,
   odeberTaktZeSekce,
+  posunSekciVPoli,
   pridejTaktDoRadku,
   rozdelRadekOdTaktu,
   rozdelSekciOdRadku,
@@ -119,6 +120,10 @@ export function useAkordovyEditor(verzeId) {
       noveSekce.splice(sekceIdx - 1, 2, spojena)
       return { ...prev, sekce: noveSekce }
     })
+  }, [])
+
+  const posunSekci = useCallback((sekceIdx, smer) => {
+    setZapis((prev) => ({ ...prev, sekce: posunSekciVPoli(prev.sekce, sekceIdx, smer) }))
   }, [])
 
   // --- řádky ---
@@ -257,6 +262,7 @@ export function useAkordovyEditor(verzeId) {
     nastavNazevSekce,
     rozdelSekci,
     spojSePredchozi,
+    posunSekci,
     vlozRadekPo,
     rozdelRadek,
     pridejTakt,
