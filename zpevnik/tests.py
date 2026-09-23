@@ -1492,6 +1492,94 @@ class AkordyPdfMrizkaTests(TestCase):
         self.assertEqual(hranice_dlouhy, hranice_kratky)
         self.assertGreater(hranice_dlouhy, 4 * 40)
 
+    def test_mezery_znacek_repetice_zacatek_a_konec_mid_radku(self):
+        from zpevnik.akordy_pdf import (
+            SIRKA_ZNACKY_ZACATEK_REPETICE,
+            VELIKOST_REPETICE_N,
+            _mezery_znacek_repetice,
+            _radky_s_metadaty,
+            _zaregistruj_fonty,
+        )
+
+        _zaregistruj_fonty()
+        sekce = [
+            {
+                "nazev": "S",
+                "radky": [{"takty": [{"bunky": ["A"]}, {"bunky": ["B"]}, {"bunky": ["C"]}, {"bunky": ["D"]}]}],
+                # repetice na taktech 1-2 (0-based) - ZAČÍNÁ i KONČÍ
+                # uprostřed řádku (ne na taktu 0, ne na posledním taktu 3).
+                "repetice": [{"od_taktu": 1, "do_taktu": 2, "krat": 2}],
+            }
+        ]
+        polozky = _radky_s_metadaty(sekce)
+        vlevo, vpravo = _mezery_znacek_repetice(polozky, VELIKOST_REPETICE_N)
+
+        self.assertEqual(vlevo, {1: SIRKA_ZNACKY_ZACATEK_REPETICE})
+        self.assertEqual(set(vpravo.keys()), {2})
+        self.assertGreater(vpravo[2], 0)
+
+    def test_znacka_konce_repetice_uprostred_radku_nezasahuje_do_dalsiho_taktu(self):
+        # Regrese k bodu 1 PC_zpevnik_akordy_ovladani.md: ':|' + '×N' na
+        # konci repetice uprostřed řádku nesmí přepsat akord následujícího
+        # taktu (viz "Don't Bring Me Down", refrén: ×2 na G). Dva řádky -
+        # jeden s repeticí končící uprostřed (takt index 1 ze 4), druhý bez
+        # repetice - taktové čáry musí vyjít stejně (sdílená mřížka), a
+        # '×N' text se musí vejít do rezervovaného místa PŘED další takt.
+        from reportlab.pdfbase import pdfmetrics
+
+        from zpevnik.akordy_pdf import (
+            FONT_POPISEK_TUCNE,
+            ODSTUP_ZA_ZNACKOU_KONCE,
+            ODSTUP_ZNACKY_KONCE_OD_CARY,
+            VELIKOST_REPETICE_N,
+            _mezery_znacek_repetice,
+            _radky_s_metadaty,
+            _rozsir_sirky_pro_znacky,
+            _sirky_pozic,
+            _x_pozice_taktu,
+            _zaregistruj_fonty,
+        )
+
+        _zaregistruj_fonty()
+        sekce = [
+            {
+                "nazev": "S repeticí",
+                "radky": [{"takty": [{"bunky": ["A"]}, {"bunky": ["B"]}, {"bunky": ["C"]}, {"bunky": ["D"]}]}],
+                "repetice": [{"od_taktu": 0, "do_taktu": 1, "krat": 2}],
+            },
+            {
+                "nazev": "Bez repetice",
+                "radky": [{"takty": [{"bunky": ["E"]}, {"bunky": ["F"]}, {"bunky": ["G"]}, {"bunky": ["H"]}]}],
+                "repetice": [],
+            },
+        ]
+        polozky = _radky_s_metadaty(sekce)
+        radek_s_rep, radek_bez_rep = polozky[0]["radek"], polozky[1]["radek"]
+        radky = [p["radek"] for p in polozky]
+
+        sirka_doby_zakladni, velikost_akordu = 40, 17.5
+        sirky = _sirky_pozic(radky, sirka_doby_zakladni, velikost_akordu)
+        vlevo, vpravo = _mezery_znacek_repetice(polozky, VELIKOST_REPETICE_N)
+        sirky = _rozsir_sirky_pro_znacky(sirky, vlevo, vpravo)
+
+        # Taktové čáry PO taktu 1 (hranice před taktem 2) ve stejné
+        # svislici pro OBA řádky, přestože jen jeden má repetici na
+        # týhle pozici - to je celý smysl sdílené mřížky pozic.
+        hranice_s_rep = _x_pozice_taktu(radek_s_rep, sirky, 2)
+        hranice_bez_rep = _x_pozice_taktu(radek_bez_rep, sirky, 2)
+        self.assertEqual(hranice_s_rep, hranice_bez_rep)
+        # a je znatelně širší než bez rezervy (jinak by test neověřoval nic).
+        self.assertGreater(hranice_s_rep, 2 * sirka_doby_zakladni)
+
+        # '×2' text (stejná logika jako _kresli_repetici) musí SKONČIT
+        # PŘED touhle hranicí, s odstupem ODSTUP_ZA_ZNACKOU_KONCE - žádný
+        # překryv s akordem taktu 2 ('C').
+        mezera_konce = vpravo[1]
+        x_konec_znacky = hranice_s_rep - mezera_konce
+        sirka_textu = pdfmetrics.stringWidth("×2", FONT_POPISEK_TUCNE, VELIKOST_REPETICE_N)
+        konec_textu = x_konec_znacky + ODSTUP_ZNACKY_KONCE_OD_CARY + sirka_textu
+        self.assertLessEqual(konec_textu, hranice_s_rep - ODSTUP_ZA_ZNACKOU_KONCE + 0.01)
+
     def test_rozvrhni_stranky_jednoducha_pisen_zustane_na_jedne_strance(self):
         from zpevnik.akordy_pdf import (
             OKRAJ,
@@ -1510,9 +1598,8 @@ class AkordyPdfMrizkaTests(TestCase):
             }
         ]
         polozky = _radky_s_metadaty(sekce)
-        radky = [p["radek"] for p in polozky]
         sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
-        scale = _najdi_scale(radky, sirka_obsahu, 4)
+        scale = _najdi_scale(polozky, sirka_obsahu, 4)
         self.assertAlmostEqual(scale, 1.0, places=2)
         stranky = _rozvrhni_stranky(polozky, scale)
         self.assertEqual(len(stranky), 1)
@@ -1540,9 +1627,8 @@ class AkordyPdfMrizkaTests(TestCase):
             }
         ]
         polozky = _radky_s_metadaty(sekce)
-        radky = [p["radek"] for p in polozky]
         sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
-        scale = _najdi_scale(radky, sirka_obsahu, 4)
+        scale = _najdi_scale(polozky, sirka_obsahu, 4)
 
         stranky = _rozvrhni_stranky(polozky, scale)
         self.assertGreater(len(stranky), 1)
@@ -1578,9 +1664,8 @@ class AkordyPdfMrizkaTests(TestCase):
         sekce = [{"nazev": "A", "radky": radky_data, "repetice": []}]
 
         polozky = _radky_s_metadaty(sekce)
-        radky = [p["radek"] for p in polozky]
         sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
-        scale = _najdi_scale(radky, sirka_obsahu, 4)
+        scale = _najdi_scale(polozky, sirka_obsahu, 4)
         self.assertLess(scale, 1.0)  # sanity: scénář skutečně cvičí zúžení
 
         stranky = _rozvrhni_stranky(polozky, scale)
