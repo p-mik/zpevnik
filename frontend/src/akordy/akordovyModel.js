@@ -178,6 +178,33 @@ export function voltyVRadku(sekce, radekIdx) {
   return vysledek
 }
 
+// Repetice, které zasahují do řádku `radekIdx` sekce — stejný vzor jako
+// voltyVRadku výš, zrcadlí zpevnik/akordy_pdf.py (repetice smí, stejně
+// jako volty, přes víc řádků jedné sekce). Používá AkordovyMrizka pro
+// vykreslení notových značek (‖: na začátku, :‖ na konci, docs/
+// zadani_redesign_akordovy_zapis.md bod 4) — samotné zrušení repetice
+// zůstává na badge v hlavičce sekce (bod 3), tyhle značky jsou jen
+// vizuální, neklikací.
+export function repeticeVRadku(sekce, radekIdx) {
+  const od_g = globalniIndexTaktu(sekce, radekIdx, 0)
+  const do_g = od_g + sekce.radky[radekIdx].takty.length
+  const vysledek = []
+  ;(sekce.repetice || []).forEach((rep, repIdx) => {
+    const segOd = Math.max(rep.od_taktu, od_g)
+    const segDo = Math.min(rep.do_taktu, do_g - 1)
+    if (segOd > segDo) return
+    vysledek.push({
+      repIdx,
+      rep,
+      odTaktLokalni: segOd - od_g,
+      doTaktLokalni: segDo - od_g,
+      kresliZacatek: rep.od_taktu >= od_g,
+      kresliKonec: rep.do_taktu < do_g,
+    })
+  })
+  return vysledek
+}
+
 // --- délka řádku v dobách (pro info hlášku pod editorem, zrcadlí PDF) ---
 
 export function delkaRadkuVDobach(radek, taktVychozi) {

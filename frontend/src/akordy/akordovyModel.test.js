@@ -4,6 +4,7 @@ import {
   globalniIndexTaktu,
   odeberTaktZeSekce,
   posunSekciVPoli,
+  repeticeVRadku,
   rozdelRadekOdTaktu,
   rozdelSekciOdRadku,
   spojRadekSPredchozim,
@@ -560,6 +561,37 @@ describe('voltyVRadku', () => {
     expect(prvniRadek[0]).toMatchObject({ odTaktLokalni: 3, doTaktLokalni: 3, kresliZacatek: true, kresliKonec: false })
 
     const druhyRadek = voltyVRadku(sekce, 1)
+    expect(druhyRadek[0]).toMatchObject({ odTaktLokalni: 0, doTaktLokalni: 1, kresliZacatek: false, kresliKonec: true })
+  })
+})
+
+describe('repeticeVRadku', () => {
+  test('najde jen repetice, co daný řádek zasahují, s lokálními indexy', () => {
+    const sekce = {
+      radky: [radek(4), radek(4)],
+      repetice: [
+        { krat: 2, od_taktu: 0, do_taktu: 3 }, // celý první řádek
+        { krat: 3, od_taktu: 5, do_taktu: 5 }, // v druhém řádku
+      ],
+    }
+    const prvniRadek = repeticeVRadku(sekce, 0)
+    expect(prvniRadek.length).toBe(1)
+    expect(prvniRadek[0]).toMatchObject({ odTaktLokalni: 0, doTaktLokalni: 3, kresliZacatek: true, kresliKonec: true })
+
+    const druhyRadek = repeticeVRadku(sekce, 1)
+    expect(druhyRadek.length).toBe(1)
+    expect(druhyRadek[0]).toMatchObject({ odTaktLokalni: 1, doTaktLokalni: 1, kresliZacatek: true, kresliKonec: true })
+  })
+
+  test('repetice přes víc řádků: kresliZacatek/kresliKonec jen na řádku, kde skutečně začíná/končí', () => {
+    const sekce = {
+      radky: [radek(4), radek(2)],
+      repetice: [{ krat: 2, od_taktu: 2, do_taktu: 5 }], // takt 2-3 (radek0) az takt 4-5 (radek1)
+    }
+    const prvniRadek = repeticeVRadku(sekce, 0)
+    expect(prvniRadek[0]).toMatchObject({ odTaktLokalni: 2, doTaktLokalni: 3, kresliZacatek: true, kresliKonec: false })
+
+    const druhyRadek = repeticeVRadku(sekce, 1)
     expect(druhyRadek[0]).toMatchObject({ odTaktLokalni: 0, doTaktLokalni: 1, kresliZacatek: false, kresliKonec: true })
   })
 })
