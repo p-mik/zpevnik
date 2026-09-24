@@ -435,6 +435,7 @@ export default function AkordovyMrizka({
         </p>
       </div>
 
+      <div className="akordy-mrizka-vyskok">
       <div className="akordy-mrizka-obsah">
       {/* Skrytá sonda jen pro měření šířky buňky (viz efekt výš) — VŽDY
           přesně 4 takty výchozího taktu (+ tlačítko rozdělení, nejhorší
@@ -707,6 +708,7 @@ export default function AkordovyMrizka({
         {taktPopoverOtevreny && (
           <ZmenitTaktPopover onPotvrdit={potvrdZmenuTaktu} onZrusit={() => setTaktPopoverOtevreny(false)} />
         )}
+      </div>
       </div>
       </div>
     </>

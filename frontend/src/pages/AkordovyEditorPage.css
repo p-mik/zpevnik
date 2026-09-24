@@ -1,13 +1,23 @@
-/* Odsazení zleva pro panel akcí (PC_zpevnik_akordy_ovladani.md bod 6,
-   viz AkordovyMrizka.css .akordy-panel-akci) — platí pro CELOU stránku
-   (drobečková navigace, nadpis, Takt/Tempo box, mřížka), ne jen mřížku:
-   panel je fixní a svisle na střed OKNA, takže bez scrollování může
-   zasahovat i do obsahu NAD mřížkou. Stejný responzivní vzorec jako
-   .akordy-mrizka-obsah — `.app-main` (viz index.css) má max-width:1100px
-   a margin:0 auto, nad ~1450px šířky okna už samo nechává vlevo dost
-   volného místa, kam se panel vejde bez dalšího odsazení. */
+/* .akordy-editor-page sám NESMÍ mít žádné asymetrické padding (viz
+   komentář u AkordovyMrizka.css .akordy-mrizka-vyskok) — mřížka uvnitř
+   "vyskakuje" na celou šířku OKNA přes záporné okraje `50% rodiče − 50vw`,
+   což funguje jen když je celý řetězec rodičů až po .app-main symetricky
+   centrovaný. Odsazení zleva pro panel akcí (PC_zpevnik_akordy_ovladani.md
+   bod 6, viz AkordovyMrizka.css .akordy-panel-akci) proto žije ZVLÁŠŤ na
+   hlavičce a patě (ty zůstávají v běžném sloupci .app-main) — mřížka si
+   svoje odsazení počítá sama, viz .akordy-mrizka-obsah. */
 .akordy-editor-page {
   padding-bottom: var(--space-8);
+}
+
+/* Panel je fixní a svisle na střed OKNA, takže bez scrollování může
+   zasahovat i do obsahu NAD i POD mřížkou — hlavička (drobečková
+   navigace, nadpis, Takt/Tempo box) i pata (uložení, odkazy) proto
+   dostávají STEJNÝ vzorec. `.app-main` (viz index.css) má max-width:1100px
+   a margin:0 auto, nad ~1450px šířky okna už samo nechává vlevo dost
+   volného místa, kam se panel vejde bez dalšího odsazení. */
+.akordy-editor-hlavicka,
+.akordy-editor-pata {
   padding-left: max(0px, 11rem - (100vw - 1100px) / 2);
 }
 

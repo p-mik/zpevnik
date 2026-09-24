@@ -40,15 +40,42 @@
   line-height: 1.6;
 }
 
-/* Odsazení zleva pro panel akcí žije na CELÉ stránce (.akordy-editor-page
-   v AkordovyEditorPage.css), ne tady — panel je fixní a svisle na střed
-   OKNA, takže bez scrollování může zasahovat i do obsahu NAD mřížkou
-   (drobečková navigace, nadpis, Takt/Tempo box), ne jen do mřížky samotné.
-   Tenhle wrapper zůstává jen jako společný rodič sondy a skutečné mřížky
-   (viz AkordovyMrizka.jsx) — ať obě měří/dostávají stejnou dostupnou
-   šířku, žádné odsazení navíc tady samo o sobě nepřidává. */
+/* Mřížka potřebuje na takty víc místa než čtecí sloupec .app-main
+   (max-width:1100px, viz index.css) — na širokém monitoru by se do
+   jeho ~1052px nemusely vejít 4 takty husté písně bez scrollu (viz
+   PC_zpevnik_akordy_ovladani.md, bod "šířka mřížky"). ".akordy-mrizka-
+   vyskok" proto "vyskočí" z .app-main na celou šířku OKNA — standardní
+   CSS trik: záporné okraje ±(50 % rodiče − 50vw) natáhnou box na 100vw,
+   i když je rodič užší a vycentrovaný (na rozdíl od `width:100vw` tenhle
+   způsob nepočítá se šířkou scrollbaru, takže nepřidává vodorovný scroll
+   navíc na CELÉ stránce). ".akordy-mrizka-obsah" pak dostane VLASTNÍ
+   strop podle POMĚRU A4 na šířku (842:595) vázaný na VÝŠKU okna (ne na
+   šířku) — na širokém, ale nízkém okně se tak mřížka pořád nerozlije
+   přes celou obrazovku — a vycentruje se v rámci vyskočeného pásu (=
+   v rámci celého okna, ne jen `.app-main` sloupce).
+
+   Odsazení zleva pro panel akcí (.akordy-panel-akci, fixní u levého
+   okraje OKNA) se dopočítává ZVLÁŠŤ pro tenhle sloupec, ne podle vzorce
+   z .akordy-editor-page (AkordovyEditorPage.css) — ten platí pro zbytek
+   stránky, co zůstává v .app-main a má tedy JINOU šířku/centrování, stejný
+   vzorec by tu seděl jen náhodou. Princip je stejný: `max(0, POŽADOVANÁ_
+   REZERVA − přirozená_mezera_od_centrování)` — jen "přirozená mezera" se
+   tady počítá z (100vw − skutečná šířka sloupce) / 2, ne z pevné 1100px. */
+.akordy-mrizka-vyskok {
+  margin-left: calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+}
+
 .akordy-mrizka-obsah {
-  padding-left: 0;
+  --akordy-a4-strop: calc(100vh * 842 / 595);
+  box-sizing: border-box;
+  max-width: var(--akordy-a4-strop);
+  margin: 0 auto;
+  padding: 0 var(--space-5);
+  padding-left: max(
+    var(--space-5),
+    calc(11rem - (100vw - min(var(--akordy-a4-strop), 100vw)) / 2)
+  );
 }
 
 /* Sonda pro měření šířky buňky (viz AkordovyMrizka.jsx) — vykreslená
