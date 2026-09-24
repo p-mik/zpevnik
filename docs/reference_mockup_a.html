@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<title>Akordový zápis – subtilní</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#efe9db;font-family:'IBM Plex Sans',system-ui,sans-serif;color:#1b1a17}
+a{color:#1b1a17}a:hover{color:#a4262c}
+.ib{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border:1px solid transparent;background:transparent;color:#6b665c;cursor:pointer;padding:0}
+.ib:hover{border-color:#1b1a17;color:#1b1a17;background:#fff}
+.ib.danger:hover{border-color:#a4262c;color:#a4262c}
+.tb{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:1px solid transparent;background:transparent;color:#1b1a17;font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.04em;text-transform:uppercase;cursor:pointer}
+.tb:hover{border-color:#1b1a17;background:#fff}
+.tb[disabled]{color:#a39d90;cursor:default}
+.tb[disabled]:hover{border-color:transparent;background:transparent}
+.seg button{height:30px;min-width:40px;padding:0 10px;border:0;border-right:1px solid #1b1a17;background:transparent;font-family:'Oswald',sans-serif;font-size:13px;color:#1b1a17;cursor:pointer}
+.seg button:last-child{border-right:0}
+.seg button:hover{background:#fff}
+.seg button.on{background:#1b1a17;color:#f4efe3}
+kbd{font-family:'IBM Plex Mono',monospace;font-size:10px;border:1px solid #c9c1ae;padding:1px 5px;color:#1b1a17;background:#faf7ef}
+</style>
+</helmet>
+<div style="width:1280px;height:1100px;box-sizing:border-box;border-left:4px solid #a4262c;padding:28px 56px 40px;display:flex;flex-direction:column;gap:20px;background:#efe9db">
+
+  <!-- hlavicka -->
+  <header style="display:flex;align-items:flex-end;justify-content:space-between;gap:24px">
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <a href="#" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;text-decoration:none;color:#6b665c">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="M13 8H3M7 4L3 8l4 4"/></svg>
+        Zpět na píseň
+      </a>
+      <div style="display:flex;align-items:baseline;gap:12px">
+        <h1 style="margin:0;font-family:'Oswald',sans-serif;font-weight:600;font-size:30px;letter-spacing:.01em">Dont bring me down</h1>
+        <span style="font-size:13px;color:#6b665c">Akordový zápis · Verze 3</span>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:20px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6b665c">Takt</span>
+        <div class="seg" style="display:flex;border:1px solid #1b1a17;background:#faf7ef">
+          <button>2/4</button><button>3/4</button><button class="on">4/4</button><button>6/8</button><button>12/8</button><button aria-label="Vlastní takt">…</button>
+        </div>
+      </div>
+      <label style="display:flex;align-items:center;gap:10px">
+        <span style="font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#6b665c">BPM</span>
+        <input placeholder="—" style="width:56px;height:30px;box-sizing:border-box;border:1px solid #1b1a17;background:#faf7ef;font-family:'Oswald',sans-serif;font-size:14px;text-align:center;outline:none">
+      </label>
+    </div>
+  </header>
+
+  <!-- toolbar -->
+  <div style="display:flex;align-items:center;gap:4px;height:44px;padding:0 6px;border-top:1px solid #1b1a17;border-bottom:1px solid #1b1a17">
+    <button class="tb" disabled title="Repetice (vyber takty)">
+      <svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2v12M4.5 2v12M15.5 2v12M18 2v12"/><circle cx="7.5" cy="6" r=".9" fill="currentColor"/><circle cx="7.5" cy="10" r=".9" fill="currentColor"/><circle cx="12.5" cy="6" r=".9" fill="currentColor"/><circle cx="12.5" cy="10" r=".9" fill="currentColor"/></svg>
+      Repetice
+    </button>
+    <button class="tb" disabled title="Volta (vyber takt)">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="M2 14V3h12"/><text x="4.5" y="11" font-size="7" font-family="Oswald" fill="currentColor" stroke="none">1.</text></svg>
+      Volta
+    </button>
+    <button class="tb" disabled title="Změnit takt od vybraného taktu">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><text x="5" y="7" font-size="7" font-family="Oswald" fill="currentColor" stroke="none">3</text><text x="5" y="15" font-size="7" font-family="Oswald" fill="currentColor" stroke="none">4</text><path d="M3 8.5h10"/></svg>
+      Takt
+    </button>
+    <span style="width:1px;height:20px;background:#c9c1ae;margin:0 8px"></span>
+    <button class="tb">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><rect x="2" y="3" width="12" height="10"/><path d="M8 6v4M6 8h4"/></svg>
+      Sekce
+    </button>
+    <button class="tb">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="M3 3h10M8 3v10"/></svg>
+      Nadpis
+    </button>
+    <div style="flex-grow:1"></div>
+    <div style="display:flex;align-items:center;gap:14px;font-size:11px;color:#6b665c">
+      <span><kbd>Tab</kbd> další buňka</span>
+      <span><kbd>Enter</kbd> nový řádek</span>
+      <span><kbd>⌫</kbd> spojit s předchozím</span>
+    </div>
+  </div>
+
+  <!-- sekce -->
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-for list="{{sections}}" as="sec" hint-placeholder-count="3">
+
+      <sc-if value="{{sec.isHeading}}" hint-placeholder-val="{{false}}">
+        <div style="display:flex;align-items:center;gap:12px;height:36px">
+          <span style="font-family:'Oswald',sans-serif;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#1b1a17">{{sec.name}}</span>
+          <span style="flex-grow:1;height:1px;background:#1b1a17"></span>
+          <button class="ib" aria-label="Posunout nahoru"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="M4 10l4-4 4 4"/></svg></button>
+          <button class="ib danger" aria-label="Smazat nadpis"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="M3 4h10M6 4V2.5h4V4M4.5 4l.7 9.5h5.6l.7-9.5"/></svg></button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{sec.isSection}}" hint-placeholder-val="{{true}}">
+        <section style="border:1px solid #1b1a17;background:#faf7ef">
+          <!-- hlavicka sekce -->
+          <div style="display:flex;align-items:center;gap:8px;height:40px;padding:0 6px 0 4px;border-bottom:1px solid #ddd5c3">
+            <div style="display:flex;flex-direction:column">
+              <button class="ib" aria-label="Posunout nahoru" style="height:16px;width:22px"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M3 11l5-5 5 5"/></svg></button>
+              <button class="ib" aria-label="Posunout dolů" style="height:16px;width:22px"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M3 5l5 5 5-5"/></svg></button>
+            </div>
+            <sc-if value="{{sec.hasName}}" hint-placeholder-val="{{true}}">
+              <span style="font-family:'Oswald',sans-serif;font-weight:500;font-size:15px;letter-spacing:.08em;text-transform:uppercase;padding:2px 4px;border-bottom:1px dashed transparent">{{sec.name}}</span>
+            </sc-if>
+            <sc-if value="{{sec.noName}}" hint-placeholder-val="{{false}}">
+              <span style="font-family:'Oswald',sans-serif;font-size:15px;letter-spacing:.08em;text-transform:uppercase;padding:2px 4px;color:#a39d90;border-bottom:1px dashed #a39d90">Název sekce</span>
+            </sc-if>
+            <span style="font-size:11px;color:#6b665c">{{sec.meta}}</span>
+            <sc-if value="{{sec.rep}}" hint-placeholder-val="{{false}}">
+              <span style="display:inline-flex;align-items:center;gap:6px;height:20px;padding:0 4px 0 8px;background:#1f5c55;color:#f4efe3;font-family:'Oswald',sans-serif;font-size:12px;letter-spacing:.03em">
+                {{sec.rep}}
+                <button aria-label="Zrušit repetici" style="display:inline-flex;border:0;background:transparent;color:#f4efe3;padding:2px;cursor:pointer"><svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
+              </span>
+            </sc-if>
+            <div style="flex-grow:1"></div>
+            <sc-if value="{{sec.notFirst}}" hint-placeholder-val="{{true}}">
+              <button class="ib" aria-label="Spojit s předchozí" title="Spojit s předchozí"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="M3 2.5h10M8 14V6M5 9l3-3 3 3"/></svg></button>
+            </sc-if>
+            <button class="ib" aria-label="Duplikovat" title="Duplikovat"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="8.5" height="8.5"/><path d="M2.5 10.5V2.5h8"/></svg></button>
+            <button class="ib danger" aria-label="Smazat sekci" title="Smazat sekci"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="M3 4h10M6 4V2.5h4V4M4.5 4l.7 9.5h5.6l.7-9.5"/></svg></button>
+          </div>
+
+          <!-- telo -->
+          <div style="padding:10px 16px 10px 16px;display:flex;flex-direction:column;gap:6px">
+            <sc-if value="{{sec.empty}}" hint-placeholder-val="{{false}}">
+              <button style="display:flex;align-items:center;gap:8px;height:44px;border:1px dashed #c9c1ae;background:transparent;color:#6b665c;font-family:'IBM Plex Sans',sans-serif;font-size:12px;padding:0 14px;cursor:pointer;text-align:left">
+                <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square"><path d="M8 3v10M3 8h10"/></svg>
+                Začni psát akord, nebo <kbd>Enter</kbd> pro první řádek
+              </button>
+            </sc-if>
+
+            <sc-for list="{{sec.rows}}" as="row" hint-placeholder-count="2">
+              <div style="display:flex;align-items:flex-end">
+                <sc-for list="{{row.bars}}" as="bar" hint-placeholder-count="4">
+                  <div style="width:216px;flex-shrink:0;display:flex;flex-direction:column">
+                    <div style="height:16px">
+                      <sc-if value="{{bar.volta}}" hint-placeholder-val="{{false}}">
+                        <div style="height:16px;box-sizing:border-box;margin-right:8px;border-top:1.5px solid #1b1a17;border-left:1.5px solid #1b1a17;font-family:'Oswald',sans-serif;font-size:11px;line-height:14px;padding-left:4px">{{bar.volta}}</div>
+                      </sc-if>
+                    </div>
+                    <div style="display:flex;height:40px;border-left:1px solid #1b1a17">
+                      <sc-if value="{{bar.rs}}" hint-placeholder-val="{{false}}">
+                        <div style="display:flex;align-items:center;gap:3px;margin-left:2px">
+                          <span style="width:1px;height:40px;background:#1b1a17"></span>
+                          <span style="display:flex;flex-direction:column;gap:6px"><span style="width:3px;height:3px;background:#1b1a17"></span><span style="width:3px;height:3px;background:#1b1a17"></span></span>
+                        </div>
+                      </sc-if>
+                      <div style="flex-grow:1;display:grid;grid-template-columns:repeat(4, minmax(0, 1fr))">
+                        <sc-for list="{{bar.beats}}" as="beat" hint-placeholder-count="4">
+                          <div style="position:relative;display:flex;align-items:flex-end;padding:0 0 9px 8px">
+                            <sc-if value="{{beat.has}}" hint-placeholder-val="{{false}}">
+                              <span style="font-family:'Oswald',sans-serif;font-weight:500;font-size:19px;line-height:1">{{beat.c}}</span>
+                            </sc-if>
+                            <sc-if value="{{beat.empty}}" hint-placeholder-val="{{true}}">
+                              <span style="width:10px;height:1px;background:#cfc7b5;margin-bottom:2px"></span>
+                            </sc-if>
+                            <sc-if value="{{beat.focus}}" hint-placeholder-val="{{false}}">
+                              <span style="position:absolute;left:4px;right:4px;top:6px;bottom:4px;border:1px solid #a4262c;background:#fff"></span>
+                              <span style="position:absolute;left:10px;bottom:9px;width:1px;height:18px;background:#a4262c"></span>
+                            </sc-if>
+                          </div>
+                        </sc-for>
+                      </div>
+                      <sc-if value="{{bar.re}}" hint-placeholder-val="{{false}}">
+                        <div style="display:flex;align-items:center;gap:3px;margin-right:2px">
+                          <span style="display:flex;flex-direction:column;gap:6px"><span style="width:3px;height:3px;background:#1b1a17"></span><span style="width:3px;height:3px;background:#1b1a17"></span></span>
+                          <span style="width:1px;height:40px;background:#1b1a17"></span>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </div>
+                </sc-for>
+                <span style="width:1px;height:40px;background:#1b1a17"></span>
+                <sc-if value="{{row.split}}" hint-placeholder-val="{{false}}">
+                  <button class="ib" aria-label="Nová sekce od tohoto řádku" title="Nová sekce od tohoto řádku" style="margin-left:12px;margin-bottom:4px"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="4" cy="4" r="2"/><circle cx="4" cy="12" r="2"/><path d="M5.6 5.2L14 12M5.6 10.8L14 4"/></svg></button>
+                </sc-if>
+              </div>
+            </sc-for>
+
+            <sc-if value="{{sec.hasRows}}" hint-placeholder-val="{{true}}">
+              <button class="tb" style="align-self:flex-start;height:26px;padding:0 6px;margin-left:-6px;color:#6b665c;font-size:11px">
+                <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square"><path d="M8 3v10M3 8h10"/></svg>
+                řádek
+              </button>
+            </sc-if>
+          </div>
+        </section>
+      </sc-if>
+
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const B = (chs, o) => {
+      o = o || {};
+      return {
+        volta: o.volta || '', rs: !!o.rs, re: !!o.re,
+        beats: [0, 1, 2, 3].map((i) => {
+          const c = chs[i] || '';
+          return { c: c, has: !!c && o.focus !== i, empty: !c && o.focus !== i, focus: o.focus === i };
+        })
+      };
+    };
+    const S = (s) => {
+      const rows = s.rows || [];
+      return Object.assign({ isSection: !s.heading, isHeading: !!s.heading, hasName: !!s.name, noName: !s.name, empty: !s.heading && rows.length === 0, hasRows: rows.length > 0, notFirst: !s.first, rep: s.rep || '' }, s, { rows: rows.map((r) => Object.assign({ split: false }, r)) });
+    };
+    return {
+      sections: [
+        S({ name: 'Intro', meta: '4 takty', first: true, rows: [{ bars: [B(['G']), B([]), B(['G']), B([])] }] }),
+        S({ name: '', meta: 'prázdná' }),
+        S({ name: 'Sloka', meta: '13 taktů', rep: '1–12 ×2', rows: [
+          { bars: [B(['G'], { rs: true }), B([]), B(['G']), B([])] },
+          { split: true, bars: [B(['C']), B([], { focus: 0 }), B(['G']), B([])] },
+          { split: true, bars: [B(['B']), B(['F', '', 'C']), B(['G']), B(['D'], { volta: '1.', re: true }), B(['–'], { volta: '2.' })] }
+        ] }),
+        S({ heading: true, name: 'Sólo' })
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
