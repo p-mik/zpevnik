@@ -1,15 +1,30 @@
+/* Redesign (docs/zadani_redesign_akordovy_zapis.md) — žádný rámeček
+   silnější než 1px kromě volty (akceptační kritéria, bod 6); tokeny
+   --ink/--paper žijí na .akordy-editor-page, uvnitř kterého se popover
+   vždycky vykresluje. */
 .volta-popover {
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
   padding: var(--space-4);
-  border: var(--border-w-lg) solid var(--app-ink);
-  background: var(--app-paper);
+  border: 1px solid var(--ink);
+  background: var(--paper);
   max-width: 20em;
 }
 
 .volta-popover .field-input {
   width: 6em;
+}
+
+/* .btn/.field-input jsou sdílené globální třídy (ui.css) s 2px rámečkem
+   — tady se jen upravuje TLOUŠŤKA na 1px (barvy/rozměry beze změny), ať
+   platí i pro tenhle popover "žádný rámeček silnější než 1px kromě
+   volty" (akceptační kritéria bod 6). Selektor je scoped na
+   .volta-popover, takže jiné stránky se sdílenými třídami .btn/
+   .field-input zůstávají beze změny. */
+.volta-popover .btn,
+.volta-popover .field-input {
+  border-width: 1px;
 }
 
 .volta-popover-akce {
