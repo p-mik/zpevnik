@@ -4,42 +4,6 @@
   gap: var(--space-5);
 }
 
-/* Panel akcí (PC_zpevnik_akordy_ovladani.md bod 6) — sjednocuje akce, co
-   byly dřív roztroušené (Repetice/Volta/Změnit takt ve výběru dole, +
-   Přidat sekci/+ Jen nadpis až úplně dole). Fixní u LEVÉHO OKRAJE OKNA
-   (ne stránky/sekce), svisle na střed, drží se při scrollování — proto
-   position:fixed, ne sticky (sticky by se vázalo na rodiče, co scrolluje
-   pryč spolu se stránkou). Výběrové akce (Repetice/Volta/Změnit takt) jsou
-   `disabled`, NE skryté, i bez výběru — schválně, ať panel nemění tvar
-   podle stavu výběru (viz zadání). */
-.akordy-panel-akci {
-  position: fixed;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  z-index: 20;
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  width: 9rem;
-  padding: var(--space-3);
-  border: var(--border-w-lg) solid var(--app-ink);
-  border-left: none;
-  background: var(--app-paper);
-}
-.akordy-panel-akci .btn {
-  width: 100%;
-  padding: var(--space-2) var(--space-3);
-  font-size: var(--text-sm);
-}
-
-.akordy-panel-napoveda {
-  margin: var(--space-2) 0 0;
-  font-size: var(--text-xs);
-  color: var(--app-ink-70);
-  line-height: 1.6;
-}
-
 /* Mřížka potřebuje na takty víc místa než čtecí sloupec .app-main
    (max-width:1100px, viz index.css) — na širokém monitoru by se do
    jeho ~1052px nemusely vejít 4 takty husté písně bez scrollu (viz
@@ -54,13 +18,11 @@
    přes celou obrazovku — a vycentruje se v rámci vyskočeného pásu (=
    v rámci celého okna, ne jen `.app-main` sloupce).
 
-   Odsazení zleva pro panel akcí (.akordy-panel-akci, fixní u levého
-   okraje OKNA) se dopočítává ZVLÁŠŤ pro tenhle sloupec, ne podle vzorce
-   z .akordy-editor-page (AkordovyEditorPage.css) — ten platí pro zbytek
-   stránky, co zůstává v .app-main a má tedy JINOU šířku/centrování, stejný
-   vzorec by tu seděl jen náhodou. Princip je stejný: `max(0, POŽADOVANÁ_
-   REZERVA − přirozená_mezera_od_centrování)` — jen "přirozená mezera" se
-   tady počítá z (100vw − skutečná šířka sloupce) / 2, ne z pevné 1100px. */
+   Odsazení zleva "pro panel akcí" tu už není — od redesignu (docs/
+   zadani_redesign_akordovy_zapis.md bod 2) je toolbar `position: sticky`,
+   ne fixní u levého okraje okna (viz AkordovyToolbar.css), takže se
+   s ničím nepřekrývá a žádnou vyhrazenou mezeru nepotřebuje. Zůstává jen
+   prostý symetrický padding. */
 .akordy-mrizka-vyskok {
   margin-left: calc(50% - 50vw);
   margin-right: calc(50% - 50vw);
@@ -72,10 +34,6 @@
   max-width: var(--akordy-a4-strop);
   margin: 0 auto;
   padding: 0 var(--space-5);
-  padding-left: max(
-    var(--space-5),
-    calc(11rem - (100vw - min(var(--akordy-a4-strop), 100vw)) / 2)
-  );
 }
 
 /* Sonda pro měření šířky buňky (viz AkordovyMrizka.jsx) — vykreslená

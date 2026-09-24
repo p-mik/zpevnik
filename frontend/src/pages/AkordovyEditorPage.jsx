@@ -60,36 +60,32 @@ export default function AkordovyEditorPage() {
 
   return (
     <div className="akordy-editor-page">
-      {/* Hlavička dostává odsazení pro panel akcí ZVLÁŠŤ (viz
-          .akordy-editor-hlavicka v CSS) — zůstává v běžném sloupci
-          .app-main, na rozdíl od mřížky níž (AkordovyMrizka má VLASTNÍ,
-          širší strop podle poměru A4 na šířku, viz AkordovyMrizka.css).
-          .akordy-editor-page sám NESMÍ mít žádné asymetrické padding,
-          jinak by to rozbilo mřížčin výpočet "vyskoč na celou šířku okna"
-          (ten počítá se symetrickým rodičem, stejně jako .app-main). */}
-      <div className="akordy-editor-hlavicka">
-        <div className="akordy-editor-hlavicka-radek">
-          <div className="akordy-editor-zpet-nadpis">
-            <Link to={verze.pisen ? `/pisne/${verze.pisen}` : '/pisne'} className="akordy-zpet-odkaz">
-              <IkonaZpet size={14} />
-              Zpět na píseň
-            </Link>
-            <div className="akordy-editor-nadpis-radek">
-              <h1 className="akordy-editor-nazev">{song ? song.nazev : 'Akordový zápis'}</h1>
-              <span className="akordy-editor-meta">
-                Akordový zápis{verze.cislo ? ` · Verze ${verze.cislo}` : ''}
-              </span>
-            </div>
+      {/* .akordy-editor-page sám NESMÍ mít žádné asymetrické padding (viz
+          komentář u AkordovyMrizka.css .akordy-mrizka-vyskok) — mřížka níž
+          "vyskakuje" na celou šířku okna, což počítá se symetrickým
+          rodičem stejně jako .app-main. Tenhle řádek zůstává v běžném
+          sloupci .app-main. */}
+      <div className="akordy-editor-hlavicka-radek">
+        <div className="akordy-editor-zpet-nadpis">
+          <Link to={verze.pisen ? `/pisne/${verze.pisen}` : '/pisne'} className="akordy-zpet-odkaz">
+            <IkonaZpet size={14} />
+            Zpět na píseň
+          </Link>
+          <div className="akordy-editor-nadpis-radek">
+            <h1 className="akordy-editor-nazev">{song ? song.nazev : 'Akordový zápis'}</h1>
+            <span className="akordy-editor-meta">
+              Akordový zápis{verze.cislo ? ` · Verze ${verze.cislo}` : ''}
+            </span>
           </div>
-
-          <AkordovyHlavicka
-            takt={editor.zapis.takt}
-            tempo={editor.zapis.tempo}
-            sekce={editor.zapis.sekce}
-            onZmenTakt={editor.nastavTakt}
-            onZmenTempo={editor.nastavTempo}
-          />
         </div>
+
+        <AkordovyHlavicka
+          takt={editor.zapis.takt}
+          tempo={editor.zapis.tempo}
+          sekce={editor.zapis.sekce}
+          onZmenTakt={editor.nastavTakt}
+          onZmenTempo={editor.nastavTempo}
+        />
       </div>
 
       <AkordovyMrizka
@@ -115,45 +111,43 @@ export default function AkordovyEditorPage() {
         onZmenTaktVyberu={editor.zmenTaktVyberu}
       />
 
-      <div className="akordy-editor-pata">
-        <div className="akordy-editor-ulozeni">
-          {editor.chyba && (
-            <span className="akordy-editor-chyba" role="alert">
-              {editor.chyba}
-            </span>
-          )}
-          <span className={`akordy-editor-stav${editor.zmeneno ? ' akordy-editor-stav-zmeneno' : ''}`}>
-            {editor.ukladam ? 'Ukládám…' : editor.zmeneno ? 'Neuloženo' : 'Uloženo'}
+      <div className="akordy-editor-ulozeni">
+        {editor.chyba && (
+          <span className="akordy-editor-chyba" role="alert">
+            {editor.chyba}
           </span>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={ulozit}
-            disabled={editor.ukladam || !editor.zmeneno}
-          >
-            Uložit
-          </button>
-        </div>
-
-        {editor.pocetAnotaciKtereMohlyUjet > 0 && (
-          <p className="akordy-editor-anotace-varovani" role="status">
-            Tahle verze má {editor.pocetAnotaciKtereMohlyUjet}{' '}
-            {editor.pocetAnotaciKtereMohlyUjet === 1 ? 'poznámku' : 'poznámek'}, změna rozložení je
-            může posunout.
-          </p>
         )}
-
-        {verze.ma_soubor && (
-          <div className="akordy-editor-odkazy">
-            <Link to={`/pisne/${verze.pisen}/ctecka?verze=${verze.id}`} className="btn btn-secondary">
-              Otevřít ve čtečce
-            </Link>
-            <a href={`/api/verze-pisni/${verze.id}/soubor/`} className="btn btn-secondary">
-              Stáhnout PDF
-            </a>
-          </div>
-        )}
+        <span className={`akordy-editor-stav${editor.zmeneno ? ' akordy-editor-stav-zmeneno' : ''}`}>
+          {editor.ukladam ? 'Ukládám…' : editor.zmeneno ? 'Neuloženo' : 'Uloženo'}
+        </span>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={ulozit}
+          disabled={editor.ukladam || !editor.zmeneno}
+        >
+          Uložit
+        </button>
       </div>
+
+      {editor.pocetAnotaciKtereMohlyUjet > 0 && (
+        <p className="akordy-editor-anotace-varovani" role="status">
+          Tahle verze má {editor.pocetAnotaciKtereMohlyUjet}{' '}
+          {editor.pocetAnotaciKtereMohlyUjet === 1 ? 'poznámku' : 'poznámek'}, změna rozložení je
+          může posunout.
+        </p>
+      )}
+
+      {verze.ma_soubor && (
+        <div className="akordy-editor-odkazy">
+          <Link to={`/pisne/${verze.pisen}/ctecka?verze=${verze.id}`} className="btn btn-secondary">
+            Otevřít ve čtečce
+          </Link>
+          <a href={`/api/verze-pisni/${verze.id}/soubor/`} className="btn btn-secondary">
+            Stáhnout PDF
+          </a>
+        </div>
+      )}
     </div>
   )
 }

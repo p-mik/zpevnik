@@ -16,6 +16,7 @@ import {
   zkontrolujVyberProVoltu,
   zpusobiZtratuZmenaVyberu,
 } from './akordovyModel'
+import AkordovyToolbar from './AkordovyToolbar'
 import RepeticePopover from './RepeticePopover'
 import VoltaPopover from './VoltaPopover'
 import ZmenitTaktPopover from './ZmenitTaktPopover'
@@ -387,53 +388,14 @@ export default function AkordovyMrizka({
 
   return (
     <>
-      {/* Panel akcí (PC_zpevnik_akordy_ovladani.md bod 6) — fixní u levého
-          okraje OKNA (ne sekce/stránky), svisle na střed, drží se při
-          scrollování. Akce závislé na výběru (Repetice/Volta/Změnit takt)
-          jsou bez výběru NEAKTIVNÍ, ne skryté — zadání to chce takhle
-          schválně, ať je panel vždycky na stejném místě se stejným
-          obsahem, žádné poskakování layoutu podle toho, jestli je něco
-          vybrané. ".akordy-mrizka-obsah" níž dostává odpovídající
-          odsazení zleva, ať se panel nepřekrývá s mřížkou. */}
-      <div className="akordy-panel-akci" role="toolbar" aria-label="Akce akordového zápisu">
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={otevriRepetici}
-          disabled={vyber.length === 0}
-        >
-          Repetice
-        </button>
-        <button type="button" className="btn btn-secondary" onClick={otevriVoltu} disabled={vyber.length === 0}>
-          Volta
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={() => setTaktPopoverOtevreny(true)}
-          disabled={vyber.length === 0}
-        >
-          Změnit takt
-        </button>
-        <button type="button" className="btn btn-secondary" onClick={pridatSekci}>
-          + Přidat sekci
-        </button>
-        <button
-          type="button"
-          className="btn btn-secondary"
-          onClick={pridatSekciBezRadku}
-          title="Sekce jen s nadpisem, bez taktů — třeba „Sloka 2 = Sloka 1“."
-        >
-          + Jen nadpis
-        </button>
-        <p className="akordy-panel-napoveda">
-          <strong>Tab</strong> další buňka
-          <br />
-          <strong>Enter</strong> nový řádek
-          <br />
-          <strong>Backspace</strong> spojí s předchozím
-        </p>
-      </div>
+      <AkordovyToolbar
+        vyberAktivni={vyber.length > 0}
+        onRepetice={otevriRepetici}
+        onVolta={otevriVoltu}
+        onTakt={() => setTaktPopoverOtevreny(true)}
+        onPridejSekci={pridatSekci}
+        onPridejSekciBezRadku={pridatSekciBezRadku}
+      />
 
       <div className="akordy-mrizka-vyskok">
       <div className="akordy-mrizka-obsah">

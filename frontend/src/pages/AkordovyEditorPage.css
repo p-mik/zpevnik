@@ -94,17 +94,6 @@
   color: var(--muted);
 }
 
-/* Panel je fixní a svisle na střed OKNA, takže bez scrollování může
-   zasahovat i do obsahu NAD i POD mřížkou — hlavička (drobečková
-   navigace, nadpis, Takt/Tempo box) i pata (uložení, odkazy) proto
-   dostávají STEJNÝ vzorec. `.app-main` (viz index.css) má max-width:1100px
-   a margin:0 auto, nad ~1450px šířky okna už samo nechává vlevo dost
-   volného místa, kam se panel vejde bez dalšího odsazení. */
-.akordy-editor-hlavicka,
-.akordy-editor-pata {
-  padding-left: max(0px, 11rem - (100vw - 1100px) / 2);
-}
-
 .akordy-editor-ulozeni {
   display: flex;
   align-items: center;
