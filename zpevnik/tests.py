@@ -1813,96 +1813,60 @@ class AkordyPdfMrizkaTests(TestCase):
         pdf = akordy_pdf.vygeneruj_pdf(FakePisen(), zapis)
         self.assertEqual(pdf[:5], b"%PDF-")
 
-    def test_rozvrhni_stranky_jednoducha_pisen_zustane_na_jedne_strance(self):
+    def test_vyska_obsahu_bez_mezery_za_posledni_polozkou(self):
+        # Dokument je jedna souvislá stránka (viz modul docstring) — mezera
+        # se přidává jen MEZI položkami, ne za úplně poslední (nic už po ní
+        # nenásleduje). Dvě položky téže sekce: výška = 2 řádky + JEDNA
+        # mezera mezi nimi, ne dvě.
         from zpevnik.akordy_pdf import (
-            OKRAJ,
-            SIRKA_GUTTERU,
-            SIRKA_STRANKY,
-            _najdi_scale,
-            _radky_s_metadaty,
-            _rozvrhni_stranky,
+            MEZERA_RADKU_STEJNA_SEKCE,
+            VYSKA_RADKU,
+            _vyska_obsahu,
         )
 
-        sekce = [
-            {
-                "nazev": "A",
-                "radky": [{"takty": [{"bunky": ["C", "", "", ""]}] * 4}] * 3,
-                "repetice": [],
-            }
-        ]
-        polozky = _radky_s_metadaty(sekce)
-        sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
-        scale = _najdi_scale(polozky, sirka_obsahu, 4)
-        self.assertAlmostEqual(scale, 1.0, places=2)
-        stranky = _rozvrhni_stranky(polozky, scale)
-        self.assertEqual(len(stranky), 1)
+        prazdna_sekce = {"volty": []}
+        spolecne = {
+            "typ": "radek",
+            "radek": {"takty": [{"bunky": [""]}]},
+            "sekce": prazdna_sekce,
+            "od_g": 0,
+            "do_g": 1,
+        }
+        radek = {**spolecne, "je_prvni_v_sekci": True, "je_posledni_v_sekci": False}
+        posledni = {**spolecne, "je_prvni_v_sekci": False, "je_posledni_v_sekci": True}
+        vyska = _vyska_obsahu([radek, posledni], scale=1.0)
+        self.assertAlmostEqual(vyska, 2 * VYSKA_RADKU + MEZERA_RADKU_STEJNA_SEKCE)
 
-    def test_rozvrhni_stranky_deli_jen_podle_vysky_ne_podle_scale(self):
-        # Mřížka je teď SPOLEČNÁ pro celý dokument (viz modul docstring) —
-        # stránkování už nesmí dělit podle scale, jen podle výšky. Dost
-        # řádků na to, aby se na výšku nevešly na jednu stránku, musí dát
-        # víc stránek se STEJNÝM scale na všech (na rozdíl od dřívějšího
-        # chování, kdy pozdější stránky mohly vyjít větší).
-        from zpevnik.akordy_pdf import (
-            OKRAJ,
-            SIRKA_GUTTERU,
-            SIRKA_STRANKY,
-            _najdi_scale,
-            _radky_s_metadaty,
-            _rozvrhni_stranky,
-        )
-
-        sekce = [
-            {
-                "nazev": "A",
-                "radky": [{"takty": [{"bunky": ["C", "", "", ""]}] * 4}] * 60,
-                "repetice": [],
-            }
-        ]
-        polozky = _radky_s_metadaty(sekce)
-        sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
-        scale = _najdi_scale(polozky, sirka_obsahu, 4)
-
-        stranky = _rozvrhni_stranky(polozky, scale)
-        self.assertGreater(len(stranky), 1)
-        self.assertEqual(sum(len(s) for s in stranky), len(polozky))
-
-    def test_husta_pisen_uz_nerozdeli_stranky_kvuli_scale(self):
+    def test_husta_pisen_zustane_na_jedne_strance_i_pri_nizkem_scale(self):
         # Regrese k ZRUŠENÉMU chování (viz modul docstring): dřív sdílená
-        # mřížka přes moc řádků srážela scale, a stránkování na to reagovalo
-        # děním stránek i podle výšky by se vešly. Teď je mřížka pro celý
-        # dokument a stránkování řeší JEN výšku — hustá "písnička", co se na
-        # výšku vejde na jednu stránku, musí zůstat na jedné, i když je
-        # scale kvůli širokým akordům nízký.
-        from zpevnik.akordy_pdf import (
-            OKRAJ,
-            SIRKA_GUTTERU,
-            SIRKA_STRANKY,
-            _najdi_scale,
-            _radky_s_metadaty,
-            _rozvrhni_stranky,
-        )
+        # mřížka přes moc řádků srážela scale a stránkování na výšku
+        # reagovalo děním víc stránek. Teď žádné stránkování není — hustá
+        # "písnička" se scale pod 1.0 kvůli širokým akordům musí pořád
+        # vyjít jako JEDNA (vyšší) stránka.
+        from zpevnik import akordy_pdf
+
+        class FakePisen:
+            nazev = "Test"
+            interpret = ""
 
         # 12 řádků (4 takty po 4 dobách = 16 pozic), každý má "G#m7" na
         # JINÉ z prvních 12 pozic — žádný řádek sám o sobě není široký (jen
         # 1 široký akord v něm), ale mřížka sdílená přes všech 12 rozšíří
-        # 12 pozic najednou, takže scale vyjde pod 1.0 — 12 řádků se ale
-        # při tomhle scale pořád vejde na výšku jedné (landscape) stránky.
+        # 12 pozic najednou, takže scale vyjde pod 1.0.
         radky_data = []
         for i in range(12):
             bunky = ["C", "", "", ""] * 4
             bunky[i] = "G#m7"
             takty = [{"bunky": bunky[t * 4 : t * 4 + 4]} for t in range(4)]
             radky_data.append({"takty": takty})
-        sekce = [{"nazev": "A", "radky": radky_data, "repetice": []}]
+        zapis = self._zapis([{"nazev": "A", "radky": radky_data, "repetice": []}])
 
-        polozky = _radky_s_metadaty(sekce)
-        sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
-        scale = _najdi_scale(polozky, sirka_obsahu, 4)
-        self.assertLess(scale, 1.0)  # sanity: scénář skutečně cvičí zúžení
+        pdf = akordy_pdf.vygeneruj_pdf(FakePisen(), zapis)
 
-        stranky = _rozvrhni_stranky(polozky, scale)
-        self.assertEqual(len(stranky), 1)
+        from pypdf import PdfReader
+
+        reader = PdfReader(io.BytesIO(pdf))
+        self.assertEqual(len(reader.pages), 1)
 
     def test_radky_s_metadaty_sekce_bez_radku_je_polozka_typu_nadpis(self):
         from zpevnik.akordy_pdf import _radky_s_metadaty
@@ -1918,87 +1882,6 @@ class AkordyPdfMrizkaTests(TestCase):
         self.assertTrue(polozky[0]["je_prvni_v_sekci"])
         self.assertTrue(polozky[0]["je_posledni_v_sekci"])
         self.assertEqual(polozky[1]["typ"], "radek")
-
-    def test_seskup_pro_zalomeni_slepi_nadpis_s_prvni_polozkou_za_nim(self):
-        from zpevnik.akordy_pdf import _seskup_pro_zalomeni
-
-        radek1 = {"typ": "radek", "je_prvni_v_sekci": True, "je_posledni_v_sekci": False}
-        nadpis = {"typ": "nadpis", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
-        radek2 = {"typ": "radek", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
-        skupiny = _seskup_pro_zalomeni([radek1, nadpis, radek2])
-        self.assertEqual(skupiny, [[radek1], [nadpis, radek2]])
-
-    def test_seskup_pro_zalomeni_slepi_retez_nadpisu_az_po_prvni_skutecny_radek(self):
-        from zpevnik.akordy_pdf import _seskup_pro_zalomeni
-
-        nadpis1 = {"typ": "nadpis", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
-        nadpis2 = {"typ": "nadpis", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
-        radek = {"typ": "radek", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
-        skupiny = _seskup_pro_zalomeni([nadpis1, nadpis2, radek])
-        self.assertEqual(skupiny, [[nadpis1, nadpis2, radek]])
-
-    def test_seskup_pro_zalomeni_osamoceny_nadpis_na_konci_dokumentu_zustane_sam(self):
-        # Nemá s čím se slepit - to zadání výslovně neřeší (viz modul
-        # docstring).
-        from zpevnik.akordy_pdf import _seskup_pro_zalomeni
-
-        radek = {"typ": "radek", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
-        nadpis = {"typ": "nadpis", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
-        skupiny = _seskup_pro_zalomeni([radek, nadpis])
-        self.assertEqual(skupiny, [[radek], [nadpis]])
-
-    def test_rozvrhni_stranky_nenecha_osamoceny_nadpis_na_konci_stranky(self):
-        # Regrese k požadavku "nadpis a první řádek další sekce nejsou
-        # rozdělené koncem stránky": sestavíme scénář, kde by se BEZ
-        # seskupení (_seskup_pro_zalomeni) nadpis vešel jako poslední
-        # položka na stránku, ale spolu s řádkem hned za ním už ne - a
-        # ověříme, že se stránkuje po CELÉ skupině, ne po jednotlivé
-        # položce.
-        from zpevnik.akordy_pdf import OKRAJ, Y_ZACATEK_OBSAHU, _rozvrhni_stranky, _vyska_obsahu_stranky
-
-        scale = 1.0
-        vyska_dostupna = Y_ZACATEK_OBSAHU - OKRAJ
-
-        prazdna_sekce = {"volty": []}
-
-        def filler_radek():
-            return {
-                "typ": "radek",
-                "radek": {"takty": [{"bunky": [""]}]},
-                "sekce": prazdna_sekce,
-                "od_g": 0,
-                "do_g": 1,
-                "je_prvni_v_sekci": False,
-                "je_posledni_v_sekci": False,
-            }
-
-        nadpis = {"typ": "nadpis", "je_prvni_v_sekci": True, "je_posledni_v_sekci": True}
-        posledni_radek = {
-            "typ": "radek",
-            "radek": {"takty": [{"bunky": [""]}]},
-            "sekce": prazdna_sekce,
-            "od_g": 0,
-            "do_g": 1,
-            "je_prvni_v_sekci": True,
-            "je_posledni_v_sekci": True,
-        }
-
-        filler = []
-        while True:
-            filler.append(filler_radek())
-            s_nadpisem = _vyska_obsahu_stranky(filler + [nadpis], scale)
-            s_obema = _vyska_obsahu_stranky(filler + [nadpis, posledni_radek], scale)
-            if s_nadpisem <= vyska_dostupna < s_obema:
-                break
-            if len(filler) > 500:
-                self.fail("nepodařilo se sestavit scénář pro test")
-
-        polozky = filler + [nadpis, posledni_radek]
-        stranky = _rozvrhni_stranky(polozky, scale)
-
-        self.assertNotIn(nadpis, stranky[0])
-        self.assertIn(nadpis, stranky[1])
-        self.assertIn(posledni_radek, stranky[1])
 
     def _zapis(self, sekce, dob=4, hodnota=4):
         return {"schema": 2, "takt": {"dob": dob, "hodnota": hodnota}, "tempo": None, "sekce": sekce}

@@ -30,15 +30,22 @@ celý dokument u husté písně jako Africa (26 řádků, akordy typu
 G#m7/D#m7) srážela scale na ~0.57, i když žádný jednotlivý řádek sám o
 sobě tak široký nebyl. Landscape dává asi 1,4× šířky obsahu navíc oproti
 portrétu, což tenhle problém řeší přímo (viz report u příslušného
-committu pro čísla) — proto teď stačí jedna mřížka pro celý dokument,
-žádné dělení podle scale. Stránkování (`_rozvrhni_stranky`) řeší JEN
-výšku — scale je pro celý dokument jeden a stejný na všech stránkách.
+committu pro čísla) — proto stačí jedna mřížka pro celý dokument, žádné
+dělení podle scale.
+
+BEZ STRÁNKOVÁNÍ — dokument je VŽDY jedna souvislá stránka: šířka zůstává
+pevná (A4 na šířku), ale VÝŠKA stránky se dopočítá podle obsahu (součet
+výšek všech řádků/mezer, viz `_vyska_obsahu`), než se vůbec založí
+Canvas. Scale se počítá jen ze ŠÍŘKY (`_najdi_scale`) — výška do něj
+nijak nevstupuje, je to až důsledek. Dřívější stránkování podle výšky
+(`_rozvrhni_stranky`) i s ním související hlídání osamoceného nadpisu
+sekce na konci stránky (`_seskup_pro_zalomeni`) odpadají úplně — není
+kam by se dalo zalomit.
 
 SEKCE BEZ ŘÁDKŮ (`radky: []`, jen nadpis — typicky rozdělením editoru,
 kdy se smaže úplně poslední takt) se v `_radky_s_metadaty` zploští na
 položku typu "nadpis" místo "radek": kreslí se jen jméno sekce, žádná
-mřížka. `_seskup_pro_zalomeni` hlídá, aby takový osamocený nadpis
-nezůstal na konci stránky odtržený od obsahu, co po něm hned následuje.
+mřížka.
 """
 
 import io
@@ -73,11 +80,14 @@ def _zaregistruj_fonty():
 # --- rozměry (body, A4 na šířku = 842 x 595) — svislé rozměry (výšky
 # řádků, velikosti písma apod.) kalibrované na referenční
 # africa_chord_chart.pdf (portrét), viz commit historie; na landscape se
-# mění jen šířka obsahu, ne tyhle ---
-SIRKA_STRANKY, VYSKA_STRANKY = landscape(A4)
+# mění jen šířka obsahu, ne tyhle. VÝŠKA stránky se (na rozdíl od šířky)
+# NEUKLÁDÁ jako konstanta — dokument je jedna souvislá stránka, jejíž
+# výška se dopočítá z obsahu (viz `_vyska_obsahu`, `vygeneruj_pdf`). ---
+SIRKA_STRANKY, _VYSKA_A4 = landscape(A4)
 OKRAJ = 30
 SIRKA_GUTTERU = 70  # levý sloupec se sekcí
 POCET_TAKTU_NA_RADEK = 4  # cíl: 4 takty VÝCHOZÍHO taktu na řádek, vždy
+VYSKA_HLAVICKY = 95  # od horního OKRAJE po y, kde začíná obsah (viz kresli_hlavicku)
 
 VYSKA_RADKU = 28  # výška řádku PŘI scale=1
 MEZERA_RADKU_STEJNA_SEKCE = 4  # mezi dvěma řádky TÉŽE sekce
@@ -128,9 +138,6 @@ REZERVA_MEZI_AKORDY = 5  # mezera připočtená k šířce textu při rozšiřov
 SIRKA_ZNACKY_ZACATEK_REPETICE = 14  # čára + 2 tečky '|:' PŘED prvním taktem repetice
 ODSTUP_ZNACKY_KONCE_OD_CARY = 8  # mezera mezi čárou ':|' a textem '×N'
 ODSTUP_ZA_ZNACKOU_KONCE = 6  # mezera ZA '×N', než začne obsah dalšího taktu
-
-Y_ZACATEK_OBSAHU = VYSKA_STRANKY - OKRAJ - 95  # y hned pod pravítkem hlavičky
-
 
 def _efektivni_takt(takt_v_radku, takt_vychozi):
     return takt_v_radku.get("takt") or takt_vychozi
@@ -348,82 +355,37 @@ def _ma_navic_nad_radkem(polozka):
     return _ma_badge(radek) or bool(_volty_v_radku(polozka["sekce"], polozka["od_g"], polozka["do_g"]))
 
 
-def _vyska_obsahu_stranky(polozky_stranky, scale):
-    """Součet výšek všech položek (+ mezer mezi nimi + rezervy pro badge/
-    voltu) stránky PŘI daném `scale` — pro rozhodnutí, jestli se
-    `polozky_stranky` ještě vejdou na výšku. Položka typu "nadpis"
-    (sekce bez řádků, viz _radky_s_metadaty) nemá badge/voltu a bere
-    stejnou výšku jako běžný řádek — jen se do ní nekreslí mřížka, viz
-    vygeneruj_pdf."""
+def _vyska_obsahu(polozky, scale):
+    """Součet výšek VŠECH položek dokumentu (+ mezer mezi nimi + rezervy
+    pro badge/voltu) PŘI daném `scale` — dokument je jedna souvislá
+    stránka (viz modul docstring), takže tohle je přímo výška obsahu,
+    podle které se dopočítá výška Canvasu. Mezera SE PŘIDÁVÁ jen MEZI
+    položkami, ne za úplně poslední — za ní už nic nenásleduje, není co
+    oddělovat (spodní okraj stránky řeší volající zvlášť). Položka typu
+    "nadpis" (sekce bez řádků, viz _radky_s_metadaty) nemá badge/voltu a
+    bere stejnou výšku jako běžný řádek — jen se do ní nekreslí mřížka,
+    viz vygeneruj_pdf."""
     vyska_radku = VYSKA_RADKU * scale
     mezera_stejna_sekce = MEZERA_RADKU_STEJNA_SEKCE * scale
     mezera_mezi_sekcemi = MEZERA_MEZI_SEKCEMI * scale
     mezera_pro_badge = MEZERA_PRO_BADGE * scale
     celkem = 0.0
-    for polozka in polozky_stranky:
+    posledni_index = len(polozky) - 1
+    for i, polozka in enumerate(polozky):
         if _ma_navic_nad_radkem(polozka):
             celkem += mezera_pro_badge
         celkem += vyska_radku
-        celkem += (
-            mezera_stejna_sekce if not polozka["je_posledni_v_sekci"] else mezera_mezi_sekcemi
-        )
+        if i < posledni_index:
+            celkem += (
+                mezera_stejna_sekce if not polozka["je_posledni_v_sekci"] else mezera_mezi_sekcemi
+            )
     return celkem
-
-
-def _seskup_pro_zalomeni(polozky):
-    """Seskupí položky tak, aby "nadpis" (sekce bez řádků) nikdy nezůstal
-    sám na konci stránky, oddělený zalomením od obsahu, co po něm hned
-    následuje — stránkuje se pak po CELÝCH skupinách (viz _rozvrhni_stranky),
-    ne po jednotlivých položkách. Řetěz víc "nadpisů" za sebou (víc
-    prázdných sekcí vedle sebe) se slepí dohromady s první SKUTEČNOU
-    položkou, co po nich přijde — jinak by mohl zůstat osamocený i
-    prostřední z nich. Nadpis úplně na konci dokumentu (nic už za ním
-    není) zůstane sám — nemá s čím se slepit, a "osamocený na konci
-    stránky" u posledního obsahu dokumentu není problém řešený tímhle
-    zadáním (viz modul docstring)."""
-    skupiny = []
-    i = 0
-    n = len(polozky)
-    while i < n:
-        skupina = [polozky[i]]
-        i += 1
-        while skupina[-1]["typ"] == "nadpis" and i < n:
-            skupina.append(polozky[i])
-            i += 1
-        skupiny.append(skupina)
-    return skupiny
-
-
-def _rozvrhni_stranky(polozky, scale):
-    """Rozdělí řádky na stránky JEN podle výšky — scale je teď společný
-    pro celý dokument (viz modul docstring), takže se tu (na rozdíl od
-    dřívější verze) neřeší nic jiného než kolik řádků se při něm vejde
-    nad sebe na jednu stránku. Dělí se po SKUPINÁCH (_seskup_pro_zalomeni),
-    ne po jednotlivých položkách, aby osamocený "nadpis" sekce bez řádků
-    nezůstal na konci stránky odtržený od obsahu za ním."""
-    vyska_dostupna = Y_ZACATEK_OBSAHU - OKRAJ
-    stranky = []
-    aktualni = []
-    for skupina in _seskup_pro_zalomeni(polozky):
-        kandidat = aktualni + skupina
-        vyska = _vyska_obsahu_stranky(kandidat, scale)
-        if aktualni and vyska > vyska_dostupna:
-            stranky.append(aktualni)
-            aktualni = skupina
-        else:
-            aktualni = kandidat
-    if aktualni:
-        stranky.append(aktualni)
-    return stranky
 
 
 def vygeneruj_pdf(pisen, akordy):
     """`pisen` — instance Pisen (název, interpret). `akordy` — JSON prošlý
     přes AkordovyZapisSerializer (schéma 2). Vrací bytes hotového PDF."""
     _zaregistruj_fonty()
-
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=(SIRKA_STRANKY, VYSKA_STRANKY))
 
     takt_vychozi = akordy["takt"]
     dob_vychozi = takt_vychozi["dob"]
@@ -434,9 +396,31 @@ def vygeneruj_pdf(pisen, akordy):
     sirka_obsahu = SIRKA_STRANKY - 2 * OKRAJ - SIRKA_GUTTERU
     x0 = OKRAJ + SIRKA_GUTTERU
 
+    polozky = _radky_s_metadaty(vsechny_sekce)
+
+    # Výška stránky je funkcí OBSAHU (žádné stránkování, viz modul
+    # docstring) — musí se spočítat PŘED založením Canvasu (pagesize se u
+    # reportlab nedá změnit po vytvoření). Scale (ze šířky, viz
+    # _najdi_scale) na výšku nijak nezávisí — počítá se tu jen proto, že
+    # `_vyska_obsahu` ho potřebuje (větší scale = vyšší řádky).
+    if not polozky:
+        scale = 1.0
+        vyska_stranky = _VYSKA_A4
+        polozky_radek = []
+    else:
+        # Mřížka (scale i šířky pozic) je SPOLEČNÁ pro CELÝ dokument —
+        # počítá se tu JEDNOU. Položky typu "nadpis" (sekce bez řádků) do
+        # mřížky nepřispívají — nemají žádné buňky.
+        polozky_radek = [p for p in polozky if p["typ"] == "radek"]
+        scale = _najdi_scale(polozky_radek, sirka_obsahu, dob_vychozi)
+        vyska_stranky = 2 * OKRAJ + VYSKA_HLAVICKY + _vyska_obsahu(polozky, scale)
+
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=(SIRKA_STRANKY, vyska_stranky))
+
     def kresli_hlavicku():
         # Hlavička se NEŠKÁLUJE.
-        y_baseline = VYSKA_STRANKY - OKRAJ - 28
+        y_baseline = vyska_stranky - OKRAJ - 28
         c.setFont(FONT_POPISEK_TUCNE, VELIKOST_TITULKU)
         c.setFillColorRGB(*BARVA_CERNA)
         c.drawString(OKRAJ, y_baseline, pisen.nazev.upper())
@@ -459,9 +443,7 @@ def vygeneruj_pdf(pisen, akordy):
         c.setStrokeColorRGB(*BARVA_CERNA)
         c.setLineWidth(TLOUSTKA_PRAVITKA)
         c.line(OKRAJ, y_pravitko, SIRKA_STRANKY - OKRAJ, y_pravitko)
-        return VYSKA_STRANKY - OKRAJ - 95
-
-    polozky = _radky_s_metadaty(vsechny_sekce)
+        return vyska_stranky - OKRAJ - VYSKA_HLAVICKY
 
     if not polozky:
         kresli_hlavicku()
@@ -469,14 +451,7 @@ def vygeneruj_pdf(pisen, akordy):
         c.save()
         return buffer.getvalue()
 
-    # Mřížka (scale i šířky pozic) je SPOLEČNÁ pro CELÝ dokument, ne jen
-    # jednu stránku (viz modul docstring) — počítá se tu JEDNOU, mimo
-    # smyčku přes stránky, a použije se beze změny na každé z nich.
-    # Položky typu "nadpis" (sekce bez řádků) do mřížky nepřispívají —
-    # nemají žádné buňky.
-    polozky_radek = [p for p in polozky if p["typ"] == "radek"]
     radky_dokumentu = [p["radek"] for p in polozky_radek]
-    scale = _najdi_scale(polozky_radek, sirka_obsahu, dob_vychozi)
     sirka_doby_zakladni = (sirka_obsahu / (POCET_TAKTU_NA_RADEK * dob_vychozi)) * scale
     velikost_akordu = max(VELIKOST_AKORDU * scale, TECHNICKY_MIN_VELIKOST)
     velikost_sekce = max(VELIKOST_SEKCE * scale, TECHNICKY_MIN_VELIKOST)
@@ -496,45 +471,18 @@ def vygeneruj_pdf(pisen, akordy):
     mezery_vlevo, mezery_vpravo = _mezery_znacek_repetice(polozky_radek, velikost_repetice_n)
     sirky_pozic = _rozsir_sirky_pro_znacky(sirky_pozic, mezery_vlevo, mezery_vpravo)
 
-    for polozky_stranky in _rozvrhni_stranky(polozky, scale):
-        y = kresli_hlavicku()
+    y = kresli_hlavicku()
 
-        for polozka in polozky_stranky:
-            sekce = polozka["sekce"]
+    for polozka in polozky:
+        sekce = polozka["sekce"]
 
-            if polozka["typ"] == "nadpis":
-                # Sekce bez řádků: jen nadpis na vlastním řádku, stejný
-                # styl jako nadpis normální sekce (viz níž) — žádná
-                # mřížka, žádné takty, žádné repetice (schéma repetice na
-                # sekci bez taktů nepřipouští).
-                y_radku = y
-                if sekce.get("nazev"):
-                    nazev_velky = sekce["nazev"].upper()
-                    velikost_nazvu = _velikost_pro_text(
-                        nazev_velky,
-                        FONT_POPISEK_TUCNE,
-                        SIRKA_GUTTERU - 6,
-                        velikost_sekce,
-                        TECHNICKY_MIN_VELIKOST,
-                    )
-                    c.setFont(FONT_POPISEK_TUCNE, velikost_nazvu)
-                    c.setFillColorRGB(*BARVA_SEDA)
-                    c.drawString(OKRAJ, y_radku - sekce_offset, nazev_velky)
-
-                y -= vyska_radku + (
-                    mezera_stejna_sekce if not polozka["je_posledni_v_sekci"] else mezera_mezi_sekcemi
-                )
-                continue
-
-            radek = polozka["radek"]
-            od_g, do_g = polozka["od_g"], polozka["do_g"]
-            volty_radku = _volty_v_radku(sekce, od_g, do_g)
-
-            navic_pred_radkem = mezera_pro_badge if (_ma_badge(radek) or volty_radku) else 0
-            y -= navic_pred_radkem
+        if polozka["typ"] == "nadpis":
+            # Sekce bez řádků: jen nadpis na vlastním řádku, stejný
+            # styl jako nadpis normální sekce (viz níž) — žádná
+            # mřížka, žádné takty, žádné repetice (schéma repetice na
+            # sekci bez taktů nepřipouští).
             y_radku = y
-
-            if polozka["je_prvni_v_sekci"] and sekce.get("nazev"):
+            if sekce.get("nazev"):
                 nazev_velky = sekce["nazev"].upper()
                 velikost_nazvu = _velikost_pro_text(
                     nazev_velky,
@@ -547,154 +495,179 @@ def vygeneruj_pdf(pisen, akordy):
                 c.setFillColorRGB(*BARVA_SEDA)
                 c.drawString(OKRAJ, y_radku - sekce_offset, nazev_velky)
 
-            # --- takty a buňky ---
-            c.setStrokeColorRGB(*BARVA_CERNA)
-            c.setLineWidth(TLOUSTKA_CARY)
-            x = x0
-            c.line(x, y_radku - vyska_radku, x, y_radku)
-            pozice = 0
-            for takt_v_radku in radek["takty"]:
-                efektivni = _efektivni_takt(takt_v_radku, takt_vychozi)
-                bunky = takt_v_radku["bunky"]
-                sirky_dob = sirky_pozic[pozice : pozice + len(bunky)]
-                sirka_taktu = sum(sirky_dob)
-
-                if takt_v_radku.get("takt"):
-                    c.setFont(FONT_POPISEK, velikost_badge)
-                    c.setFillColorRGB(*BARVA_SEDA)
-                    c.drawString(
-                        x + 2,
-                        y_radku + badge_nad_radkem,
-                        f"{efektivni['dob']}/{efektivni['hodnota']}",
-                    )
-
-                x_doba = x
-                for i_doba, (text, sirka_teto_doby) in enumerate(zip(bunky, sirky_dob)):
-                    # Pozice s rezervou pro značku repetice (viz
-                    # _mezery_znacek_repetice) nesmí akord/tečku centrovat
-                    # do CELÉ (rozšířené) šířky — to by posunulo obsah
-                    # do prostoru značky. Centruje se jen v PŮVODNÍ
-                    # ("přirozené") šířce, rezerva zůstává čistá na svojí
-                    # straně (vlevo pro začátek repetice, vpravo pro konec).
-                    p_abs = pozice + i_doba
-                    posun_vlevo = mezery_vlevo.get(p_abs, 0.0)
-                    posun_vpravo = mezery_vpravo.get(p_abs, 0.0)
-                    prirozena_sirka = sirka_teto_doby - posun_vlevo - posun_vpravo
-                    x_stred = x_doba + posun_vlevo + prirozena_sirka / 2
-                    if text:
-                        c.setFont(FONT_AKORD, velikost_akordu)
-                        c.setFillColorRGB(*BARVA_CERNA)
-                        c.drawCentredString(x_stred, y_radku - chord_offset, text)
-                    else:
-                        # Tečka VŽDY — žádné potlačování (viz zadání bod 4).
-                        # Díky rozšiřování dob (bod 5) do ní teď nemá jak
-                        # zasáhnout přetékající akord odjinud.
-                        c.setFillColorRGB(*BARVA_SEDA)
-                        c.circle(
-                            x_stred,
-                            y_radku - chord_offset + velikost_akordu * 0.32,
-                            max(1.6 * scale, 0.6),
-                            stroke=0,
-                            fill=1,
-                        )
-                    x_doba += sirka_teto_doby
-
-                x += sirka_taktu
-                pozice += len(bunky)
-                c.line(x, y_radku - vyska_radku, x, y_radku)
-
-            # --- repetice sekce, které zasahují do TOHOTO řádku ---
-            for rep in sekce.get("repetice", []):
-                seg_od = max(rep["od_taktu"], od_g)
-                seg_do = min(rep["do_taktu"], do_g - 1)
-                if seg_od > seg_do:
-                    continue
-                kresli_konec = rep["do_taktu"] < do_g
-                mezera_konce = 0.0
-                if kresli_konec:
-                    do_v_radku = seg_do - od_g
-                    p_konec = (
-                        _pozice_zacatku_taktu(radek, do_v_radku)
-                        + len(radek["takty"][do_v_radku]["bunky"])
-                        - 1
-                    )
-                    mezera_konce = mezery_vpravo.get(p_konec, 0.0)
-                _kresli_repetici(
-                    c,
-                    x0=x0,
-                    y_radku=y_radku,
-                    vyska_radku=vyska_radku,
-                    sirky_pozic=sirky_pozic,
-                    radek=radek,
-                    od_v_radku=seg_od - od_g,
-                    do_v_radku=seg_do - od_g,
-                    kresli_zacatek=rep["od_taktu"] >= od_g,
-                    kresli_konec=kresli_konec,
-                    krat=rep["krat"],
-                    velikost_repetice_n=velikost_repetice_n,
-                    chord_offset=chord_offset,
-                    mezera_konce=mezera_konce,
-                )
-
-            # --- volty, které zasahují do TOHOTO řádku ---
-            for volta in volty_radku:
-                seg_od = max(volta["od_taktu"], od_g)
-                seg_do = min(volta["do_taktu"], do_g - 1)
-                volta_od_v_radku = seg_od - od_g
-                volta_do_v_radku = seg_do - od_g
-                # Volta smí (stejně jako repetice) přes víc řádků JEDNÉ
-                # sekce — kresli_zacatek/kresli_konec (stejný vzor jako u
-                # _kresli_repetici) řeší, jestli SKUTEČNÝ začátek/konec
-                # volty padne zrovna do TOHOTO řádku, nebo jestli je to
-                # jen pokračování/předěl přes zalomení řádku (tam se noha
-                # závorky nekreslí, jen vodorovná čára pokračuje dál).
-                kresli_zacatek = volta["od_taktu"] >= od_g
-                kresli_konec = volta["do_taktu"] < do_g
-                # Volta se může na svém začátku/konci potkat se sdílenou
-                # pozicí, co má REZERVU pro značku repetice (viz
-                # _mezery_znacek_repetice) — když volta končí přesně tam,
-                # kde končí i repetice (běžný případ, viz zadání), musí
-                # závorka skončit PŘED rezervou pro '×N', ne za ní (jinak
-                # by vyjela až za konec repetice/přes okraj stránky).
-                # Platí to jen tam, kde se skutečně kreslí odpovídající
-                # konec — na pokračovací řádek by se rezerva odjinud
-                # nesouvisejícím způsobem promítla do vodorovné čáry.
-                posun_zacatku = 0.0
-                if kresli_zacatek:
-                    p_zacatek_volty = _pozice_zacatku_taktu(radek, volta_od_v_radku)
-                    posun_zacatku = mezery_vlevo.get(p_zacatek_volty, 0.0)
-                posun_konce = 0.0
-                if kresli_konec:
-                    p_konec_volty = (
-                        _pozice_zacatku_taktu(radek, volta_do_v_radku)
-                        + len(radek["takty"][volta_do_v_radku]["bunky"])
-                        - 1
-                    )
-                    posun_konce = mezery_vpravo.get(p_konec_volty, 0.0)
-                _kresli_voltu(
-                    c,
-                    x0=x0,
-                    y_radku=y_radku,
-                    sirky_pozic=sirky_pozic,
-                    radek=radek,
-                    od_v_radku=volta_od_v_radku,
-                    do_v_radku=volta_do_v_radku,
-                    kresli_zacatek=kresli_zacatek,
-                    kresli_konec=kresli_konec,
-                    posun_zacatku=posun_zacatku,
-                    posun_konce=posun_konce,
-                    cislo=volta["cislo"],
-                    velikost_cisla=velikost_volta_cislo,
-                    volta_cara_offset=volta_cara_offset,
-                    volta_noha=volta_noha,
-                )
-
             y -= vyska_radku + (
                 mezera_stejna_sekce if not polozka["je_posledni_v_sekci"] else mezera_mezi_sekcemi
             )
+            continue
 
-        c.showPage()
+        radek = polozka["radek"]
+        od_g, do_g = polozka["od_g"], polozka["do_g"]
+        volty_radku = _volty_v_radku(sekce, od_g, do_g)
 
+        navic_pred_radkem = mezera_pro_badge if (_ma_badge(radek) or volty_radku) else 0
+        y -= navic_pred_radkem
+        y_radku = y
+
+        if polozka["je_prvni_v_sekci"] and sekce.get("nazev"):
+            nazev_velky = sekce["nazev"].upper()
+            velikost_nazvu = _velikost_pro_text(
+                nazev_velky,
+                FONT_POPISEK_TUCNE,
+                SIRKA_GUTTERU - 6,
+                velikost_sekce,
+                TECHNICKY_MIN_VELIKOST,
+            )
+            c.setFont(FONT_POPISEK_TUCNE, velikost_nazvu)
+            c.setFillColorRGB(*BARVA_SEDA)
+            c.drawString(OKRAJ, y_radku - sekce_offset, nazev_velky)
+
+        # --- takty a buňky ---
+        c.setStrokeColorRGB(*BARVA_CERNA)
+        c.setLineWidth(TLOUSTKA_CARY)
+        x = x0
+        c.line(x, y_radku - vyska_radku, x, y_radku)
+        pozice = 0
+        for takt_v_radku in radek["takty"]:
+            efektivni = _efektivni_takt(takt_v_radku, takt_vychozi)
+            bunky = takt_v_radku["bunky"]
+            sirky_dob = sirky_pozic[pozice : pozice + len(bunky)]
+            sirka_taktu = sum(sirky_dob)
+
+            if takt_v_radku.get("takt"):
+                c.setFont(FONT_POPISEK, velikost_badge)
+                c.setFillColorRGB(*BARVA_SEDA)
+                c.drawString(
+                    x + 2,
+                    y_radku + badge_nad_radkem,
+                    f"{efektivni['dob']}/{efektivni['hodnota']}",
+                )
+
+            x_doba = x
+            for i_doba, (text, sirka_teto_doby) in enumerate(zip(bunky, sirky_dob)):
+                # Pozice s rezervou pro značku repetice (viz
+                # _mezery_znacek_repetice) nesmí akord/tečku centrovat
+                # do CELÉ (rozšířené) šířky — to by posunulo obsah
+                # do prostoru značky. Centruje se jen v PŮVODNÍ
+                # ("přirozené") šířce, rezerva zůstává čistá na svojí
+                # straně (vlevo pro začátek repetice, vpravo pro konec).
+                p_abs = pozice + i_doba
+                posun_vlevo = mezery_vlevo.get(p_abs, 0.0)
+                posun_vpravo = mezery_vpravo.get(p_abs, 0.0)
+                prirozena_sirka = sirka_teto_doby - posun_vlevo - posun_vpravo
+                x_stred = x_doba + posun_vlevo + prirozena_sirka / 2
+                if text:
+                    c.setFont(FONT_AKORD, velikost_akordu)
+                    c.setFillColorRGB(*BARVA_CERNA)
+                    c.drawCentredString(x_stred, y_radku - chord_offset, text)
+                else:
+                    # Tečka VŽDY — žádné potlačování (viz zadání bod 4).
+                    # Díky rozšiřování dob (bod 5) do ní teď nemá jak
+                    # zasáhnout přetékající akord odjinud.
+                    c.setFillColorRGB(*BARVA_SEDA)
+                    c.circle(
+                        x_stred,
+                        y_radku - chord_offset + velikost_akordu * 0.32,
+                        max(1.6 * scale, 0.6),
+                        stroke=0,
+                        fill=1,
+                    )
+                x_doba += sirka_teto_doby
+
+            x += sirka_taktu
+            pozice += len(bunky)
+            c.line(x, y_radku - vyska_radku, x, y_radku)
+
+        # --- repetice sekce, které zasahují do TOHOTO řádku ---
+        for rep in sekce.get("repetice", []):
+            seg_od = max(rep["od_taktu"], od_g)
+            seg_do = min(rep["do_taktu"], do_g - 1)
+            if seg_od > seg_do:
+                continue
+            kresli_konec = rep["do_taktu"] < do_g
+            mezera_konce = 0.0
+            if kresli_konec:
+                do_v_radku = seg_do - od_g
+                p_konec = (
+                    _pozice_zacatku_taktu(radek, do_v_radku)
+                    + len(radek["takty"][do_v_radku]["bunky"])
+                    - 1
+                )
+                mezera_konce = mezery_vpravo.get(p_konec, 0.0)
+            _kresli_repetici(
+                c,
+                x0=x0,
+                y_radku=y_radku,
+                vyska_radku=vyska_radku,
+                sirky_pozic=sirky_pozic,
+                radek=radek,
+                od_v_radku=seg_od - od_g,
+                do_v_radku=seg_do - od_g,
+                kresli_zacatek=rep["od_taktu"] >= od_g,
+                kresli_konec=kresli_konec,
+                krat=rep["krat"],
+                velikost_repetice_n=velikost_repetice_n,
+                chord_offset=chord_offset,
+                mezera_konce=mezera_konce,
+            )
+
+        # --- volty, které zasahují do TOHOTO řádku ---
+        for volta in volty_radku:
+            seg_od = max(volta["od_taktu"], od_g)
+            seg_do = min(volta["do_taktu"], do_g - 1)
+            volta_od_v_radku = seg_od - od_g
+            volta_do_v_radku = seg_do - od_g
+            # Volta smí (stejně jako repetice) přes víc řádků JEDNÉ
+            # sekce — kresli_zacatek/kresli_konec (stejný vzor jako u
+            # _kresli_repetici) řeší, jestli SKUTEČNÝ začátek/konec
+            # volty padne zrovna do TOHOTO řádku, nebo jestli je to
+            # jen pokračování/předěl přes zalomení řádku (tam se noha
+            # závorky nekreslí, jen vodorovná čára pokračuje dál).
+            kresli_zacatek = volta["od_taktu"] >= od_g
+            kresli_konec = volta["do_taktu"] < do_g
+            # Volta se může na svém začátku/konci potkat se sdílenou
+            # pozicí, co má REZERVU pro značku repetice (viz
+            # _mezery_znacek_repetice) — když volta končí přesně tam,
+            # kde končí i repetice (běžný případ, viz zadání), musí
+            # závorka skončit PŘED rezervou pro '×N', ne za ní (jinak
+            # by vyjela až za konec repetice/přes okraj stránky).
+            # Platí to jen tam, kde se skutečně kreslí odpovídající
+            # konec — na pokračovací řádek by se rezerva odjinud
+            # nesouvisejícím způsobem promítla do vodorovné čáry.
+            posun_zacatku = 0.0
+            if kresli_zacatek:
+                p_zacatek_volty = _pozice_zacatku_taktu(radek, volta_od_v_radku)
+                posun_zacatku = mezery_vlevo.get(p_zacatek_volty, 0.0)
+            posun_konce = 0.0
+            if kresli_konec:
+                p_konec_volty = (
+                    _pozice_zacatku_taktu(radek, volta_do_v_radku)
+                    + len(radek["takty"][volta_do_v_radku]["bunky"])
+                    - 1
+                )
+                posun_konce = mezery_vpravo.get(p_konec_volty, 0.0)
+            _kresli_voltu(
+                c,
+                x0=x0,
+                y_radku=y_radku,
+                sirky_pozic=sirky_pozic,
+                radek=radek,
+                od_v_radku=volta_od_v_radku,
+                do_v_radku=volta_do_v_radku,
+                kresli_zacatek=kresli_zacatek,
+                kresli_konec=kresli_konec,
+                posun_zacatku=posun_zacatku,
+                posun_konce=posun_konce,
+                cislo=volta["cislo"],
+                velikost_cisla=velikost_volta_cislo,
+                volta_cara_offset=volta_cara_offset,
+                volta_noha=volta_noha,
+            )
+
+        y -= vyska_radku + (
+            mezera_stejna_sekce if not polozka["je_posledni_v_sekci"] else mezera_mezi_sekcemi
+        )
+
+    c.showPage()
     c.save()
     return buffer.getvalue()
 
