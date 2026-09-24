@@ -1,13 +1,97 @@
-/* .akordy-editor-page sám NESMÍ mít žádné asymetrické padding (viz
-   komentář u AkordovyMrizka.css .akordy-mrizka-vyskok) — mřížka uvnitř
-   "vyskakuje" na celou šířku OKNA přes záporné okraje `50% rodiče − 50vw`,
-   což funguje jen když je celý řetězec rodičů až po .app-main symetricky
-   centrovaný. Odsazení zleva pro panel akcí (PC_zpevnik_akordy_ovladani.md
-   bod 6, viz AkordovyMrizka.css .akordy-panel-akci) proto žije ZVLÁŠŤ na
-   hlavičce a patě (ty zůstávají v běžném sloupci .app-main) — mřížka si
-   svoje odsazení počítá sama, viz .akordy-mrizka-obsah. */
+/* Redesign editoru (docs/zadani_redesign_akordovy_zapis.md) — VLASTNÍ,
+   škrobenější paleta/typografie jen pro tuhle stránku, proto tokeny
+   nežijí v tokens.css (:root, sdílené s celou appkou), ale tady, na
+   .akordy-editor-page — potomci na ně sahají přes var(), zbytek appky je
+   vůbec nevidí. Jména tokenů jsou schválně stejná jako v zadání (--bg,
+   --ink, ...), ne s prefixem — je to bezpečné: custom properties jsou
+   svázané s DOM podstromem, ne globální, takže i shodné jméno nikde jinde
+   nic nepřepíše. */
 .akordy-editor-page {
-  padding-bottom: var(--space-8);
+  --bg: #efe9db;
+  --paper: #faf7ef;
+  --ink: #1b1a17;
+  --hair: #ddd5c3;
+  --hair-2: #c9c1ae;
+  --dot: #cfc7b5;
+  --muted: #6b665c;
+  --disabled: #a39d90;
+  --accent: #a4262c;
+  --teal: #1f5c55;
+  --white: #ffffff;
+
+  --font-ar-display: 'Oswald', 'Arial Narrow', sans-serif;
+  --font-ar-body: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-ar-mono: 'IBM Plex Mono', 'Courier New', monospace;
+
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ar-body);
+  /* .akordy-editor-page sám NESMÍ mít žádné ASYMETRICKÉ padding/border
+     (viz komentář u AkordovyMrizka.css .akordy-mrizka-vyskok) — mřížka
+     uvnitř "vyskakuje" na celou šířku OKNA přes záporné okraje
+     `50% rodiče − 50vw`, což funguje jen když je celý řetězec rodičů až
+     po .app-main symetricky centrovaný. Levý pruh (border-left) je jediná
+     výjimka ze zadání — 4px asymetrie je zanedbatelná (řádově menší než
+     posun od scrollbaru, který breakout matematika stejně nemá jak
+     obejít, viz tamní komentář), proto se tu neřeší zvlášť. */
+  border-left: 4px solid var(--accent);
+  padding: 28px 56px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.akordy-editor-page :focus-visible {
+  outline: 1px solid var(--ink);
+  outline-offset: 1px;
+}
+
+.akordy-editor-hlavicka-radek {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.akordy-editor-zpet-nadpis {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.akordy-zpet-odkaz {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-ar-body);
+  font-size: 12px;
+  color: var(--muted);
+  text-decoration: none;
+  width: fit-content;
+}
+.akordy-zpet-odkaz:hover {
+  color: var(--accent);
+}
+
+.akordy-editor-nadpis-radek {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.akordy-editor-nazev {
+  margin: 0;
+  font-family: var(--font-ar-display);
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: 0.01em;
+}
+
+.akordy-editor-meta {
+  font-size: 13px;
+  color: var(--muted);
 }
 
 /* Panel je fixní a svisle na střed OKNA, takže bez scrollování může

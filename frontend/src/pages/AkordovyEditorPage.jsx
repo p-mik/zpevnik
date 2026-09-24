@@ -2,11 +2,24 @@ import { useParams, Link } from 'react-router-dom'
 import { useApiResource } from '../hooks/useApiResource'
 import { useAkordovyEditor } from '../akordy/useAkordovyEditor'
 import { useVarovaniPriOdchodu } from '../pdf/useAnotace'
+import { IkonaZpet } from '../akordy/AkordyIkony'
 import AkordovyHlavicka from '../akordy/AkordovyHlavicka'
 import AkordovyMrizka from '../akordy/AkordovyMrizka'
 import LoadingState from '../components/LoadingState'
 import ErrorState from '../components/ErrorState'
 import '../components/ui.css'
+// Redesign editoru (docs/zadani_redesign_akordovy_zapis.md) potřebuje IBM
+// Plex Sans/Mono navíc k fontům, co appka jinak sama-hostuje (Oswald/Work
+// Sans/JetBrains Mono, viz main.jsx) — schválně natažené TADY, ne v
+// main.jsx, ať je platí jen tahle stránka, ne celá appka.
+import '@fontsource/ibm-plex-sans/latin-400.css'
+import '@fontsource/ibm-plex-sans/latin-ext-400.css'
+import '@fontsource/ibm-plex-sans/latin-500.css'
+import '@fontsource/ibm-plex-sans/latin-ext-500.css'
+import '@fontsource/ibm-plex-sans/latin-600.css'
+import '@fontsource/ibm-plex-sans/latin-ext-600.css'
+import '@fontsource/ibm-plex-mono/latin-500.css'
+import '@fontsource/ibm-plex-mono/latin-ext-500.css'
 import './AkordovyEditorPage.css'
 
 // Editor akordového zápisu (viz PC_zpevnik_akordovy_zapis.md, fáze 2).
@@ -55,22 +68,28 @@ export default function AkordovyEditorPage() {
           jinak by to rozbilo mřížčin výpočet "vyskoč na celou šířku okna"
           (ten počítá se symetrickým rodičem, stejně jako .app-main). */}
       <div className="akordy-editor-hlavicka">
-        <Link to={verze.pisen ? `/pisne/${verze.pisen}` : '/pisne'} className="breadcrumb-back">
-          ← Zpět na píseň
-        </Link>
+        <div className="akordy-editor-hlavicka-radek">
+          <div className="akordy-editor-zpet-nadpis">
+            <Link to={verze.pisen ? `/pisne/${verze.pisen}` : '/pisne'} className="akordy-zpet-odkaz">
+              <IkonaZpet size={14} />
+              Zpět na píseň
+            </Link>
+            <div className="akordy-editor-nadpis-radek">
+              <h1 className="akordy-editor-nazev">{song ? song.nazev : 'Akordový zápis'}</h1>
+              <span className="akordy-editor-meta">
+                Akordový zápis{verze.cislo ? ` · Verze ${verze.cislo}` : ''}
+              </span>
+            </div>
+          </div>
 
-        <h1 className="section-heading">
-          Akordový zápis{song ? ` — ${song.nazev}` : ''}
-          {verze.cislo ? ` · Verze ${verze.cislo}` : ''}
-        </h1>
-
-        <AkordovyHlavicka
-          takt={editor.zapis.takt}
-          tempo={editor.zapis.tempo}
-          sekce={editor.zapis.sekce}
-          onZmenTakt={editor.nastavTakt}
-          onZmenTempo={editor.nastavTempo}
-        />
+          <AkordovyHlavicka
+            takt={editor.zapis.takt}
+            tempo={editor.zapis.tempo}
+            sekce={editor.zapis.sekce}
+            onZmenTakt={editor.nastavTakt}
+            onZmenTempo={editor.nastavTempo}
+          />
+        </div>
       </div>
 
       <AkordovyMrizka

@@ -1,49 +1,102 @@
+/* Redesign (docs/zadani_redesign_akordovy_zapis.md bod 1) — žádný orámovaný
+   blok, jen dva pole inline v pravé části hlavičky stránky (viz
+   AkordovyEditorPage.css .akordy-editor-hlavicka-radek). Tokeny (--ink,
+   --paper, --muted, --hair-2, ...) žijí na .akordy-editor-page, odsud se
+   jen dědí. */
 .akordy-hlavicka {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-6);
-  padding: var(--space-4);
-  border: var(--border-w) solid var(--app-ink);
-  margin-bottom: var(--space-5);
+  align-items: center;
+  gap: 20px;
 }
 
 .akordy-hlavicka-pole {
   display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  align-items: center;
+  gap: 10px;
 }
 
+.akordy-hlavicka-popisek {
+  font-family: var(--font-ar-body);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+/* Segmentový ovladač: JEDEN rámeček kolem celé skupiny, tlačítka uvnitř
+   oddělená jen svislou linkou (border-right), ne každé svým rámečkem. */
 .akordy-takt-presety {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  border: 1px solid var(--ink);
+  background: var(--paper);
 }
 
 .akordy-takt-preset {
-  font-family: var(--font-display);
-  font-weight: 600;
-  font-size: var(--text-sm);
-  padding: var(--space-2) var(--space-4);
-  min-height: var(--touch-min);
-  border: var(--border-w) solid var(--app-ink);
+  font-family: var(--font-ar-display);
+  font-size: 13px;
+  height: 30px;
+  min-width: 40px;
+  padding: 0 10px;
+  border: none;
+  border-right: 1px solid var(--ink);
   background: transparent;
-  color: var(--app-ink);
+  color: var(--ink);
   cursor: pointer;
 }
+.akordy-takt-preset:last-child {
+  border-right: none;
+}
+.akordy-takt-preset:hover:not(.akordy-takt-preset-aktivni) {
+  background: var(--white);
+}
 .akordy-takt-preset-aktivni {
-  background: var(--app-ink);
-  color: var(--app-paper);
+  background: var(--ink);
+  color: var(--bg);
 }
 
 .akordy-takt-vlastni {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 8px;
+  margin-left: 10px;
 }
-.akordy-takt-vlastni .field-input {
-  width: 4.5em;
+
+.akordy-hlavicka-input {
+  width: 3.5em;
+  height: 30px;
+  box-sizing: border-box;
+  border: 1px solid var(--ink);
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-ar-display);
+  font-size: 14px;
+  text-align: center;
+}
+.akordy-hlavicka-input::placeholder {
+  color: var(--disabled);
+}
+.akordy-hlavicka-input:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: 1px;
 }
 
 .akordy-tempo-input {
-  width: 8em;
+  width: 56px;
+}
+
+.akordy-hlavicka-pouzit {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-ar-display);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.akordy-hlavicka-pouzit:hover {
+  background: var(--white);
 }

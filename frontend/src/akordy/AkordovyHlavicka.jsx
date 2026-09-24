@@ -2,10 +2,13 @@ import { useState } from 'react'
 import { TAKTY_PRESETY, zpusobiZtratuZmenaVychozihoTaktu } from './akordovyModel'
 import './AkordovyHlavicka.css'
 
-// Takt a tempo. Změna VÝCHOZÍHO taktu mění jen takty BEZ vlastního přepisu
-// (viz zadání bod 2) — počet taktů se neměnní, takže repetice zůstávají
-// beze změny. Potvrzovací dialog se ptá JEN když by zúžení počtu dob
-// zahodilo neprázdný obsah (buňky se jinak jen doplní/ořežou zprava).
+// Takt a tempo — vykresluje se INLINE v pravé části hlavičky stránky (viz
+// AkordovyEditorPage), ne jako vlastní orámovaný blok (redesign, docs/
+// zadani_redesign_akordovy_zapis.md bod 1). Změna VÝCHOZÍHO taktu mění jen
+// takty BEZ vlastního přepisu (viz PC_zpevnik_akordovy_zapis_upravy.md bod 2)
+// — počet taktů se neměnní, takže repetice zůstávají beze změny.
+// Potvrzovací dialog se ptá JEN když by zúžení počtu dob zahodilo neprázdný
+// obsah (buňky se jinak jen doplní/ořežou zprava).
 export default function AkordovyHlavicka({ takt, tempo, sekce, onZmenTakt, onZmenTempo }) {
   const [vlastniOtevreny, setVlastniOtevreny] = useState(false)
   const [vlastniDob, setVlastniDob] = useState(String(takt.dob))
@@ -36,7 +39,7 @@ export default function AkordovyHlavicka({ takt, tempo, sekce, onZmenTakt, onZme
   return (
     <div className="akordy-hlavicka">
       <div className="akordy-hlavicka-pole">
-        <span className="field-label">Takt</span>
+        <span className="akordy-hlavicka-popisek">Takt</span>
         <div className="akordy-takt-presety" role="group" aria-label="Takt">
           {TAKTY_PRESETY.map((p) => (
             <button
@@ -55,15 +58,17 @@ export default function AkordovyHlavicka({ takt, tempo, sekce, onZmenTakt, onZme
             type="button"
             className={`akordy-takt-preset${vlastniOtevreny ? ' akordy-takt-preset-aktivni' : ''}`}
             onClick={() => setVlastniOtevreny((v) => !v)}
+            aria-label="Vlastní takt"
+            title="Vlastní takt"
           >
-            Vlastní…
+            …
           </button>
         </div>
         {vlastniOtevreny && (
           <div className="akordy-takt-vlastni">
             <input
               type="number"
-              className="field-input"
+              className="akordy-hlavicka-input"
               min={1}
               max={32}
               value={vlastniDob}
@@ -73,14 +78,14 @@ export default function AkordovyHlavicka({ takt, tempo, sekce, onZmenTakt, onZme
             <span>/</span>
             <input
               type="number"
-              className="field-input"
+              className="akordy-hlavicka-input"
               min={1}
               max={32}
               value={vlastniHodnota}
               onChange={(e) => setVlastniHodnota(e.target.value)}
               aria-label="Hodnota doby"
             />
-            <button type="button" className="btn btn-secondary" onClick={potvrdVlastni}>
+            <button type="button" className="akordy-hlavicka-pouzit" onClick={potvrdVlastni}>
               Použít
             </button>
           </div>
@@ -88,17 +93,17 @@ export default function AkordovyHlavicka({ takt, tempo, sekce, onZmenTakt, onZme
       </div>
 
       <div className="akordy-hlavicka-pole">
-        <label className="field-label" htmlFor="akordy-tempo">
-          Tempo (BPM)
+        <label className="akordy-hlavicka-popisek" htmlFor="akordy-tempo">
+          BPM
         </label>
         <input
           id="akordy-tempo"
           type="number"
-          className="field-input akordy-tempo-input"
+          className="akordy-hlavicka-input akordy-tempo-input"
           min={20}
           max={400}
           value={tempo ?? ''}
-          placeholder="volitelné"
+          placeholder="—"
           onChange={(e) => onZmenTempo(e.target.value === '' ? null : Number(e.target.value))}
         />
       </div>
