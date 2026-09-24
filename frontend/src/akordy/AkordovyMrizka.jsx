@@ -387,6 +387,55 @@ export default function AkordovyMrizka({
 
   return (
     <>
+      {/* Panel akcí (PC_zpevnik_akordy_ovladani.md bod 6) — fixní u levého
+          okraje OKNA (ne sekce/stránky), svisle na střed, drží se při
+          scrollování. Akce závislé na výběru (Repetice/Volta/Změnit takt)
+          jsou bez výběru NEAKTIVNÍ, ne skryté — zadání to chce takhle
+          schválně, ať je panel vždycky na stejném místě se stejným
+          obsahem, žádné poskakování layoutu podle toho, jestli je něco
+          vybrané. ".akordy-mrizka-obsah" níž dostává odpovídající
+          odsazení zleva, ať se panel nepřekrývá s mřížkou. */}
+      <div className="akordy-panel-akci" role="toolbar" aria-label="Akce akordového zápisu">
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={otevriRepetici}
+          disabled={vyber.length === 0}
+        >
+          Repetice
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={otevriVoltu} disabled={vyber.length === 0}>
+          Volta
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={() => setTaktPopoverOtevreny(true)}
+          disabled={vyber.length === 0}
+        >
+          Změnit takt
+        </button>
+        <button type="button" className="btn btn-secondary" onClick={pridatSekci}>
+          + Přidat sekci
+        </button>
+        <button
+          type="button"
+          className="btn btn-secondary"
+          onClick={pridatSekciBezRadku}
+          title="Sekce jen s nadpisem, bez taktů — třeba „Sloka 2 = Sloka 1“."
+        >
+          + Jen nadpis
+        </button>
+        <p className="akordy-panel-napoveda">
+          <strong>Tab</strong> další buňka
+          <br />
+          <strong>Enter</strong> nový řádek
+          <br />
+          <strong>Backspace</strong> spojí s předchozím
+        </p>
+      </div>
+
+      <div className="akordy-mrizka-obsah">
       {/* Skrytá sonda jen pro měření šířky buňky (viz efekt výš) — VŽDY
           přesně 4 takty výchozího taktu (+ tlačítko rozdělení, nejhorší
           případ), nezávisle na skutečném obsahu zápisu. Neinteraktivní,
@@ -633,36 +682,14 @@ export default function AkordovyMrizka({
           ))}
         </datalist>
 
-        <div className="akordy-mrizka-akce">
-          <button type="button" className="btn btn-secondary" onClick={pridatSekci}>
-            + Přidat sekci
-          </button>
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={pridatSekciBezRadku}
-            title="Sekce jen s nadpisem, bez taktů — třeba „Sloka 2 = Sloka 1“."
-          >
-            + Jen nadpis
-          </button>
-          {vyber.length > 0 && (
-            <div className="akordy-vyber-akce">
-              <span className="akordy-vyber-info">{vyber.length} vybraných buněk</span>
-              <button type="button" className="btn btn-secondary" onClick={otevriRepetici}>
-                Repetice
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={otevriVoltu}>
-                Volta
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={() => setTaktPopoverOtevreny(true)}>
-                Změnit takt
-              </button>
-              <button type="button" className="btn akordy-vyber-zrusit" onClick={() => setVyber([])}>
-                Zrušit výběr
-              </button>
-            </div>
-          )}
-        </div>
+        {vyber.length > 0 && (
+          <div className="akordy-vyber-akce">
+            <span className="akordy-vyber-info">{vyber.length} vybraných buněk</span>
+            <button type="button" className="btn akordy-vyber-zrusit" onClick={() => setVyber([])}>
+              Zrušit výběr
+            </button>
+          </div>
+        )}
 
         {repeticeChyba && (
           <p className="akordy-repetice-chyba" role="alert">
@@ -680,6 +707,7 @@ export default function AkordovyMrizka({
         {taktPopoverOtevreny && (
           <ZmenitTaktPopover onPotvrdit={potvrdZmenuTaktu} onZrusit={() => setTaktPopoverOtevreny(false)} />
         )}
+      </div>
       </div>
     </>
   )

@@ -4,6 +4,53 @@
   gap: var(--space-5);
 }
 
+/* Panel akcí (PC_zpevnik_akordy_ovladani.md bod 6) — sjednocuje akce, co
+   byly dřív roztroušené (Repetice/Volta/Změnit takt ve výběru dole, +
+   Přidat sekci/+ Jen nadpis až úplně dole). Fixní u LEVÉHO OKRAJE OKNA
+   (ne stránky/sekce), svisle na střed, drží se při scrollování — proto
+   position:fixed, ne sticky (sticky by se vázalo na rodiče, co scrolluje
+   pryč spolu se stránkou). Výběrové akce (Repetice/Volta/Změnit takt) jsou
+   `disabled`, NE skryté, i bez výběru — schválně, ať panel nemění tvar
+   podle stavu výběru (viz zadání). */
+.akordy-panel-akci {
+  position: fixed;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: 9rem;
+  padding: var(--space-3);
+  border: var(--border-w-lg) solid var(--app-ink);
+  border-left: none;
+  background: var(--app-paper);
+}
+.akordy-panel-akci .btn {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.akordy-panel-napoveda {
+  margin: var(--space-2) 0 0;
+  font-size: var(--text-xs);
+  color: var(--app-ink-70);
+  line-height: 1.6;
+}
+
+/* Odsazení zleva pro panel akcí žije na CELÉ stránce (.akordy-editor-page
+   v AkordovyEditorPage.css), ne tady — panel je fixní a svisle na střed
+   OKNA, takže bez scrollování může zasahovat i do obsahu NAD mřížkou
+   (drobečková navigace, nadpis, Takt/Tempo box), ne jen do mřížky samotné.
+   Tenhle wrapper zůstává jen jako společný rodič sondy a skutečné mřížky
+   (viz AkordovyMrizka.jsx) — ať obě měří/dostávají stejnou dostupnou
+   šířku, žádné odsazení navíc tady samo o sobě nepřidává. */
+.akordy-mrizka-obsah {
+  padding-left: 0;
+}
+
 /* Sonda pro měření šířky buňky (viz AkordovyMrizka.jsx) — vykreslená
    stejnými třídami jako skutečná mřížka (takže má úplně stejnou šířku
    ovlivněnou paddingem/bordery), ale visuálně skrytá a bez zabraného
