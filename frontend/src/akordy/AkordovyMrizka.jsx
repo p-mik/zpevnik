@@ -16,11 +16,36 @@ import {
   zkontrolujVyberProVoltu,
   zpusobiZtratuZmenaVyberu,
 } from './akordovyModel'
+import {
+  IkonaDolu,
+  IkonaDuplikovat,
+  IkonaKrizek,
+  IkonaNahoru,
+  IkonaPlus,
+  IkonaSmazat,
+  IkonaSpojitSPredchozi,
+} from './AkordyIkony'
 import AkordovyToolbar from './AkordovyToolbar'
 import RepeticePopover from './RepeticePopover'
 import VoltaPopover from './VoltaPopover'
 import ZmenitTaktPopover from './ZmenitTaktPopover'
 import './AkordovyMrizka.css'
+
+const NAZEV_SEKCE_PLACEHOLDER = 'Název sekce'
+
+function pocetTaktuVSekci(sekce) {
+  return sekce.radky.reduce((soucet, r) => soucet + r.takty.length, 0)
+}
+
+// Skloňování "takt" — 1 takt, 2-4 takty, 0 a 5+ taktů (viz zadání bod 3,
+// meta info v hlavičce sekce).
+function metaSekce(sekce) {
+  const pocet = pocetTaktuVSekci(sekce)
+  if (pocet === 0) return 'prázdná'
+  if (pocet === 1) return '1 takt'
+  if (pocet <= 4) return `${pocet} takty`
+  return `${pocet} taktů`
+}
 
 const MIN_SIRKA_BUNKY = 36
 // Cíl šířky buňky NENÍ "přesně 4 takty na šířku" — je to vědomá rezerva
@@ -441,30 +466,127 @@ export default function AkordovyMrizka({
           <p className="akordy-prazdno">Zápis je zatím prázdný — přidej první sekci.</p>
         )}
 
-        {zapis.sekce.map((sekce, sekceIdx) => (
+        {zapis.sekce.map((sekce, sekceIdx) => {
+          const jePrvni = sekceIdx === 0
+          const jePosledni = sekceIdx === zapis.sekce.length - 1
+
+          if (sekce.radky.length === 0) {
+            // "Nadpis" (docs/zadani_redesign_akordovy_zapis.md bod 3,
+            // poslední odrážka) — POZOR: `radky: []` v datech vzniká DVOJÍM
+            // způsobem, appka mezi nimi nerozlišuje (jedno pole, žádný nový
+            // příznak — zadání výslovně zakazuje měnit data): buď záměrně
+            // (toolbar "Nadpis"), nebo smazáním úplně posledního taktu
+            // normální sekce (viz odeberTaktZeSekce). Obě cesty proto
+            // dostávají STEJNÝ štíhlý vzhled bez boxu. Zadání pro "Nadpis"
+            // popisuje jen šipky+název+linku+smazání, ale současná appka umí
+            // pro tenhle stav i "Spojit s předchozí"/"Duplikovat"/založit
+            // první řádek (dřívější "+ Přidat řádek") — jejich smazání by
+            // byl regres funkčnosti, ne jen vzhledu, takže zůstávají, jen
+            // zaskládané za linku jako malé ikony/odkaz.
+            return (
+              <div key={sekceIdx} className="akordy-nadpis-radek">
+                <div className="akordy-sekce-presun">
+                  {!jePrvni && (
+                    <button
+                      type="button"
+                      className="akordy-ikona-btn akordy-ikona-btn-presun"
+                      onClick={() => onPosunSekci(sekceIdx, -1)}
+                      aria-label="Posunout sekci nahoru"
+                      title="Posunout sekci nahoru"
+                    >
+                      <IkonaNahoru size={10} />
+                    </button>
+                  )}
+                  {!jePosledni && (
+                    <button
+                      type="button"
+                      className="akordy-ikona-btn akordy-ikona-btn-presun"
+                      onClick={() => onPosunSekci(sekceIdx, 1)}
+                      aria-label="Posunout sekci dolů"
+                      title="Posunout sekci dolů"
+                    >
+                      <IkonaDolu size={10} />
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={(el) => {
+                    if (el) nazvySekciRef.current.set(sekceIdx, el)
+                    else nazvySekciRef.current.delete(sekceIdx)
+                  }}
+                  list="akordy-sekce-navrhy"
+                  className="akordy-nazev-input akordy-nadpis-nazev"
+                  value={sekce.nazev}
+                  placeholder={NAZEV_SEKCE_PLACEHOLDER}
+                  onChange={(e) => onNastavNazevSekce(sekceIdx, e.target.value)}
+                  aria-label={`Název sekce ${sekceIdx + 1}`}
+                />
+                <span className="akordy-nadpis-linka" aria-hidden="true" />
+                <button
+                  type="button"
+                  className="akordy-radek-pridat-male"
+                  onClick={() => onVlozRadekPo(sekceIdx, -1)}
+                >
+                  <IkonaPlus size={11} />
+                  řádek
+                </button>
+                {!jePrvni && (
+                  <button
+                    type="button"
+                    className="akordy-ikona-btn"
+                    onClick={() => spojit(sekceIdx)}
+                    aria-label="Spojit s předchozí"
+                    title="Spojí tuhle sekci s předchozí — název téhle se zahodí."
+                  >
+                    <IkonaSpojitSPredchozi size={15} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="akordy-ikona-btn"
+                  onClick={() => duplikovat(sekceIdx)}
+                  aria-label="Duplikovat"
+                  title="Vloží kopii téhle sekce hned pod ni."
+                >
+                  <IkonaDuplikovat size={15} />
+                </button>
+                <button
+                  type="button"
+                  className="akordy-ikona-btn akordy-ikona-btn-nebezpecna"
+                  onClick={() => smazatSekci(sekceIdx)}
+                  aria-label="Smazat nadpis"
+                  title="Smazat sekci"
+                >
+                  <IkonaSmazat size={15} />
+                </button>
+              </div>
+            )
+          }
+
+          return (
           <div key={sekceIdx} className="akordy-sekce-blok">
             <div className="akordy-sekce-hlavicka">
               <div className="akordy-sekce-presun">
-                {sekceIdx > 0 && (
+                {!jePrvni && (
                   <button
                     type="button"
-                    className="btn akordy-sekce-sipka"
+                    className="akordy-ikona-btn akordy-ikona-btn-presun"
                     onClick={() => onPosunSekci(sekceIdx, -1)}
                     aria-label="Posunout sekci nahoru"
                     title="Posunout sekci nahoru"
                   >
-                    ↑
+                    <IkonaNahoru size={10} />
                   </button>
                 )}
-                {sekceIdx < zapis.sekce.length - 1 && (
+                {!jePosledni && (
                   <button
                     type="button"
-                    className="btn akordy-sekce-sipka"
+                    className="akordy-ikona-btn akordy-ikona-btn-presun"
                     onClick={() => onPosunSekci(sekceIdx, 1)}
                     aria-label="Posunout sekci dolů"
                     title="Posunout sekci dolů"
                   >
-                    ↓
+                    <IkonaDolu size={10} />
                   </button>
                 )}
               </div>
@@ -474,49 +596,60 @@ export default function AkordovyMrizka({
                   else nazvySekciRef.current.delete(sekceIdx)
                 }}
                 list="akordy-sekce-navrhy"
-                className="field-input akordy-sekce-input"
+                className="akordy-nazev-input akordy-sekce-nazev"
                 value={sekce.nazev}
-                placeholder="Název sekce"
+                placeholder={NAZEV_SEKCE_PLACEHOLDER}
                 onChange={(e) => onNastavNazevSekce(sekceIdx, e.target.value)}
                 aria-label={`Název sekce ${sekceIdx + 1}`}
               />
-              {sekceIdx > 0 && (
+              <span className="akordy-sekce-meta">{metaSekce(sekce)}</span>
+              {sekce.repetice.map((rep, repIdx) => (
+                <span key={repIdx} className="akordy-sekce-badge-repetice">
+                  {rep.od_taktu + 1}–{rep.do_taktu + 1} ×{rep.krat}
+                  <button
+                    type="button"
+                    className="akordy-sekce-badge-smazat"
+                    onClick={() => onSmazRepetici(sekceIdx, repIdx)}
+                    aria-label="Zrušit repetici"
+                    title="Zrušit repetici"
+                  >
+                    <IkonaKrizek size={10} />
+                  </button>
+                </span>
+              ))}
+              <div className="akordy-sekce-mezera" />
+              {!jePrvni && (
                 <button
                   type="button"
-                  className="btn akordy-sekce-spojit"
+                  className="akordy-ikona-btn"
                   onClick={() => spojit(sekceIdx)}
+                  aria-label="Spojit s předchozí"
                   title="Spojí tuhle sekci s předchozí — název téhle se zahodí."
                 >
-                  Spojit s předchozí
+                  <IkonaSpojitSPredchozi size={15} />
                 </button>
               )}
               <button
                 type="button"
-                className="btn akordy-sekce-duplikovat"
+                className="akordy-ikona-btn"
                 onClick={() => duplikovat(sekceIdx)}
+                aria-label="Duplikovat"
                 title="Vloží kopii téhle sekce hned pod ni."
               >
-                Duplikovat
+                <IkonaDuplikovat size={15} />
               </button>
-              <button type="button" className="btn akordy-sekce-smazat" onClick={() => smazatSekci(sekceIdx)}>
-                Smazat sekci
+              <button
+                type="button"
+                className="akordy-ikona-btn akordy-ikona-btn-nebezpecna"
+                onClick={() => smazatSekci(sekceIdx)}
+                aria-label="Smazat sekci"
+                title="Smazat sekci"
+              >
+                <IkonaSmazat size={15} />
               </button>
             </div>
 
-            {sekce.radky.length === 0 ? (
-              // Sekce jen s nadpisem, bez taktů (viz schéma bod "radky
-              // smí být prázdné") — smazáním úplně posledního taktu sem
-              // sekce dojde sama (viz odeberTaktZeSekce), zpátky na
-              // obsah vede jen tenhle jeden krok. `-1` = vlož na začátek
-              // (vlozRadekPo počítá "po radekIdx", -1 je "před vším").
-              <button
-                type="button"
-                className="btn btn-secondary akordy-radek-pridat"
-                onClick={() => onVlozRadekPo(sekceIdx, -1)}
-              >
-                + Přidat řádek
-              </button>
-            ) : (
+            <div className="akordy-sekce-telo">
             <div className="akordy-sekce-scroll">
               <ul className="akordy-radky">
                 {sekce.radky.map((radek, radekIdx) => {
@@ -612,32 +745,24 @@ export default function AkordovyMrizka({
                 })}
               </ul>
             </div>
-            )}
+            <button
+              type="button"
+              className="akordy-radek-pridat-male"
+              onClick={() => onVlozRadekPo(sekceIdx, sekce.radky.length - 1)}
+            >
+              <IkonaPlus size={11} />
+              řádek
+            </button>
+            </div>
 
             {chybaRozdeleni && chybaRozdeleni.sekceIdx === sekceIdx && (
               <p className="akordy-repetice-chyba" role="alert">
                 {chybaRozdeleni.hlaska}
               </p>
             )}
-
-            {sekce.repetice.length > 0 && (
-              <ul className="akordy-repetice-seznam" aria-label={`Repetice sekce ${sekceIdx + 1}`}>
-                {sekce.repetice.map((rep, repIdx) => (
-                  <li key={repIdx}>
-                    <button
-                      type="button"
-                      className="akordy-repetice-chip"
-                      onClick={() => onSmazRepetici(sekceIdx, repIdx)}
-                      title="Klikem odebrat"
-                    >
-                      takt {rep.od_taktu + 1}–{rep.do_taktu + 1} ×{rep.krat} ✕
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
-        ))}
+          )
+        })}
 
         <datalist id="akordy-sekce-navrhy">
           {SEKCE_NAVRHY.map((s) => (

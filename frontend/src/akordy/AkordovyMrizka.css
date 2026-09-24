@@ -1,7 +1,7 @@
 .akordy-mrizka {
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: 14px;
 }
 
 /* Mřížka potřebuje na takty víc místa než čtecí sloupec .app-main
@@ -56,25 +56,31 @@
 }
 
 /* Sekce = blok s vlastním rámečkem (viz zadání bod 1) — název nahoře jen
-   jednou, pod ním řádky taktů. */
+   jednou, pod ním řádky taktů. Redesign, docs/zadani_redesign_akordovy_
+   zapis.md bod 3: rámeček 1px (ne 3px), bez vnějšího paddingu — hlavička
+   i tělo si padding/výšku řeší samy (.akordy-sekce-hlavicka/-telo), ať má
+   hlavička přesně 40px i s okrajem na celou šířku bloku. */
 .akordy-sekce-blok {
-  border: var(--border-w-lg) solid var(--app-ink);
-  padding: var(--space-4);
+  border: 1px solid var(--ink);
+  background: var(--paper);
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
 }
 
 .akordy-sekce-hlavicka {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-3);
+  gap: 8px;
+  height: 40px;
+  padding: 0 6px 0 4px;
+  border-bottom: 1px solid var(--hair);
 }
 
-.akordy-sekce-input {
-  width: 14em;
-  flex-shrink: 0;
+.akordy-sekce-telo {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 16px;
 }
 
 /* Přesun sekce (PC_zpevnik_akordy_ovladani.md bod 2) — dvě malé šipky nad
@@ -82,33 +88,107 @@
 .akordy-sekce-presun {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 0;
   flex-shrink: 0;
 }
 
-.akordy-sekce-sipka {
-  font-size: var(--text-xs);
-  padding: 0 var(--space-2);
-  min-height: auto;
-  line-height: 1.6;
+/* Inline editovatelný název sekce (bod 3) — "ne input v rámečku": žádný
+   border/pozadí v klidu, jen přerušované podtržení na hover/focus.
+   `field-sizing: content` nechá input těsně obepínat napsaný text (na
+   rozdíl od `ch` jednotky správně počítá i s uppercase/letter-spacing
+   podle SKUTEČNĚ vykresleného textu, ne s odhadem) — `min-width` je jen
+   pojistka pro prázdný input bez podepřeného field-sizing. */
+.akordy-nazev-input {
+  font-family: var(--font-ar-display);
+  font-weight: 500;
+  text-transform: uppercase;
+  padding: 2px 4px;
+  border: none;
+  border-bottom: 1px dashed transparent;
+  background: transparent;
+  color: var(--ink);
+  flex-shrink: 0;
+  min-width: 8ch;
+  field-sizing: content;
+}
+.akordy-nazev-input::placeholder {
+  color: var(--disabled);
+}
+.akordy-nazev-input:hover,
+.akordy-nazev-input:focus {
+  border-bottom-color: var(--disabled);
+}
+.akordy-nazev-input:focus-visible {
+  outline: none;
 }
 
-.akordy-sekce-smazat {
-  font-size: var(--text-xs);
-  padding: var(--space-2) var(--space-3);
-  min-height: auto;
+.akordy-sekce-nazev {
+  font-size: 15px;
+  letter-spacing: 0.08em;
 }
 
-.akordy-sekce-spojit {
-  font-size: var(--text-xs);
-  padding: var(--space-2) var(--space-3);
-  min-height: auto;
+.akordy-sekce-meta {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
-.akordy-sekce-duplikovat {
-  font-size: var(--text-xs);
-  padding: var(--space-2) var(--space-3);
-  min-height: auto;
+.akordy-sekce-badge-repetice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 20px;
+  padding: 0 4px 0 8px;
+  background: var(--teal);
+  color: var(--bg);
+  font-family: var(--font-ar-display);
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.akordy-sekce-badge-smazat {
+  display: inline-flex;
+  border: none;
+  background: transparent;
+  color: inherit;
+  padding: 2px;
+  cursor: pointer;
+}
+
+.akordy-sekce-mezera {
+  flex-grow: 1;
+}
+
+/* Ikonová tlačítka sekce (spojit/duplikovat/smazat i šipky přesunu) —
+   v klidu bez rámečku, na hover rámeček + bílé pozadí (bod 3). Varianta
+   "-presun" je menší (šipky nahoru/dolů nad sebou v hlavičce), "-nebezpecna"
+   (smazat) na hover zčervená (--accent) místo --ink. */
+.akordy-ikona-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  padding: 0;
+  cursor: pointer;
+}
+.akordy-ikona-btn:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+  background: var(--white);
+}
+.akordy-ikona-btn-nebezpecna:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.akordy-ikona-btn-presun {
+  width: 22px;
+  height: 16px;
 }
 
 /* Scroll je SDÍLENÝ pro celou sekci (zadání bod 2), ne po řádcích — jeden
@@ -126,7 +206,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: 6px;
 }
 
 .akordy-radek {
@@ -163,14 +243,50 @@
   color: var(--app-secondary);
 }
 
-/* Sekce bez řádků (jen nadpis, viz schéma) — jediná akce, co takové sekci
-   zbývá, je založit první řádek. align-self, ať se nenatáhne na celou
-   šířku bloku sekce (ten je flex column, default stretch) jako call-to-
-   action pruh — má vypadat jako normální tlačítko, stejně jako
-   "+ Přidat sekci". */
-.akordy-radek-pridat {
+/* Malé textové tlačítko "+ řádek" (zadání bod 3) — pod řádky neprázdné
+   sekce, i uvnitř štíhlého řádku "Nadpis" (tam zakládá první řádek —
+   viz komentář u AkordovyMrizka.jsx, sekce s `radky:[]`). */
+.akordy-radek-pridat-male {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   align-self: flex-start;
-  font-size: var(--text-sm);
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-ar-display);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.akordy-radek-pridat-male:hover {
+  border-color: var(--ink);
+  background: var(--white);
+  color: var(--ink);
+}
+
+/* "Nadpis" — sekce s radky:[] (viz AkordovyMrizka.jsx), BEZ boxu: štíhlý
+   řádek 36px, název, vodorovná linka přes zbytek šířky, akce napravo. */
+.akordy-nadpis-radek {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 36px;
+}
+
+.akordy-nadpis-nazev {
+  font-size: 13px;
+  letter-spacing: 0.14em;
+}
+
+.akordy-nadpis-linka {
+  flex-grow: 1;
+  height: 1px;
+  background: var(--ink);
 }
 
 .akordy-takt {
@@ -278,27 +394,6 @@
 
 .akordy-bunka-vybrana {
   background: var(--app-ink-18);
-}
-
-.akordy-repetice-seznam {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  width: 100%;
-}
-
-.akordy-repetice-chip {
-  font-family: var(--font-body);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  padding: var(--space-1) var(--space-3);
-  background: var(--app-secondary);
-  color: var(--app-paper);
-  border: none;
-  cursor: pointer;
 }
 
 .akordy-mrizka-akce {
