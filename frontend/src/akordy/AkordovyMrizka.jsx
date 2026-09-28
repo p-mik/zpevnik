@@ -36,6 +36,17 @@ import './AkordovyMrizka.css'
 
 const NAZEV_SEKCE_PLACEHOLDER = 'Název sekce'
 
+// Zadání (docs/zadani_redesign_akordovy_zapis.md bod 4) mluví o "pevné
+// šířce ~216px" na takt, ale doslova jen pro výchozí 4dobý takt — jinak
+// by 2dobý takt vyšel zbytečně široký (prázdné misto místo poloviční
+// šířky) a 6/8 nebo 12/8 naopak nespravedlivě úzké (viz zadavatelova
+// vlastní poznámka o "možná moc úzký takt, bude potřeba doladit").
+// Řešení: šířka NENÍ vlastnost taktu, ale POČTU DOB — 216/4 = 54px na
+// dobu, aplikováno na SKUTEČNÝ počet dob KAŽDÉHO taktu (takt.bunky.length,
+// ne jen na dokumentový výchozí takt). Výsledek pro 4/4 zůstává
+// nezměněn (přesně 216px), 2/4 vyjde 108px, 6/8 324px, 12/8 648px.
+const SIRKA_NA_DOBU = 54
+
 // Skloňování "takt" — 1 takt, 2-4 takty, 0 a 5+ taktů (viz zadání bod 3,
 // meta info v hlavičce sekce).
 function metaSekce(sekce) {
@@ -585,7 +596,11 @@ export default function AkordovyMrizka({
                         const jeKonecRepeticeVRadku =
                           repeticeTady && taktIdx === repeticeTady.doTaktLokalni && repeticeTady.kresliKonec
                         return (
-                          <div key={taktIdx} className="akordy-takt">
+                          <div
+                            key={taktIdx}
+                            className="akordy-takt"
+                            style={{ minWidth: `${takt.bunky.length * SIRKA_NA_DOBU}px` }}
+                          >
                             {/* Pruh nad taktem (bod 4) — rezervovaný u VŠECH
                                 taktů (i bez volty), ať řádky nelítají podle
                                 toho, jestli zrovna nějaká volta je. Vlastní

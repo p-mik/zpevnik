@@ -290,10 +290,14 @@
   background: var(--ink);
 }
 
-/* Takt (bod 4) — pevná ŠÍŘKA min. 216px (grid v .akordy-takt-bunky ji smí
-   překročit, když se do ní nevejde dlouhý akord jako "Eadd9" — stejná
-   záruka "akord se nikdy neořízne/nepřekryje", jak měla dřívější JS
-   měřená šířka, jen teď řeší čistě CSS grid `minmax(max-content, 1fr)`).
+/* Takt (bod 4) — pevná ŠÍŘKA min. 54px NA DOBU (216px pro obvyklý 4dobý
+   takt — viz SIRKA_NA_DOBU v AkordovyMrizka.jsx, min-width jde inline
+   podle SKUTEČNÉHO počtu dob TOHOTO taktu, ne napevno v CSS: 2dobý takt
+   je poloviční, 6/8 půldruhého násobku atd., ať takt vizuálně netrvá
+   jinak dlouho, než kolik má dob). Grid v .akordy-takt-bunky smí tuhle
+   šířku překročit, když se do ní nevejde dlouhý akord jako "Eadd9" —
+   stejná záruka "akord se nikdy neořízne/nepřekryje", jak měla dřívější
+   JS měřená šířka, jen teď řeší čistě CSS grid `minmax(max-content, 1fr)`.
    `position:relative`, ať se do rohu dá umístit křížek na smazání
    (.akordy-takt-smazat, viditelný jen na hover). Sloupec: 16px pruh
    (volta/vlastní takt) + 40px řádek dob — VŽDY, i bez volty, ať se výška
@@ -303,7 +307,6 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  min-width: 216px;
   flex-shrink: 0;
 }
 
