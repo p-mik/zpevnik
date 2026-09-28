@@ -1,6 +1,16 @@
+/* align-items:flex-start (místo výchozího stretch) — sekce se NEROZTAHUJE
+   na celou dostupnou šířku mřížky (ta je dost široká, viz .akordy-mrizka-
+   obsah), ale zabírá jen tolik, kolik potřebuje její NEJŠIRŠÍ řádek.
+   Sekce s pár krátkými takty (třeba "Intro" o jednom taktu) tak nekoukne
+   do velké prázdné plochy vpravo — je vidět, jak reálně vypadá tenhle
+   redesign v akci na skutečné písni ("Raising my family"), byla to reálná
+   vada, ne jen teoretická. `.akordy-nadpis-radek` (řádek "Nadpis") se
+   naopak MUSÍ roztahovat i tak — jeho vodorovná linka má jít přes zbytek
+   šířky, viz vlastní `align-self: stretch`. */
 .akordy-mrizka {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 14px;
 }
 
@@ -51,6 +61,10 @@
   background: var(--paper);
   display: flex;
   flex-direction: column;
+  /* Zabírá jen tolik šířky, kolik potřebuje (viz .akordy-mrizka), ale
+     nikdy víc, než je k dispozici — širší obsah řeší .akordy-sekce-scroll
+     vlastním vodorovným scrollem, ne přetečením mimo mřížku. */
+  max-width: 100%;
 }
 
 .akordy-sekce-hlavicka {
@@ -275,8 +289,10 @@
 .akordy-nadpis-radek {
   display: flex;
   align-items: center;
+  align-self: stretch;
   gap: 12px;
   height: 36px;
+  width: 100%;
 }
 
 .akordy-nadpis-nazev {
