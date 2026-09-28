@@ -60,11 +60,6 @@ export default function AkordovyEditorPage() {
 
   return (
     <div className="akordy-editor-page">
-      {/* .akordy-editor-page sám NESMÍ mít žádné asymetrické padding (viz
-          komentář u AkordovyMrizka.css .akordy-mrizka-vyskok) — mřížka níž
-          "vyskakuje" na celou šířku okna, což počítá se symetrickým
-          rodičem stejně jako .app-main. Tenhle řádek zůstává v běžném
-          sloupci .app-main. */}
       <div className="akordy-editor-hlavicka-radek">
         <div className="akordy-editor-zpet-nadpis">
           <Link to={verze.pisen ? `/pisne/${verze.pisen}` : '/pisne'} className="akordy-zpet-odkaz">

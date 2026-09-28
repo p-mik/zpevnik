@@ -26,16 +26,15 @@
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-ar-body);
-  /* .akordy-editor-page sám NESMÍ mít žádné ASYMETRICKÉ padding/border
-     (viz komentář u AkordovyMrizka.css .akordy-mrizka-vyskok) — mřížka
-     uvnitř "vyskakuje" na celou šířku OKNA přes záporné okraje
-     `50% rodiče − 50vw`, což funguje jen když je celý řetězec rodičů až
-     po .app-main symetricky centrovaný. Levý pruh (border-left) je jediná
-     výjimka ze zadání — 4px asymetrie je zanedbatelná (řádově menší než
-     posun od scrollbaru, který breakout matematika stejně nemá jak
-     obejít, viz tamní komentář), proto se tu neřeší zvlášť. */
   border-left: 4px solid var(--accent);
-  padding: 28px 56px 40px;
+  /* Zadání (bod 1) říká "padding zhruba 28px 56px 40px" — bokem je 40px,
+     ne 56px, schválně. Akceptační kritérium "řádek se 4 takty se vejde
+     i s tlačítkem nůžek" má přednost před "zhruba" uvedeným paddingem a
+     se 56px se nevešel: běžný řádek (4 takty 864px + 12px mezera + 32px
+     nůžky + 34px padding/rámeček sekce = 942px) přetékal o 6px, a u
+     husté písně (Africa — dlouhé akordy si přes minmax(max-content,1fr)
+     vynutí takty o ~11px širší) chybělo ještě dalších ~14px. */
+  padding: 28px 40px 40px;
   display: flex;
   flex-direction: column;
   gap: 20px;

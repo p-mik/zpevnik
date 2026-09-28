@@ -1,49 +1,28 @@
-/* align-items:flex-start (místo výchozího stretch) — sekce se NEROZTAHUJE
-   na celou dostupnou šířku mřížky (ta je dost široká, viz .akordy-mrizka-
-   obsah), ale zabírá jen tolik, kolik potřebuje její NEJŠIRŠÍ řádek.
-   Sekce s pár krátkými takty (třeba "Intro" o jednom taktu) tak nekoukne
-   do velké prázdné plochy vpravo — je vidět, jak reálně vypadá tenhle
-   redesign v akci na skutečné písni ("Raising my family"), byla to reálná
-   vada, ne jen teoretická. `.akordy-nadpis-radek` (řádek "Nadpis") se
-   naopak MUSÍ roztahovat i tak — jeho vodorovná linka má jít přes zbytek
-   šířky, viz vlastní `align-self: stretch`. */
+/* Mřížka NEMÁ vlastní, širší sloupec než zbytek stránky. Dřív měla —
+   "vyskakovala" z .app-main na celou šířku okna a brala si strop podle
+   poměru A4 (viz historie) — protože tehdy se šířka buňky dopočítávala
+   podle obsahu a hustá píseň (G#m7, Eadd9) se do ~1052px sloupce
+   nemusela vejít. Od redesignu (docs/zadani_redesign_akordovy_zapis.md
+   bod 4) má takt PEVNOU šířku podle počtu dob, takže nejširší běžný
+   řádek = 4 takty (864px) + nůžky (44px) + padding/rámeček sekce (34px)
+   = 942px, což se do sloupce vejde s rezervou. Důvod pro výskok tím
+   padl a zůstával po něm jen viditelný posun mřížky doleva oproti
+   hlavičce a toolbaru.
+
+   `width: fit-content` — sloupec sekcí je tak široký, jako jeho NEJŠIRŠÍ
+   sekce (ne jako celé dostupné místo), ale všechny sekce se na tuhle
+   společnou šířku roztáhnou (výchozí align-items: stretch). Sekce s pár
+   krátkými takty tedy nekouká do prázdné plochy vpravo, a zároveň nejsou
+   sousední sekce každá jinak široká podle toho, jestli zrovna mají
+   tlačítko nůžek (to je jen na druhém a dalším řádku a dělalo to rozdíl
+   44px). Obsah širší než sloupec dál řeší vodorovný scroll uvnitř sekce
+   (.akordy-sekce-scroll), ne přetečení stránky. */
 .akordy-mrizka {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  width: fit-content;
+  max-width: 100%;
   gap: 14px;
-}
-
-/* Mřížka potřebuje na takty víc místa než čtecí sloupec .app-main
-   (max-width:1100px, viz index.css) — na širokém monitoru by se do
-   jeho ~1052px nemusely vejít 4 takty husté písně bez scrollu (viz
-   PC_zpevnik_akordy_ovladani.md, bod "šířka mřížky"). ".akordy-mrizka-
-   vyskok" proto "vyskočí" z .app-main na celou šířku OKNA — standardní
-   CSS trik: záporné okraje ±(50 % rodiče − 50vw) natáhnou box na 100vw,
-   i když je rodič užší a vycentrovaný (na rozdíl od `width:100vw` tenhle
-   způsob nepočítá se šířkou scrollbaru, takže nepřidává vodorovný scroll
-   navíc na CELÉ stránce). ".akordy-mrizka-obsah" pak dostane VLASTNÍ
-   strop podle POMĚRU A4 na šířku (842:595) vázaný na VÝŠKU okna (ne na
-   šířku) — na širokém, ale nízkém okně se tak mřížka pořád nerozlije
-   přes celou obrazovku — a vycentruje se v rámci vyskočeného pásu (=
-   v rámci celého okna, ne jen `.app-main` sloupce).
-
-   Odsazení zleva "pro panel akcí" tu už není — od redesignu (docs/
-   zadani_redesign_akordovy_zapis.md bod 2) je toolbar `position: sticky`,
-   ne fixní u levého okraje okna (viz AkordovyToolbar.css), takže se
-   s ničím nepřekrývá a žádnou vyhrazenou mezeru nepotřebuje. Zůstává jen
-   prostý symetrický padding. */
-.akordy-mrizka-vyskok {
-  margin-left: calc(50% - 50vw);
-  margin-right: calc(50% - 50vw);
-}
-
-.akordy-mrizka-obsah {
-  --akordy-a4-strop: calc(100vh * 842 / 595);
-  box-sizing: border-box;
-  max-width: var(--akordy-a4-strop);
-  margin: 0 auto;
-  padding: 0 var(--space-5);
 }
 
 .akordy-prazdno {

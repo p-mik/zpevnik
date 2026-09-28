@@ -378,9 +378,6 @@ export default function AkordovyMrizka({
         onPridejSekciBezRadku={pridatSekciBezRadku}
       />
 
-      <div className="akordy-mrizka-vyskok">
-      <div className="akordy-mrizka-obsah">
-
       <div className="akordy-mrizka">
         {zapis.sekce.length === 0 && (
           <p className="akordy-prazdno">Zápis je zatím prázdný — přidej první sekci.</p>
@@ -762,8 +759,6 @@ export default function AkordovyMrizka({
         {taktPopoverOtevreny && (
           <ZmenitTaktPopover onPotvrdit={potvrdZmenuTaktu} onZrusit={() => setTaktPopoverOtevreny(false)} />
         )}
-      </div>
-      </div>
       </div>
     </>
   )
