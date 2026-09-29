@@ -3,6 +3,7 @@ import { useApiResource } from '../hooks/useApiResource'
 import { useAkordovyEditor } from '../akordy/useAkordovyEditor'
 import { useVarovaniPriOdchodu } from '../pdf/useAnotace'
 import { IkonaZpet } from '../akordy/AkordyIkony'
+import { jmenoSouboruExportu, jsonExportu, stahniText } from '../akordy/akordyExport'
 import AkordovyHlavicka from '../akordy/AkordovyHlavicka'
 import AkordovyMrizka from '../akordy/AkordovyMrizka'
 import LoadingState from '../components/LoadingState'
@@ -56,6 +57,10 @@ export default function AkordovyEditorPage() {
   async function ulozit() {
     const ok = await editor.uloz()
     if (ok) reloadVerze()
+  }
+
+  function exportovatJson() {
+    stahniText(jmenoSouboruExportu(song?.nazev, verze.cislo), jsonExportu(editor.zapis))
   }
 
   return (
@@ -133,16 +138,26 @@ export default function AkordovyEditorPage() {
         </p>
       )}
 
-      {verze.ma_soubor && (
-        <div className="akordy-editor-odkazy">
-          <Link to={`/pisne/${verze.pisen}/ctecka?verze=${verze.id}`} className="btn btn-secondary">
-            Otevřít ve čtečce
-          </Link>
-          <a href={`/api/verze-pisni/${verze.id}/soubor/`} className="btn btn-secondary">
-            Stáhnout PDF
-          </a>
-        </div>
-      )}
+      <div className="akordy-editor-odkazy">
+        {/* Export bere to, co je PRÁVĚ v editoru (tedy i neuložené změny —
+            stav "Uloženo/Neuloženo" je hned vedle), ne to, co je na
+            serveru: data už jsou v prohlížeči, takže se nemusí nikam
+            chodit. Na rozdíl od PDF je dostupný vždycky, i když verze
+            ještě nemá vygenerovaný soubor. */}
+        <button type="button" className="btn btn-secondary" onClick={exportovatJson}>
+          Exportovat JSON
+        </button>
+        {verze.ma_soubor && (
+          <>
+            <Link to={`/pisne/${verze.pisen}/ctecka?verze=${verze.id}`} className="btn btn-secondary">
+              Otevřít ve čtečce
+            </Link>
+            <a href={`/api/verze-pisni/${verze.id}/soubor/`} className="btn btn-secondary">
+              Stáhnout PDF
+            </a>
+          </>
+        )}
+      </div>
     </div>
   )
 }
